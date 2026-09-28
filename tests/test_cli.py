@@ -43,3 +43,16 @@ def test_config_command(tmp_path, monkeypatch, capsys):
     assert "context" not in path.read_text()
     with pytest.raises(SystemExit):
         cli.main(["config", "set", "permission_mode", "never"])
+
+
+def test_models_table_fits_narrow_terminals(monkeypatch):
+    import io
+
+    from rich.console import Console
+
+    narrow = Console(file=io.StringIO(), width=80)
+    monkeypatch.setattr(cli, "console", narrow)
+    cli.print_models(FakeOllama(), HW, "qwen3.6-35b")
+    out = narrow.file.getvalue()
+    assert "Fits here" in out and "qwen3.6-35b" in out and "recommended" in out
+    assert "…" not in out

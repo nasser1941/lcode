@@ -24,7 +24,7 @@ Run `lcode models` to see the same list with what fits on **your** machine:
 
 ```text
 Models for this machine: NVIDIA GeForce RTX 4080 Laptop GPU (12 GB VRAM), 31 GB RAM
- Key                     Download  Max ctx  Fits here  Speed                  Status
+ Key                     Size      Max ctx  Fits here  Speed                  Status
  qwen3.6-35b             22.6 GB   256K     256K       good (experts in RAM)  installed, recommended, current, tested
  qwen3.8-27b             17.7 GB   256K     128K       slow (split across GPU and CPU)  untested
  …

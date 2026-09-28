@@ -100,9 +100,15 @@ def print_models(ollama: Ollama | None, hw: Hardware, current: str | None = None
     except OllamaError:
         installed = set()
     rec = catalog.recommend(hw)
+    wide = console.width >= 130  # the descriptive columns don't fit an 80-column terminal
+    columns = ["Key", "Model", "Type", "Size", "Max ctx", "Fits here", "Speed", "Status"]
+    if not wide:
+        columns = [c for c in columns if c not in ("Model", "Type")]
     table = Table(title=f"Models for this machine: {hw.describe()}", title_justify="left", header_style="bold")
-    for col in ("Key", "Model", "Type", "Download", "Max ctx", "Fits here", "Speed", "Status"):
-        table.add_column(col, no_wrap=col in ("Key", "Download", "Max ctx"))
+    for col in columns:
+        table.add_column(
+            col, no_wrap=col in ("Key", "Size", "Max ctx", "Fits here"), min_width=11 if col == "Status" else None
+        )
     for spec in catalog.load():
         ctx, speed = spec.fit(hw)
         marks = []
@@ -113,16 +119,17 @@ def print_models(ollama: Ollama | None, hw: Hardware, current: str | None = None
         if current and catalog.find(current) is spec:
             marks.append("[bold]current[/]")
         marks.append("tested" if spec.tested else "[dim]untested[/]")
-        table.add_row(
-            spec.key,
-            spec.name,
-            spec.params,
-            f"{spec.size_gb:.1f} GB",
-            format_tokens(spec.max_context),
-            f"{format_tokens(ctx)}" if ctx else "[red]no[/]",
-            speed,
-            ", ".join(marks),
-        )
+        row = {
+            "Key": spec.key,
+            "Model": spec.name,
+            "Type": spec.params,
+            "Size": f"{spec.size_gb:.1f} GB",
+            "Max ctx": format_tokens(spec.max_context),
+            "Fits here": format_tokens(ctx) if ctx else "[red]no[/]",
+            "Speed": speed if wide else speed.split(" (")[0],
+            "Status": ", ".join(marks) if wide else "\n".join(marks),
+        }
+        table.add_row(*(row[c] for c in columns))
     console.print(table)
     console.print(
         "[dim]Install one with [/]lcode setup <key>[dim]. 'Fits here' is the largest context that fits in memory; "
