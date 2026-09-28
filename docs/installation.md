@@ -1,0 +1,145 @@
+# Installation
+
+lcode needs three things: a GPU driver (Linux) or an Apple Silicon Mac, [Ollama](https://ollama.com)
+to run the model, and lcode itself. The installer handles lcode; `lcode setup` then picks and
+downloads a model that fits your machine.
+
+!!! info "Requirements"
+
+    - **Linux** (Ubuntu 22.04 / 24.04 tested) with an NVIDIA GPU, or **macOS** on Apple Silicon (M1–M4).
+      Windows works through WSL2. A GPU is strongly recommended; CPU-only works with small models but is slow.
+    - **Ollama 0.30 or newer.**
+    - **Disk space** for the model: 23 GB for the default, 4–7 GB for the small models.
+
+## 1. Prepare the machine
+
+=== "Ubuntu (NVIDIA)"
+
+    Install the NVIDIA driver if `nvidia-smi` doesn't work yet, then reboot:
+
+    ```bash
+    sudo ubuntu-drivers install && sudo reboot
+    ```
+
+    Install curl and ripgrep (lcode uses ripgrep for fast code search):
+
+    ```bash
+    sudo apt update && sudo apt install -y curl ripgrep git
+    ```
+
+    Install Ollama. It runs as a background service and uses the GPU automatically:
+
+    ```bash
+    curl -fsSL https://ollama.com/install.sh | sh
+    ```
+
+=== "macOS (Apple Silicon)"
+
+    Install [Homebrew](https://brew.sh) if you don't have it, then Ollama and ripgrep:
+
+    ```bash
+    brew install ollama ripgrep
+    brew services start ollama
+    ```
+
+    You can also use the [Ollama desktop app](https://ollama.com/download) instead of Homebrew; it
+    starts the server when you open it. Ollama uses the Mac's GPU (Metal) automatically.
+
+## 2. Install lcode
+
+```bash
+curl -fsSL https://nasser1941.github.io/lcode/install.sh | bash
+```
+
+The [installer](https://github.com/nasser1941/lcode/blob/main/install.sh) installs
+[uv](https://docs.astral.sh/uv/) if needed, installs lcode with its own Python into `~/.local/bin`,
+checks that Ollama is running, and starts `lcode setup`.
+
+??? note "Prefer to do it by hand?"
+
+    With [uv](https://docs.astral.sh/uv/getting-started/installation/):
+
+    ```bash
+    uv tool install git+https://github.com/nasser1941/lcode
+    ```
+
+    Or with [pipx](https://pipx.pypa.io):
+
+    ```bash
+    pipx install git+https://github.com/nasser1941/lcode
+    ```
+
+    lcode needs Python 3.10 or newer. The macOS system Python is too old, which is why uv (it
+    brings its own Python) is the recommended route.
+
+## 3. Pick and download a model
+
+```bash
+lcode setup
+```
+
+`lcode setup` detects your GPU or Mac, recommends the best model and the largest context window
+that fits, downloads it (the default model is 23 GB, so this takes a while), and saves your choice.
+To choose yourself:
+
+```bash
+lcode models                              # the catalog and how each model fits this machine
+lcode setup qwen3.5-9b                    # a specific model
+lcode setup qwen3.6-35b --context 128k    # a specific context window
+```
+
+## 4. Check the installation
+
+```bash
+lcode doctor
+```
+
+```text
+✓ Hardware   NVIDIA GeForce RTX 4080 Laptop GPU (12 GB VRAM), 31 GB RAM
+✓ Config     ~/.config/lcode/config.toml
+✓ Ollama     http://localhost:11434 · version 0.32.15
+✓ Model      qwen3.6-35b → lcode-qwen3.6-35b
+✓ Context    256K tokens · ~28 GB needed, ~35 GB available
+✓ ripgrep    found
+✓ git        found
+```
+
+You're ready: `cd` into a project and run `lcode`. Continue with the [quickstart](quickstart.md).
+
+## Other setups
+
+### Ollama in Docker
+
+lcode talks to Ollama over HTTP, so a container works the same way. With the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+installed:
+
+```bash
+docker run -d --gpus all --restart unless-stopped -p 11434:11434 \
+  -v ollama:/root/.ollama --name ollama ollama/ollama:latest
+```
+
+### Ollama on another machine
+
+Run the model on a GPU server and lcode on your laptop:
+
+```bash
+lcode config set ollama_host http://gpu-server:11434
+```
+
+Your prompts and the code the model reads are then sent to that server. Ollama has no
+authentication; only expose it on a network you trust (or through an SSH tunnel).
+
+### Windows
+
+Use [WSL2](https://learn.microsoft.com/windows/wsl/install) with Ubuntu and follow the Ubuntu
+steps. NVIDIA GPUs work inside WSL2 with the regular Windows driver.
+
+## Upgrade and uninstall
+
+```bash
+uv tool upgrade lcode-cli        # upgrade
+uv tool uninstall lcode-cli      # remove lcode
+rm -rf ~/.config/lcode ~/.local/state/lcode    # remove settings and saved sessions
+ollama rm lcode-qwen3.6-35b qwen3.6:35b-a3b-coding   # remove downloaded models
+```

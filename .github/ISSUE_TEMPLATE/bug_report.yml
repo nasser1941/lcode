@@ -1,0 +1,52 @@
+name: Bug report
+description: Something doesn't work as documented.
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please check the [troubleshooting guide](https://nasser1941.github.io/lcode/troubleshooting/) first.
+        **Don't paste secrets, tokens or private code.**
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. lcode --model qwen3.5-9b
+        2. Ask "..."
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `lcode doctor`
+      description: Shows your lcode, Ollama and model versions and your hardware.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Ubuntu / Debian
+        - Other Linux
+        - macOS (Apple Silicon)
+        - Windows (WSL2)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output or logs
+      description: Terminal output, or Ollama server logs (`journalctl -u ollama` on Linux, `~/.ollama/logs/server.log` on macOS).
+      render: text

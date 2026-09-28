@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://nasser1941.github.io/lcode/
+    about: Installation, models, configuration and troubleshooting.
+  - name: Questions and ideas
+    url: https://github.com/nasser1941/lcode/discussions
+    about: Ask questions and share what you built in GitHub Discussions.
+  - name: Report a security vulnerability
+    url: https://github.com/nasser1941/lcode/security/advisories/new
+    about: Please report security issues privately, not as public issues.

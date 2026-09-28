@@ -1,0 +1,42 @@
+name: Model request or test report
+description: Ask for a model to be added to the catalog, or report how a model runs on your hardware.
+labels: [models]
+body:
+  - type: markdown
+    attributes:
+      value: Real-world results decide which models lcode recommends, so reports are very welcome.
+  - type: input
+    id: tag
+    attributes:
+      label: Ollama tag
+      placeholder: e.g. qwen3.5:9b
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type
+      options:
+        - Please add this model to the catalog
+        - Test report for a catalog model
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      placeholder: e.g. RTX 4070 12 GB + 32 GB RAM, or MacBook Pro M4 Pro 48 GB
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Results
+      description: Context size used, tokens/s, whether tool calls (reading, editing, running commands) worked reliably, and anything odd.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `lcode doctor`
+      render: text

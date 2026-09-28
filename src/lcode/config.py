@@ -1,0 +1,135 @@
+"""User configuration (~/.config/lcode/config.toml) and on-disk state locations."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover
+    import tomli as tomllib
+
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "lcode"
+CONFIG_PATH = CONFIG_DIR / "config.toml"
+if os.environ.get("LCODE_HOME"):  # sessions and prompt history
+    STATE_DIR = Path(os.environ["LCODE_HOME"])
+else:
+    STATE_DIR = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "lcode"
+
+DEFAULT_MODEL = "qwen3.6-35b"
+PERMISSION_MODES = ("ask", "auto-edit", "yolo")
+
+# key -> (default, type, help)
+SETTINGS: dict[str, tuple[object, type, str]] = {
+    "model": (DEFAULT_MODEL, str, "catalog key (see `lcode models`) or any Ollama model tag"),
+    "context": (None, int, "context window in tokens, e.g. 131072 or 128k (default: largest that fits)"),
+    "num_batch": (None, int, "prompt batch size; larger reads prompts faster but needs more VRAM"),
+    "keep_alive": ("30m", str, "how long Ollama keeps the model loaded after the last request"),
+    "ollama_host": ("http://localhost:11434", str, "Ollama server URL"),
+    "permission_mode": ("ask", str, "ask | auto-edit | yolo"),
+    "think": (True, bool, "let the model reason before answering (slower, better)"),
+}
+ENV_OVERRIDES = {
+    "LCODE_MODEL": "model",
+    "LCODE_CONTEXT": "context",
+    "LCODE_NUM_BATCH": "num_batch",
+    "LCODE_KEEP_ALIVE": "keep_alive",
+    "OLLAMA_HOST": "ollama_host",
+}
+
+
+class ConfigError(ValueError):
+    pass
+
+
+def parse_context(value: str | int) -> int:
+    """Parse '131072', '128k', '128K' or '1m' into a token count (k = 1024)."""
+    if isinstance(value, int):
+        n = value
+    else:
+        m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([kKmM]?)\s*", str(value))
+        if not m:
+            raise ConfigError(f"invalid context size {value!r}; use e.g. 131072, 128k or 1m")
+        n = int(float(m.group(1)) * {"": 1, "k": 1024, "m": 1024 * 1024}[m.group(2).lower()])
+    if n < 2048:
+        raise ConfigError(f"context size {n} is too small (minimum 2048)")
+    return n
+
+
+def format_tokens(n: int) -> str:
+    if n >= 1024 * 1024 and n % (1024 * 1024) == 0:
+        return f"{n // (1024 * 1024)}M"
+    if n >= 1024 and n % 1024 == 0:
+        return f"{n // 1024}K"
+    return f"{n / 1000:.1f}K" if n >= 1000 else str(n)
+
+
+def normalize_host(host: str) -> str:
+    host = host.strip()
+    if "://" not in host:
+        host = "http://" + host
+    return host.replace("0.0.0.0", "localhost").rstrip("/")
+
+
+def coerce(key: str, value: object) -> object:
+    if key not in SETTINGS:
+        raise ConfigError(f"unknown setting {key!r}; valid: {', '.join(SETTINGS)}")
+    if value is None:
+        return None
+    _, typ, _ = SETTINGS[key]
+    if key == "context":
+        return parse_context(value)  # type: ignore[arg-type]
+    if key == "ollama_host":
+        return normalize_host(str(value))
+    if key == "permission_mode" and value not in PERMISSION_MODES:
+        raise ConfigError(f"permission_mode must be one of {', '.join(PERMISSION_MODES)}")
+    if typ is bool and isinstance(value, str):
+        if value.lower() not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
+            raise ConfigError(f"{key} must be true or false")
+        return value.lower() in ("true", "1", "yes", "on")
+    if typ is int:
+        try:
+            return int(value)  # type: ignore[call-overload]
+        except (TypeError, ValueError) as e:
+            raise ConfigError(f"{key} must be an integer") from e
+    return typ(value)
+
+
+def read_file(path: Path | None = None) -> dict:
+    path = path or CONFIG_PATH
+    if not path.is_file():
+        return {}
+    try:
+        data = tomllib.loads(path.read_text())
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(f"{path} is not valid TOML: {e}") from e
+    return {k: coerce(k, v) for k, v in data.items() if k in SETTINGS}
+
+
+def load(path: Path | None = None) -> dict:
+    """Defaults < config file < environment variables."""
+    cfg = {k: default for k, (default, _, _) in SETTINGS.items()}
+    cfg.update(read_file(path))
+    for env, key in ENV_OVERRIDES.items():
+        if os.environ.get(env):
+            cfg[key] = coerce(key, os.environ[env])
+    return cfg
+
+
+def save(updates: dict, path: Path | None = None, remove: tuple[str, ...] = ()) -> None:
+    path = path or CONFIG_PATH
+    data = read_file(path)
+    data.update({k: coerce(k, v) for k, v in updates.items()})
+    for k in remove:
+        data.pop(k, None)
+    lines = ["# lcode configuration — see `lcode config` or https://nasser1941.github.io/lcode/configuration/"]
+    for k in SETTINGS:
+        if data.get(k) is not None:
+            v = data[k]
+            lines.append(f"{k} = {str(v).lower() if isinstance(v, bool) else json.dumps(v)}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")

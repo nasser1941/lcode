@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lcode-cli"
+dynamic = ["version"]
+description = "A local-first terminal coding agent powered by open-weight models on your own GPU or Mac, via Ollama."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Naser Derakhshan" }]
+keywords = ["ai", "agent", "coding-agent", "llm", "ollama", "local-llm", "cli", "qwen", "developer-tools"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development",
+]
+dependencies = [
+    "requests>=2.31",
+    "rich>=13.7",
+    "prompt_toolkit>=3.0.43",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.urls]
+Homepage = "https://nasser1941.github.io/lcode/"
+Documentation = "https://nasser1941.github.io/lcode/"
+Repository = "https://github.com/nasser1941/lcode"
+Issues = "https://github.com/nasser1941/lcode/issues"
+Changelog = "https://github.com/nasser1941/lcode/blob/main/CHANGELOG.md"
+
+[project.scripts]
+lcode = "lcode.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+docs = ["mkdocs-material>=9.5", "mkdocs>=1.6,<2"]  # MkDocs 2 drops plugins and themes
+
+[tool.hatch.version]
+path = "src/lcode/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lcode"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = [
+    "RUF001", # ambiguous unicode in strings: the UI intentionally uses symbols like ✓ and ●
+    "SIM105", # contextlib.suppress is not clearer here
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/lcode/agent.py" = ["E501"] # the prompts are prose; wrapping them would change what the model sees
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
