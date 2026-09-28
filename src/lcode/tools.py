@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import fnmatch
+import inspect
 import json
 import os
 import queue
@@ -265,6 +266,9 @@ class Toolbox:
         fn = getattr(self, f"t_{name}", None)
         if fn is None:
             return f"Error: unknown tool '{name}'. Available: {', '.join(sorted(TOOL_NAMES))}"
+        problem = self._argument_problem(fn, args)
+        if problem:
+            return f"Error: bad arguments for {name}: {problem}"
         try:
             return fn(**args)
         except ToolError as e:
@@ -273,6 +277,22 @@ class Toolbox:
             return f"Error: bad arguments for {name}: {e}"
         except Exception as e:  # surface every failure to the model instead of crashing the session
             return f"Error: {type(e).__name__}: {e}"
+
+    @staticmethod
+    def _argument_problem(fn, args: dict) -> str:
+        """Explain unknown or missing arguments in terms the model can act on."""
+        params = inspect.signature(fn).parameters
+        unknown = [a for a in args if a not in params]
+        missing = [p for p, spec in params.items() if spec.default is inspect.Parameter.empty and p not in args]
+        if not unknown and not missing:
+            return ""
+        parts = []
+        if unknown:
+            parts.append(f"unknown argument(s) {', '.join(map(repr, unknown))}")
+        if missing:
+            parts.append(f"missing required argument(s) {', '.join(map(repr, missing))}")
+        valid = ", ".join(p if params[p].default is inspect.Parameter.empty else f"{p} (optional)" for p in params)
+        return f"{'; '.join(parts)}. Valid arguments: {valid}."
 
     # -- read-only
     def t_read_file(self, path: str, offset: int = 1, limit: int = 2000) -> str:

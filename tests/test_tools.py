@@ -115,7 +115,12 @@ def test_todo_write_accepts_json_string(agent):
 
 def test_unknown_tool_and_bad_args(agent):
     assert agent.tools.run("nope", {}).startswith("Error: unknown tool 'nope'")
-    assert agent.tools.run("read_file", {"wrong": 1}).startswith("Error: bad arguments for read_file")
+    out = agent.tools.run("read_file", {"path": "README.md", "line_start": 3})
+    assert out == (
+        "Error: bad arguments for read_file: unknown argument(s) 'line_start'. "
+        "Valid arguments: path, offset (optional), limit (optional)."
+    )
+    assert "missing required argument(s) 'path'" in agent.tools.run("read_file", {})
 
 
 def test_truncate_keeps_head_and_tail():
