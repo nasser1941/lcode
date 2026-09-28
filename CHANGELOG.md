@@ -6,6 +6,11 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- lcode is on PyPI as `lcode-cli`; the installer now installs the latest release from PyPI instead of
+  the `main` branch.
+
 ## [0.1.1] - 2026-09-28
 
 ### Added

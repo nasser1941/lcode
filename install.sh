@@ -5,14 +5,15 @@
 #
 # What it does, step by step:
 #   1. installs uv (https://docs.astral.sh/uv/) if missing; uv provides an isolated Python 3.12
-#   2. installs lcode with `uv tool install` into ~/.local/bin
+#   2. installs lcode from PyPI (package lcode-cli) with `uv tool install` into ~/.local/bin
 #   3. checks that Ollama is installed and running, and tells you how to install it if not
 #   4. runs `lcode setup`, which picks the best model for your hardware and downloads it
 #
-# Environment overrides: LCODE_SOURCE (pip-style source to install from), LCODE_SKIP_SETUP=1.
+# Environment overrides: LCODE_SOURCE (what to install, e.g. git+https://github.com/nasser1941/lcode for
+# the latest main), LCODE_SKIP_SETUP=1.
 set -euo pipefail
 
-SOURCE="${LCODE_SOURCE:-git+https://github.com/nasser1941/lcode@main}"
+SOURCE="${LCODE_SOURCE:-lcode-cli}"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }

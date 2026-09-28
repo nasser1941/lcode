@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/nasser1941/lcode/actions/workflows/ci.yml"><img src="https://github.com/nasser1941/lcode/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://nasser1941.github.io/lcode/"><img src="https://github.com/nasser1941/lcode/actions/workflows/docs.yml/badge.svg" alt="Docs"></a>
+  <a href="https://pypi.org/project/lcode-cli/"><img src="https://img.shields.io/pypi/v/lcode-cli.svg" alt="PyPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20(Apple%20Silicon)-lightgrey.svg" alt="Linux and macOS">
@@ -55,13 +56,15 @@ curl -fsSL https://nasser1941.github.io/lcode/install.sh | bash
 
 The installer sets up lcode with its own Python via [uv](https://docs.astral.sh/uv/), checks for
 [Ollama](https://ollama.com) (0.30+) and runs `lcode setup`, which picks a model for your hardware
-and downloads it. Prefer manual steps? See the
-[installation guide](https://nasser1941.github.io/lcode/installation/), or:
+and downloads it. Prefer manual steps? lcode is on [PyPI](https://pypi.org/project/lcode-cli/) as
+`lcode-cli`:
 
 ```bash
-uv tool install git+https://github.com/nasser1941/lcode
+uv tool install lcode-cli      # or: pipx install lcode-cli
 lcode setup
 ```
+
+See the [installation guide](https://nasser1941.github.io/lcode/installation/) for details.
 
 ## Quickstart
 
