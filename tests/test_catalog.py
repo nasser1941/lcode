@@ -34,7 +34,7 @@ MACHINES = {
     "mac-m4-24gb": (Hardware("macos", "Apple M4", 24, "Apple M4 GPU", unified=True), "qwen3.5-9b", 262144),
     "mac-m4-max-36gb": (Hardware("macos", "Apple M4 Max", 36, "GPU", unified=True), "qwen3.6-35b", 65536),
     "mac-m4-pro-48gb": (Hardware("macos", "Apple M4 Pro", 48, "GPU", unified=True), "qwen3.6-35b", 262144),
-    "linux-8gb-gpu": (Hardware("linux", "x", 16, "RTX 4060", 8), "qwen3.5-4b", 65536),
+    "linux-8gb-gpu": (Hardware("linux", "x", 16, "RTX 4060", 8), "gpt-oss-20b", 65536),
 }
 
 
