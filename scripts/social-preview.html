@@ -1,0 +1,99 @@
+<!doctype html>
+<!-- Source of social-preview.png (1280x640). Re-render with:
+     google-chrome --headless=new --hide-scrollbars --window-size=1280,640 \
+       --virtual-time-budget=5000 --screenshot=docs/assets/social-preview.png scripts/social-preview.html -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=block" rel="stylesheet">
+<style>
+  :root { --cyan: #22d3ee; --violet: #a78bfa; --text: #e2e8f0; --muted: #94a3b8; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    font-family: Inter, system-ui, sans-serif; color: var(--text);
+    background:
+      radial-gradient(900px 500px at 85% 20%, rgba(167, 139, 250, 0.22), transparent 60%),
+      radial-gradient(700px 500px at 10% 90%, rgba(34, 211, 238, 0.18), transparent 60%),
+      linear-gradient(135deg, #0b1120 0%, #0f172a 55%, #111827 100%);
+    display: flex; align-items: center; padding: 64px 72px; gap: 56px;
+  }
+  body::before {
+    content: ""; position: absolute; inset: 0; opacity: 0.07;
+    background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .left { flex: 1 1 0; position: relative; }
+  .brand { display: flex; align-items: center; gap: 22px; margin-bottom: 26px; }
+  .brand svg { width: 92px; height: 92px; filter: drop-shadow(0 10px 30px rgba(34, 211, 238, 0.25)); }
+  h1 { font-size: 104px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+  .tagline { font-size: 34px; font-weight: 600; line-height: 1.25; margin-bottom: 30px; max-width: 560px; }
+  .tagline span {
+    background: linear-gradient(90deg, var(--cyan), var(--violet)); -webkit-background-clip: text; color: transparent;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 34px; max-width: 580px; }
+  .chip {
+    font-size: 19px; font-weight: 600; padding: 9px 16px; border-radius: 999px;
+    background: rgba(148, 163, 184, 0.12); border: 1px solid rgba(148, 163, 184, 0.28);
+  }
+  .url { font-family: "JetBrains Mono", monospace; font-size: 21px; color: var(--muted); }
+  .term {
+    flex: 0 0 520px; position: relative; border-radius: 16px; overflow: hidden;
+    background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(148, 163, 184, 0.25);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 14px 18px; background: rgba(30, 41, 59, 0.9); }
+  .dot { width: 13px; height: 13px; border-radius: 50%; }
+  .bar .title { margin-left: auto; margin-right: auto; font-size: 15px; color: var(--muted); transform: translateX(-24px); }
+  pre {
+    font-family: "JetBrains Mono", monospace; font-size: 16.5px; line-height: 1.62;
+    padding: 20px 22px 24px; white-space: pre; color: var(--text);
+  }
+  .p { color: var(--cyan); font-weight: 700; } .t { color: #c084fc; font-weight: 700; } .d { color: var(--muted); }
+  .r { color: #fb7185; } .g { color: #86efac; } .y { color: #fcd34d; } .b { font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="brand">
+      <svg viewBox="0 0 128 128" aria-hidden="true">
+        <defs>
+          <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/></linearGradient>
+          <linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#a78bfa"/></linearGradient>
+        </defs>
+        <rect width="128" height="128" rx="28" fill="url(#bg)" stroke="rgba(148,163,184,.35)" stroke-width="2"/>
+        <path d="M34 40 L62 64 L34 88" fill="none" stroke="url(#fg)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="70" y="80" width="30" height="10" rx="5" fill="url(#fg)"/>
+      </svg>
+      <h1>lcode</h1>
+    </div>
+    <p class="tagline">A coding agent that runs <span>entirely on your own machine.</span></p>
+    <div class="chips">
+      <div class="chip">Open-weight models</div>
+      <div class="chip">Up to 256K context</div>
+      <div class="chip">NVIDIA GPU · Apple Silicon</div>
+      <div class="chip">No cloud · No API keys</div>
+    </div>
+    <div class="url">github.com/nasser1941/lcode</div>
+  </div>
+  <div class="term">
+    <div class="bar">
+      <div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div>
+      <div class="title">lcode</div>
+    </div>
+<pre><span class="p">❯</span> The tests fail. Find the bug and fix it.
+<span class="t">●</span> <span class="t">read_file</span>(cart.py)
+<span class="d">  ⎿ 14 line(s)</span>
+The bug is on <span class="b">cart.py:13</span>: quantities
+are ignored in the subtotal.
+<span class="t">●</span> <span class="t">edit_file</span>(cart.py)
+<span class="r">-  sum(price for _, price, qty in items)</span>
+<span class="g">+  sum(price * qty for _, price, qty in items)</span>
+<span class="y">  Allow? [y]es / [a]lways / [n]o:</span> <span class="g b">y</span>
+<span class="p b">  $ python3 -m unittest -v</span>
+<span class="d">    Ran 2 tests ... </span><span class="g b">OK</span>
+<span class="d">  ctx 2.8K/256K · 56 tok/s</span></pre>
+  </div>
+</body>
+</html>

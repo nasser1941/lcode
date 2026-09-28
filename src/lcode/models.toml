@@ -111,8 +111,8 @@ moe = false
 size_gb = 6.6
 max_context = 262144
 kv_kib_per_token = 32
-tested = false
-notes = "Small and capable. For 8-12 GB GPUs and 16-24 GB Macs."
+tested = true
+notes = "Small and capable: 64 tok/s fully on a 12 GB GPU at 128K context. For 8-12 GB GPUs and 16-24 GB Macs."
 
 [[model]]
 key = "qwen3.5-4b"
@@ -124,5 +124,5 @@ moe = false
 size_gb = 3.4
 max_context = 262144
 kv_kib_per_token = 32
-tested = false
-notes = "Smallest option for laptops without a GPU or with 8 GB of memory. Expect weaker results."
+tested = true
+notes = "Smallest option: ~95 tok/s on a 12 GB GPU. Makes more mistakes but fixes them when commands fail."

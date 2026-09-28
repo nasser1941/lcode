@@ -333,6 +333,9 @@ def cmd_chat(args) -> None:
     try:
         cfg = config.load()
         requested_ctx = parse_context(args.context) if args.context else cfg["context"]
+        same_model = (catalog.find(args.model) or args.model) == (catalog.find(cfg["model"]) or cfg["model"])
+        if not args.context and args.model and not same_model:
+            requested_ctx = None  # the saved context was sized for the saved model; fit this one instead
     except ConfigError as e:
         fail(str(e))
     cwd = Path(args.repo).expanduser().resolve()

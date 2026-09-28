@@ -6,6 +6,26 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-28
+
+### Added
+
+- `qwen3.5-9b` and `qwen3.5-4b` are now tested end to end, with measured speed and memory on a 12 GB
+  GPU in the docs. `lcode setup` now recommends only tested models on common machines.
+- Social preview image for the repository and link previews for the docs site.
+- Release workflow that publishes to PyPI with Trusted Publishing.
+
+### Changed
+
+- Memory estimates use ~1 GB of runtime overhead instead of 1.5 GB, matching measurements, so small
+  models get larger context windows (e.g. `qwen3.5-9b` at 128K on a 12 GB GPU).
+
+### Fixed
+
+- `lcode --model X` no longer reuses the context window saved for the default model; it picks the
+  largest window that fits X. `/model` does the same inside a session.
+- `lcode models` fits in 80-column terminals.
+
 ## [0.1.0] - 2026-09-28
 
 First public release.
@@ -30,5 +50,6 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/nasser1941/lcode/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nasser1941/lcode/releases/tag/v0.1.0

@@ -13,8 +13,8 @@ size, and it works with any other Ollama model that supports tool calling.
 | `laguna-xs-2.1` | Poolside Laguna XS 2.1 | MoE, 3B active | 20.3 GB | 256K | untested |
 | `nemotron-3.5-lightning` | NVIDIA Nemotron 3.5 Lightning | hybrid MoE, 3B active | 25.4 GB | 1M | untested |
 | `gpt-oss-20b` | OpenAI gpt-oss 20B | MoE, 3.6B active | 13.8 GB | 128K | untested |
-| `qwen3.5-9b` | Qwen3.5 9B | dense | 6.6 GB | 256K | untested |
-| `qwen3.5-4b` | Qwen3.5 4B | dense | 3.4 GB | 256K | untested |
+| `qwen3.5-9b` | Qwen3.5 9B | dense | 6.6 GB | 256K | tested |
+| `qwen3.5-4b` | Qwen3.5 4B | dense | 3.4 GB | 256K | tested |
 
 *Tested* means the maintainers verified multi-step tool use (exploring a repo, editing files,
 running commands) end to end. Untested models are expected to work; please
@@ -28,7 +28,7 @@ Models for this machine: NVIDIA GeForce RTX 4080 Laptop GPU (12 GB VRAM), 31 GB 
  qwen3.6-35b             22.6 GB   256K     256K       good (experts in RAM)  installed, recommended, current, tested
  qwen3.8-27b             17.7 GB   256K     128K       slow (split across GPU and CPU)  untested
  …
- qwen3.5-9b              6.6 GB    256K     128K       fast                   installed, untested
+ qwen3.5-9b              6.6 GB    256K     128K       fast                   installed, tested
 ```
 
 ### Why the default is a Mixture-of-Experts model
@@ -103,7 +103,7 @@ on demand.
 ### How memory is estimated
 
 ```
-memory ≈ model download size + KV cache per token × context window + ~1.5 GB overhead
+memory ≈ model download size + KV cache per token × context window + ~1 GB overhead
 ```
 
 The KV cache is what grows with context. Hybrid models only keep it in a few layers, which is what
@@ -111,13 +111,13 @@ makes long windows affordable:
 
 | Model | KV cache per token | 32K | 128K | 256K |
 |---|---|---|---|---|
-| qwen3.6-35b | 22 KiB | 23 GB | 25 GB | 28 GB |
-| qwen3.8-27b / qwen3.6-27b | 68 KiB | 20 GB | 27 GB | 35 GB |
-| laguna-xs-2.1 | ~40 KiB (estimated) | 22 GB | 25 GB | 30 GB |
-| nemotron-3.5-lightning | 7 KiB | 25 GB | 26 GB | 27 GB (1M: 32 GB) |
+| qwen3.6-35b | 22 KiB | 23 GB | 25 GB | 28 GB (measured: 26 GB) |
+| qwen3.8-27b / qwen3.6-27b | 68 KiB | 20 GB | 26 GB | 35 GB |
+| laguna-xs-2.1 | ~40 KiB (estimated) | 21 GB | 25 GB | 30 GB |
+| nemotron-3.5-lightning | 7 KiB | 25 GB | 26 GB | 26 GB (1M: 32 GB) |
 | gpt-oss-20b | 24 KiB | 15 GB | 17 GB | — |
-| qwen3.5-9b | 32 KiB | 9 GB | 12 GB | 16 GB |
-| qwen3.5-4b | 32 KiB | 6 GB | 9 GB | 13 GB |
+| qwen3.5-9b | 32 KiB | 8 GB | 11 GB (measured: 9.8 GB) | 15 GB (measured: 16 GB) |
+| qwen3.5-4b | 32 KiB | 5 GB | 8 GB (measured: 8.0 GB) | 12 GB |
 
 The **memory available** for a model is:
 
@@ -136,8 +136,8 @@ results on your machine are welcome in the
 | Machine | Memory for models | Recommended | Context | Speed |
 |---|---|---|---|---|
 | Mac with M4, 16 GB | ~11 GB | qwen3.5-9b | 64K | fast |
-| Mac with M4 / M4 Pro, 24 GB | ~16 GB | qwen3.5-9b | 128K | fast |
-| Mac with M4 Pro / M4 Max, 36 GB | ~24 GB | qwen3.6-35b | 32K | fast |
+| Mac with M4 / M4 Pro, 24 GB | ~16 GB | qwen3.5-9b | 256K | fast |
+| Mac with M4 Pro / M4 Max, 36 GB | ~24 GB | qwen3.6-35b | 64K | fast |
 | Mac with M4 Pro, 48 GB | ~36 GB | qwen3.6-35b | 256K | fast |
 | Mac with M4 Max, 64–128 GB | 48–96 GB | qwen3.6-35b | 256K | fast |
 | NVIDIA 8 GB + 16 GB RAM | ~16 GB | qwen3.5-4b | 64K | fast |
@@ -155,6 +155,17 @@ On an RTX 4080 Laptop GPU (12 GB) with an i9-13980HX and 32 GB RAM, `qwen3.6-35b
 | Prompt reading | ~500 tokens/s: a 60K-token chunk of code takes about 2 minutes the first time |
 | Follow-up turns | start in 1–2 s: Ollama reuses the cached prompt |
 | A real task | "explain X with file:line citations, then write and run a script" in about 2 minutes |
+
+The small models on the same GPU (a bug-fix task: read, run the failing tests, edit, re-run):
+
+| Model | Context | Memory | Placement | Generation | Task time |
+|---|---|---|---|---|---|
+| qwen3.5-9b | 128K | 9.8 GB | 100% GPU | 64 tokens/s | 19 s |
+| qwen3.5-9b | 256K | 16 GB | 63% GPU / 37% CPU | 21 tokens/s | 42 s |
+| qwen3.5-4b | 128K | 8.0 GB | 100% GPU | 97 tokens/s | 16 s |
+
+Dense models slow down about 3x once they no longer fit in VRAM, which is why lcode sizes their
+context to stay on the GPU.
 
 Apple Silicon numbers are not measured yet; please share yours.
 

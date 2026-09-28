@@ -20,6 +20,7 @@ from rich.text import Text
 
 from lcode import __version__, catalog
 from lcode.agent import INIT_PROMPT, Agent
+from lcode.catalog import MIN_USEFUL_CONTEXT
 from lcode.config import PERMISSION_MODES, STATE_DIR, ConfigError, format_tokens, parse_context
 from lcode.hardware import Hardware
 from lcode.ollama import OllamaError
@@ -206,9 +207,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
                 return True
             s.model = name
             s.num_batch = spec.num_batch if spec and name == spec.local_name else None
-            limit = spec.max_context if spec else None
-            if limit and s.context > limit:
-                s.context = limit
+            if spec:  # size the context for the new model: largest window that fits this machine
+                s.context = spec.fit(hardware)[0] or MIN_USEFUL_CONTEXT
             agent.messages[0]["content"] = agent.system_prompt()
             c.print(f"[green]Switched to {name}[/] (context {format_tokens(s.context)}).")
     elif cmd == "/think":

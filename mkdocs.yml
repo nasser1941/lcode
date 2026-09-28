@@ -8,6 +8,7 @@ copyright: Copyright &copy; 2026 Naser Derakhshan · <a href="https://github.com
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/logo.svg
   favicon: assets/logo.svg
   icon:

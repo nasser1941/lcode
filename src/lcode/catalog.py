@@ -14,7 +14,7 @@ if sys.version_info >= (3, 11):
 else:  # pragma: no cover
     import tomli as tomllib
 
-OVERHEAD_GIB = 1.5  # compute buffers, speculative-decoding context, runtime
+OVERHEAD_GIB = 1.0  # compute buffers and runtime; measured <1 GiB for qwen3.6-35b and qwen3.5-9b on CUDA
 HEADROOM_GIB = 0.5  # keep a little memory free so estimates at the edge don't run out
 CONTEXT_STEPS = [1048576, 524288, 262144, 131072, 65536, 32768]
 MIN_USEFUL_CONTEXT = 32768
