@@ -22,6 +22,10 @@ All notable changes to lcode are documented here. The format follows
 
 - `lcode -c` continues the most recently *used* session in the folder, not the most recently created
   one. Empty sessions are no longer saved.
+- `/rename` saves the session right away, so a session named before its first request shows up in
+  `/resume`.
+- Typing `exit` or `quit` (without a slash) quits instead of being sent to the model as a request.
+- Compacted sessions keep their original title instead of showing the summary header.
 
 ## [0.1.1] - 2026-09-28
 

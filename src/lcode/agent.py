@@ -142,8 +142,8 @@ class Agent:
         return any(m.get("role") == "user" for m in self.messages)
 
     def save(self) -> None:
-        if not self.has_conversation():
-            return
+        if not (self.has_conversation() or self.session_name):
+            return  # nothing worth resuming
         self.session_title = self.session_title or sessions.title_from(self.messages)
         f = self.session_file()
         f.parent.mkdir(parents=True, exist_ok=True)

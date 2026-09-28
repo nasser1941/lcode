@@ -180,8 +180,7 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
             c.print(f"This session is {current}. Name it with /rename <name>.")
         else:
             agent.rename(arg)
-            later = "" if agent.has_conversation() else " It's saved after your first request."
-            c.print(f"[green]Session named '{escape(agent.session_name)}'.[/]{later}")
+            c.print(f"[green]Session named '{escape(agent.session_name)}'.[/] Find it later with /resume.")
     elif cmd == "/resume":
         info = choose_session(agent, arg)
         if info:
@@ -267,7 +266,10 @@ def print_sessions(agent: Agent, found: list[sessions.SessionInfo], all_dirs: bo
     if all_dirs:
         table.add_column("Folder", overflow="fold")
     for i, info in enumerate(found, 1):
-        label = f"[bold]{escape(info.name)}[/]\n[dim]{escape(info.title)}[/]" if info.name else escape(info.title)
+        if info.name:
+            label = f"[bold]{escape(info.name)}[/]\n[dim]{escape(info.title or '(no requests yet)')}[/]"
+        else:
+            label = escape(info.label)
         if info.id == agent.session_id:
             label += " [green](current)[/]"
         row = [str(i), label, sessions.age(info.updated), str(info.turns)]
@@ -374,6 +376,8 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
             break
         if not line:
             continue
+        if line.lower() in sessions.EXIT_WORDS:  # people type these expecting to quit, not to ask the model
+            break
         if line.startswith("/") and not line.startswith("//"):
             if not handle_command(agent, line, hardware):
                 break
