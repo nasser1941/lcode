@@ -144,3 +144,31 @@ def test_cli_resume_flag():
     assert cli.build_parser().parse_args(["--resume"]).resume == ""
     assert cli.build_parser().parse_args(["--resume", "parser work"]).resume == "parser work"
     assert cli.build_parser().parse_args([]).resume is None
+
+
+def test_renaming_an_empty_session_saves_it(make_agent):
+    agent = make_agent()
+    handle_command(agent, "/rename planning", HW)
+    found = sessions.list_sessions(agent.cwd)
+    assert [(s.name, s.turns, s.label) for s in found] == [("planning", 0, "planning")]
+    # The name survives the first request.
+    run(agent, "first real request")
+    assert json.loads(agent.session_file().read_text())["name"] == "planning"
+
+
+def test_titles_skip_compaction_summaries(make_agent):
+    summary = {"role": "user", "content": f"{sessions.SUMMARY_PREFIX}\n\n## Summary ..."}
+    assert sessions.title_from([summary]) == "Compacted conversation"
+    assert sessions.title_from([summary, {"role": "user", "content": "next step"}]) == "next step"
+    # A session keeps its original title after /compact.
+    agent = make_agent([reply("ok"), reply("SUMMARY")])
+    agent.run_turn("design the cache layer")
+    agent.save()
+    agent.compact()
+    agent.save()
+    assert sessions.list_sessions(agent.cwd)[0].title == "design the cache layer"
+
+
+def test_exit_words():
+    assert {"exit", "quit"} <= sessions.EXIT_WORDS
+    assert "exit the loop early when empty" not in sessions.EXIT_WORDS

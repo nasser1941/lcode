@@ -11,6 +11,8 @@ from pathlib import Path
 from lcode import config
 
 TITLE_LENGTH = 70
+SUMMARY_PREFIX = "[Summary of our conversation so far]"  # first message of a compacted conversation
+EXIT_WORDS = {"exit", "quit", ":q", ":quit"}
 
 
 @dataclass(frozen=True)
@@ -26,7 +28,7 @@ class SessionInfo:
 
     @property
     def label(self) -> str:
-        return self.name or self.title or "(empty)"
+        return self.name or self.title or "(no requests yet)"
 
 
 def sessions_dir() -> Path:
@@ -34,13 +36,20 @@ def sessions_dir() -> Path:
 
 
 def title_from(messages: list[dict]) -> str:
-    """A one-line title from the first request, without attached files."""
+    """A one-line title from the first request, without attached files or compaction summaries."""
+    compacted = False
     for message in messages:
-        if message.get("role") == "user":
-            text = re.split(r"\n\n<(?:file|directory) path=", message.get("content", ""), maxsplit=1)[0]
-            text = " ".join(text.split())
+        if message.get("role") != "user":
+            continue
+        content = message.get("content", "")
+        if content.startswith(SUMMARY_PREFIX):
+            compacted = True
+            continue
+        text = re.split(r"\n\n<(?:file|directory) path=", content, maxsplit=1)[0]
+        text = " ".join(text.split())
+        if text:
             return text if len(text) <= TITLE_LENGTH else text[: TITLE_LENGTH - 1].rstrip() + "…"
-    return ""
+    return "Compacted conversation" if compacted else ""
 
 
 def read_info(path: Path) -> SessionInfo | None:
@@ -71,7 +80,7 @@ def list_sessions(cwd: Path | str | None = None, limit: int = 50) -> list[Sessio
     found = []
     for f in files:
         info = read_info(f)
-        if info and info.turns and (cwd is None or info.cwd == str(cwd)):
+        if info and (info.turns or info.name) and (cwd is None or info.cwd == str(cwd)):
             found.append(info)
             if len(found) >= limit:
                 break
