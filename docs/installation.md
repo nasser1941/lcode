@@ -52,21 +52,29 @@ curl -fsSL https://nasser1941.github.io/lcode/install.sh | bash
 ```
 
 The [installer](https://github.com/nasser1941/lcode/blob/main/install.sh) installs
-[uv](https://docs.astral.sh/uv/) if needed, installs lcode with its own Python into `~/.local/bin`,
-checks that Ollama is running, and starts `lcode setup`.
+[uv](https://docs.astral.sh/uv/) if needed, installs the latest release of lcode from
+[PyPI](https://pypi.org/project/lcode-cli/) with its own Python into `~/.local/bin`, checks that
+Ollama is running, and starts `lcode setup`.
 
 ??? note "Prefer to do it by hand?"
 
-    With [uv](https://docs.astral.sh/uv/getting-started/installation/):
+    lcode is published on PyPI as `lcode-cli` (the command is `lcode`). With
+    [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
     ```bash
-    uv tool install git+https://github.com/nasser1941/lcode
+    uv tool install lcode-cli
     ```
 
     Or with [pipx](https://pipx.pypa.io):
 
     ```bash
-    pipx install git+https://github.com/nasser1941/lcode
+    pipx install lcode-cli
+    ```
+
+    To try the latest unreleased changes from `main`:
+
+    ```bash
+    uv tool install git+https://github.com/nasser1941/lcode
     ```
 
     lcode needs Python 3.10 or newer. The macOS system Python is too old, which is why uv (it
@@ -138,7 +146,7 @@ steps. NVIDIA GPUs work inside WSL2 with the regular Windows driver.
 ## Upgrade and uninstall
 
 ```bash
-uv tool upgrade lcode-cli        # upgrade
+uv tool upgrade lcode-cli        # upgrade (pipx: pipx upgrade lcode-cli)
 uv tool uninstall lcode-cli      # remove lcode
 rm -rf ~/.config/lcode ~/.local/state/lcode    # remove settings and saved sessions
 ollama rm lcode-qwen3.6-35b qwen3.6:35b-a3b-coding   # remove downloaded models
