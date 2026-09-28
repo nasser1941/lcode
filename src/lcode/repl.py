@@ -14,11 +14,13 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Group
+from rich.markup import escape
 from rich.panel import Panel
 from rich.rule import Rule
+from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, catalog
+from lcode import __version__, catalog, sessions
 from lcode.agent import INIT_PROMPT, Agent
 from lcode.catalog import MIN_USEFUL_CONTEXT
 from lcode.config import PERMISSION_MODES, STATE_DIR, ConfigError, format_tokens, parse_context
@@ -30,6 +32,8 @@ COMMANDS = {
     "/help": "Show this help",
     "/init": "Analyze the repo and write an AGENTS.md guide (loaded at every start)",
     "/clear": "Start a fresh conversation",
+    "/rename": "Name this session so you can find it later, e.g. /rename auth refactor",
+    "/resume": "Resume a saved session: pick from a list, or /resume <number|name> (/resume all: every folder)",
     "/compact": "Summarize the conversation to free context (optional: what to focus on)",
     "/context": "Show context-window usage",
     "/ctx": "Show or change the context window, e.g. /ctx 128k",
@@ -105,6 +109,7 @@ def build_session(agent: Agent) -> PromptSession:
             f" <b>{html.escape(s.model)}</b> · ctx {format_tokens(agent.ctx_used)}/{format_tokens(s.context)} "
             f"({pct:.0f}%) · mode <{color}>{agent.perms.mode}</{color}> (shift+tab) · "
             f"think {'on' if s.think else 'off'} · {html.escape(agent.cwd.name)}/"
+            + (f" · <b>{html.escape(agent.session_name)}</b>" if agent.session_name else "")
         )
 
     STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -167,9 +172,20 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         )
         c.print(Panel(f"{rows}\n\n  [dim]{keys}[/]", title="lcode commands", border_style="cyan"))
     elif cmd == "/clear":
-        agent.reset()
-        agent.session_id = agent.new_session_id()
-        c.print("[green]Conversation cleared.[/]")
+        agent.new_session()
+        c.print("[green]Started a new conversation.[/] The previous one is saved; /resume brings it back.")
+    elif cmd == "/rename":
+        if not arg:
+            current = f"'{escape(agent.session_name)}'" if agent.session_name else "not named yet"
+            c.print(f"This session is {current}. Name it with /rename <name>.")
+        else:
+            agent.rename(arg)
+            later = "" if agent.has_conversation() else " It's saved after your first request."
+            c.print(f"[green]Session named '{escape(agent.session_name)}'.[/]{later}")
+    elif cmd == "/resume":
+        info = choose_session(agent, arg)
+        if info:
+            resume_session(agent, info)
     elif cmd == "/compact":
         agent.compact(arg)
     elif cmd == "/context":
@@ -241,9 +257,107 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
     return True
 
 
-def repl(agent: Agent, prompt: str | None, resume: bool, hardware: Hardware) -> None:
-    if resume and agent.load_latest():
-        agent.console.print(f"[green]Resumed session {agent.session_id} ({len(agent.messages)} messages).[/]")
+def print_sessions(agent: Agent, found: list[sessions.SessionInfo], all_dirs: bool) -> None:
+    where = "all folders" if all_dirs else str(agent.cwd)
+    table = Table(title=f"Saved sessions · {where}", title_justify="left", header_style="bold")
+    table.add_column("#", justify="right", style="cyan")
+    table.add_column("Session")
+    table.add_column("Last used", no_wrap=True)
+    table.add_column("Requests", justify="right")
+    if all_dirs:
+        table.add_column("Folder", overflow="fold")
+    for i, info in enumerate(found, 1):
+        label = f"[bold]{escape(info.name)}[/]\n[dim]{escape(info.title)}[/]" if info.name else escape(info.title)
+        if info.id == agent.session_id:
+            label += " [green](current)[/]"
+        row = [str(i), label, sessions.age(info.updated), str(info.turns)]
+        if all_dirs:
+            row.append(escape(info.cwd))
+        table.add_row(*row)
+    agent.console.print(table)
+
+
+def choose_session(agent: Agent, query: str = "") -> sessions.SessionInfo | None:
+    """Find a session by number/name/id, or list them and ask. `all` lists every folder."""
+    c = agent.console
+    words = query.split()
+    all_dirs = bool(words) and words[0].lower() in ("all", "--all", "-a")
+    query = " ".join(words[1:] if all_dirs else words)
+    found = sessions.list_sessions(None if all_dirs else agent.cwd)
+    if not found and not all_dirs:
+        found, all_dirs = sessions.list_sessions(None), True
+        if found and not query:
+            c.print("[dim]No saved sessions in this folder; showing all folders.[/]")
+    if not found:
+        c.print("No saved sessions yet. Sessions are saved after every request.")
+        return None
+    if query:
+        match = sessions.find(query, found)
+        if match is None and not all_dirs:
+            match = sessions.find(query, sessions.list_sessions(None))
+        if match:
+            return match
+        c.print(f"[yellow]No session matches '{escape(query)}'.[/]")
+    print_sessions(agent, found, all_dirs)
+    try:
+        answer = input("  Resume which session? (number or name, Enter to cancel): ").strip()
+    except EOFError:
+        return None
+    if not answer:
+        return None
+    match = sessions.find(answer, found)
+    if match is None:
+        c.print(f"[yellow]No session matches '{escape(answer)}'.[/]")
+    return match
+
+
+def resume_session(agent: Agent, info: sessions.SessionInfo) -> None:
+    c = agent.console
+    if info.id == agent.session_id:
+        c.print("That's the current session.")
+        return
+    agent.save()
+    try:
+        note = agent.load(info)
+    except OSError as e:
+        c.print(f"[red]{e}[/]")
+        return
+    c.print(
+        f"[green]Resumed[/] [bold]{escape(info.label)}[/] "
+        f"[dim]({info.turns} request{'' if info.turns == 1 else 's'}, last used {sessions.age(info.updated)})[/]"
+    )
+    if note:
+        c.print(f"[yellow]{escape(note)}[/]")
+    print_recap(agent)
+
+
+def print_recap(agent: Agent) -> None:
+    """Show the last request and the start of the last answer, so it's clear where things left off."""
+    last_user = next((m for m in reversed(agent.messages) if m.get("role") == "user"), None)
+    last_answer = next(
+        (m for m in reversed(agent.messages) if m.get("role") == "assistant" and m.get("content", "").strip()), None
+    )
+    if not last_user:
+        return
+    lines = [f"[bold]You:[/] {escape(sessions.title_from([last_user]))}"]
+    if last_answer:
+        answer = " ".join(last_answer["content"].split())
+        answer = answer if len(answer) <= 300 else answer[:299].rstrip() + "…"
+        lines.append(f"[bold]lcode:[/] {escape(answer)}")
+    agent.console.print(Panel("\n".join(lines), title="Where you left off", title_align="left", border_style="dim"))
+
+
+def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = False, resume: str | None = None) -> None:
+    if cont:
+        if agent.load_latest():
+            agent.console.print(f"[green]Continuing[/] [bold]{escape(agent.session_name or agent.session_title)}[/]")
+            print_recap(agent)
+        else:
+            agent.console.print("[dim]No saved session in this folder yet; starting a new one.[/]")
+    elif resume is not None:
+        info = choose_session(agent, resume)
+        if info:
+            resume_session(agent, info)
     if prompt:
         run_safely(agent, prompt)
         return

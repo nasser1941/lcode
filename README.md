@@ -83,9 +83,10 @@ lcode
 | | |
 |---|---|
 | `lcode -p "…"` | one request, no interaction (scripts, hooks) |
-| `lcode -c` | continue the last session in this directory |
+| `lcode -c` / `lcode --resume` | continue the last session here / pick a saved session from a list |
 | `lcode --model qwen3.5-9b --context 128k` | pick a model and context window for this session |
 | `lcode models` / `lcode doctor` | what fits this machine / check the installation |
+| `/rename`, `/resume` | name the current session, resume a saved one |
 | `/model`, `/ctx 128k`, `/compact`, `/help` | switch model, resize context, summarize, list commands |
 
 ## Models

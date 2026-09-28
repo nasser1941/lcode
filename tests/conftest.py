@@ -62,7 +62,7 @@ def repo(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def make_agent(repo: Path, monkeypatch, tmp_path_factory):
-    monkeypatch.setattr("lcode.agent.STATE_DIR", tmp_path_factory.mktemp("state"))
+    monkeypatch.setattr("lcode.config.STATE_DIR", tmp_path_factory.mktemp("state"))
 
     def factory(scripts=None, mode: str = "yolo", **settings) -> Agent:
         console = Console(file=io.StringIO(), width=100, force_terminal=False)
