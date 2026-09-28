@@ -84,6 +84,25 @@ def test_gpu_memory_error_retries_with_a_smaller_batch(make_agent):
     assert "retrying with 512" in output(agent)
 
 
+def test_context_is_halved_until_the_model_fits(make_agent):
+    from lcode import limits
+
+    agent = make_agent(context=524288)
+
+    def chat_stream(payload):
+        agent.ollama.payloads.append(payload)
+        if payload["options"]["num_ctx"] > 131072:
+            raise OllamaError("Ollama error 500: llama-server process has terminated: cudaMalloc failed: out of memory")
+        yield from reply("fits now")
+
+    agent.ollama.chat_stream = chat_stream
+    agent.run_turn("hi")
+    assert [p["options"]["num_ctx"] for p in agent.ollama.payloads] == [524288, 262144, 131072]
+    assert agent.settings.context == 131072
+    assert limits.get(agent.settings.model) == 131072
+    assert "didn't fit in GPU memory" in output(agent)
+
+
 def test_errors_after_output_are_not_retried(make_agent):
     agent = make_agent(num_batch=1024)
 

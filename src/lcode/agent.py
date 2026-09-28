@@ -18,7 +18,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
-from lcode import catalog, sessions
+from lcode import catalog, limits, sessions
 from lcode.config import format_tokens
 from lcode.ollama import Ollama, OllamaError
 from lcode.permissions import Permissions
@@ -234,6 +234,19 @@ class Agent:
                     self.console.print(
                         f"[yellow]The GPU ran out of memory with a prompt batch of {batch}; retrying with "
                         f"{SAFE_NUM_BATCH}.[/] [dim]To skip this retry: lcode config set num_batch {SAFE_NUM_BATCH}[/]"
+                    )
+                    yield from self.chat(messages, tools, think)
+                    return
+                context = self.settings.context
+                if not started and context > catalog.MIN_USEFUL_CONTEXT:
+                    # The context cache has to fit in memory; halve it until the model loads.
+                    smaller = max(catalog.MIN_USEFUL_CONTEXT, context // 2)
+                    self.settings.context = smaller
+                    limits.record(self.settings.model, smaller)
+                    self.console.print(
+                        f"[yellow]{self.settings.model} didn't fit in GPU memory with a {format_tokens(context)} "
+                        f"context; retrying with {format_tokens(smaller)}.[/] [dim]lcode will start there next "
+                        "time on this machine.[/]"
                     )
                     yield from self.chat(messages, tools, think)
                     return

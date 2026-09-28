@@ -53,6 +53,7 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `~/.config/lcode/config.toml` | Settings |
 | `~/.local/state/lcode/sessions/` | Saved conversations (for `lcode -c`) |
 | `~/.local/state/lcode/history` | Prompt history (++up++ in the prompt) |
+| `~/.local/state/lcode/limits.json` | Context sizes that ran out of GPU memory on this machine (safe to delete) |
 
 Sessions contain everything the model read, including file contents. Delete the folder to clear them.
 

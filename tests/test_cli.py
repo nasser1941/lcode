@@ -78,3 +78,16 @@ def test_other_model_gets_its_own_context(tmp_path, monkeypatch):
     cli.main(["--model", "qwen3.6-35b"])
     cli.main(["--model", "qwen3.5-9b", "--context", "64k"])
     assert requested == [("qwen3.5-9b", None), ("qwen3.6-35b", 262144), ("qwen3.5-9b", 65536)]
+
+
+def test_learned_limits_cap_the_automatic_context(tmp_path, monkeypatch):
+    from lcode import limits
+
+    monkeypatch.setattr(config, "STATE_DIR", tmp_path)
+    spec = catalog.find("nemotron-3.5-lightning")
+    big = Hardware("linux", "x", 64, "GPU", 12)
+    assert cli.choose_context(FakeOllama(max_ctx=1048576), "nemo", spec, None, big)[0] == 1048576
+    limits.record("nemo", 524288)
+    assert cli.choose_context(FakeOllama(max_ctx=1048576), "nemo", spec, None, big)[0] == 524288
+    # An explicit --context is respected (and falls back at runtime if it doesn't fit).
+    assert cli.choose_context(FakeOllama(max_ctx=1048576), "nemo", spec, 1048576, big)[0] == 1048576

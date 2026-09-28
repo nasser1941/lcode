@@ -34,7 +34,13 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ### Out of memory, or `CUDA error: an illegal memory access`
 
-The model plus its context don't fit.
+The model plus its context don't fit. lcode handles the common cases itself: if a model fails to load
+because of GPU memory, it first retries with a prompt batch of 512 (if you raised it), then with half
+the context, until it loads. The context that worked is remembered in `~/.local/state/lcode/limits.json`,
+so the next session starts there; `lcode doctor` shows it. Delete that file to let lcode try larger
+contexts again (for example after a GPU upgrade, or if another program was using the GPU at the time).
+
+If it still fails:
 
 1. Lower the context: `/ctx 128k` in a session or `lcode config set context 128k`.
 2. If you raised the prompt batch, lower it again: `lcode config unset num_batch`. (When the GPU runs
