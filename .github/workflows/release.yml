@@ -1,0 +1,36 @@
+name: Release
+
+# Publishes to PyPI when a GitHub release is published, using PyPI Trusted Publishing:
+# no API token is stored anywhere. PyPI must list this repository, this workflow file and the
+# "pypi" environment as a trusted publisher for the lcode-cli project.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/lcode-cli/
+    permissions:
+      id-token: write # to prove to PyPI that the upload comes from this workflow
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - name: Check the release tag matches the package version
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/lcode/__init__.py)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match package version $version"
+            exit 1
+          fi
+      - run: uv build
+      - name: Smoke-test the wheel
+        run: uvx --from dist/*.whl lcode --version
+      - run: uv publish --trusted-publishing always

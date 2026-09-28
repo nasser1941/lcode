@@ -60,9 +60,10 @@ representative at an online or offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement (currently the
-maintainer, [@nasser1941](https://github.com/nasser1941)) privately through
+maintainer, [@nasser1941](https://github.com/nasser1941)) by email at
+[nasser_derakhshan@yahoo.com](mailto:nasser_derakhshan@yahoo.com), privately through
 [this confidential report form](https://github.com/nasser1941/lcode/security/advisories/new),
-which only maintainers can see, or with GitHub's "Report content" option on the comment.
+or with GitHub's "Report content" option on the comment.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the

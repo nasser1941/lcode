@@ -56,3 +56,25 @@ def test_models_table_fits_narrow_terminals(monkeypatch):
     out = narrow.file.getvalue()
     assert "Fits here" in out and "qwen3.6-35b" in out and "recommended" in out
     assert "…" not in out
+
+
+def test_other_model_gets_its_own_context(tmp_path, monkeypatch):
+    """A context saved for the default model must not be forced on a model picked with --model."""
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
+    config.save({"model": "qwen3.6-35b", "context": 262144})
+    requested = []
+
+    def fake_choose_context(ollama, model, spec, requested_ctx, hw):
+        requested.append((model, requested_ctx))
+        return 131072, ""
+
+    monkeypatch.setattr(cli, "Ollama", lambda host: FakeOllama())
+    monkeypatch.setattr(cli, "detect", lambda: HW)
+    monkeypatch.setattr(cli, "check_ollama", lambda *args: "0.32.0")
+    monkeypatch.setattr(cli, "resolve_model", lambda ollama, name: (name, catalog.find(name)))
+    monkeypatch.setattr(cli, "choose_context", fake_choose_context)
+    monkeypatch.setattr("lcode.repl.repl", lambda *args, **kwargs: None)
+    cli.main(["--model", "qwen3.5-9b"])
+    cli.main(["--model", "qwen3.6-35b"])
+    cli.main(["--model", "qwen3.5-9b", "--context", "64k"])
+    assert requested == [("qwen3.5-9b", None), ("qwen3.6-35b", 262144), ("qwen3.5-9b", 65536)]

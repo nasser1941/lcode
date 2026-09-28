@@ -95,20 +95,22 @@ lcode
 | `laguna-xs-2.1` | Poolside Laguna XS 2.1 (MoE, 3B active) | 20.3 GB | 256K | |
 | `nemotron-3.5-lightning` | NVIDIA Nemotron 3.5 Lightning (hybrid MoE) | 25.4 GB | 1M | |
 | `gpt-oss-20b` | OpenAI gpt-oss 20B (MoE) | 13.8 GB | 128K | |
-| `qwen3.5-9b` | Qwen3.5 9B (dense) | 6.6 GB | 256K | |
-| `qwen3.5-4b` | Qwen3.5 4B (dense) | 3.4 GB | 256K | |
+| `qwen3.5-9b` | Qwen3.5 9B (dense) | 6.6 GB | 256K | tested |
+| `qwen3.5-4b` | Qwen3.5 4B (dense) | 3.4 GB | 256K | tested |
 
 What `lcode setup` picks for common machines:
 
 | Machine | Model | Context |
 |---|---|---|
 | Mac with M4, 16 GB | qwen3.5-9b | 64K |
-| Mac with M4 / M4 Pro, 24 GB | qwen3.5-9b | 128K |
+| Mac with M4 / M4 Pro, 24 GB | qwen3.5-9b | 256K |
+| Mac with M4 Pro / M4 Max, 36 GB | qwen3.6-35b | 64K |
 | Mac with M4 Pro, 48 GB · M4 Max, 64 GB+ | qwen3.6-35b | 256K |
 | NVIDIA 8–24 GB + 32 GB RAM | qwen3.6-35b | 256K |
 | NVIDIA 8 GB + 16 GB RAM | qwen3.5-4b | 64K |
 
-On an RTX 4080 Laptop GPU (12 GB) the default model generates 50–60 tokens/s at 256K context. See
+On an RTX 4080 Laptop GPU (12 GB) the default model generates 50–60 tokens/s at 256K context, and
+qwen3.5-9b 64 tokens/s at 128K. See
 [Models & context windows](https://nasser1941.github.io/lcode/models/) for memory estimates and
 tuning.
 
