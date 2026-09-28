@@ -127,11 +127,13 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 ## Roadmap
 
-- More models in the catalog, with community test reports ([request one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml))
-- Measured Apple Silicon performance numbers
-- MCP (Model Context Protocol) tool servers
-- Web fetch and search tools
-- Packaging on PyPI and Homebrew
+See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
+
+- [`/undo` and automatic checkpoints](https://github.com/nasser1941/lcode/issues/4)
+- [`lcode bench`: score models on your own hardware](https://github.com/nasser1941/lcode/issues/5)
+- [MCP tool servers](https://github.com/nasser1941/lcode/issues/6) and [web fetch/search tools](https://github.com/nasser1941/lcode/issues/7)
+- [Homebrew formula](https://github.com/nasser1941/lcode/issues/8) and an [optional sandbox for shell commands](https://github.com/nasser1941/lcode/issues/9)
+- More models in the catalog, with community test reports ([report one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml)), especially from Apple Silicon Macs
 
 ## Contributing
 
