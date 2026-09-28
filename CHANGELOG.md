@@ -6,10 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Named sessions and a session picker: `/rename <name>` names the current session, `/resume` lists
+  saved sessions and resumes the one you pick (by number, name, id or title), `/resume all` shows
+  every folder, and `lcode --resume [SESSION]` does the same from the shell. Resuming shows a short
+  recap of where you left off.
+
 ### Changed
 
 - lcode is on PyPI as `lcode-cli`; the installer now installs the latest release from PyPI instead of
   the `main` branch.
+
+### Fixed
+
+- `lcode -c` continues the most recently *used* session in the folder, not the most recently created
+  one. Empty sessions are no longer saved.
 
 ## [0.1.1] - 2026-09-28
 

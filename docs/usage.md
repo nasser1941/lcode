@@ -16,7 +16,8 @@ lcode config [set|unset]     # show or change settings
 | `-m, --model NAME` | Catalog key (see `lcode models`) or any installed Ollama model |
 | `--context SIZE` | Context window, e.g. `65536`, `128k`, `1m` |
 | `-r, --repo DIR` | Work in another directory |
-| `-c, --continue` | Resume the last session in this directory |
+| `-c, --continue` | Continue the most recently used session in this directory |
+| `--resume [SESSION]` | Resume a saved session: pick from a list, or give its number, name or id |
 | `--auto-edit` | Apply file edits without asking (commands still ask) |
 | `--yolo` | Never ask for permission |
 | `--no-think` | Turn off the model's reasoning: faster, less accurate |
@@ -44,7 +45,9 @@ reasoning is on.
 |---|---|
 | `/help` | List commands and keys |
 | `/init` | Analyze the repository and write `AGENTS.md` (read at every start) |
-| `/clear` | Start a new conversation |
+| `/clear` | Start a new conversation (the current one stays saved) |
+| `/rename NAME` | Name the current session so it's easy to find later |
+| `/resume [SESSION]` | Resume a saved session: pick from a list, or give its number or name; `/resume all` lists every folder |
 | `/compact [focus]` | Summarize the conversation to free context |
 | `/context` | Show how full the context window is |
 | `/ctx [size]` | Show or change the context window |
@@ -100,8 +103,35 @@ conventions. `/init` writes a first version for you.
 
 ## Sessions
 
-Every session is saved to `~/.local/state/lcode/sessions/`. `lcode -c` resumes the most recent
-session for the current directory, with the full conversation.
+Every conversation is saved after each request to `~/.local/state/lcode/sessions/`, so you can
+leave and pick up where you stopped.
+
+```text
+❯ /rename auth refactor        # name the current session
+❯ /resume                      # list this folder's sessions and pick one
+```
+
+```text
+Saved sessions · /home/you/code/my-project
+ #  Session                                  Last used   Requests
+ 1  auth refactor                            2 h ago           14
+    Explain how login tokens are validated
+ 2  The tests in tests/test_parser.py fail…  yesterday          6
+  Resume which session? (number or name, Enter to cancel): 1
+```
+
+Unnamed sessions are listed by their first request. After resuming, lcode shows your last request
+and the start of its last answer so you know where you left off.
+
+| From the shell | From a session | Resumes |
+|---|---|---|
+| `lcode -c` | | the most recently used session in this folder |
+| `lcode --resume` | `/resume` | one you pick from a list |
+| `lcode --resume "auth refactor"` | `/resume auth refactor` | a session by name, list number, id or a unique part of its title |
+| | `/resume all` | a session from any folder (lcode switches to that folder) |
+
+`/clear` starts a new conversation and keeps the old one saved. Files may have changed since a
+session was saved, so after resuming the model has to read a file again before editing it.
 
 ## Scripting
 

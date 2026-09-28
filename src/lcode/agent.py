@@ -18,8 +18,8 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
-from lcode import catalog
-from lcode.config import STATE_DIR, format_tokens
+from lcode import catalog, sessions
+from lcode.config import format_tokens
 from lcode.ollama import Ollama, OllamaError
 from lcode.permissions import Permissions
 from lcode.render import MarkdownStreamer
@@ -100,6 +100,8 @@ class Agent:
         self.perms = Permissions(self.console, settings.permission_mode)
         self.tools = Toolbox(self)
         self.session_id = self.new_session_id()
+        self.session_name = ""
+        self.session_title = ""
         self.ctx_used = 0
         self.last_speed = 0.0
         self.messages: list[dict] = []
@@ -134,25 +136,63 @@ class Agent:
         self.ctx_used = len(self.messages[0]["content"]) // 3
 
     def session_file(self) -> Path:
-        return STATE_DIR / "sessions" / f"{self.session_id}.json"
+        return sessions.sessions_dir() / f"{self.session_id}.json"
+
+    def has_conversation(self) -> bool:
+        return any(m.get("role") == "user" for m in self.messages)
 
     def save(self) -> None:
+        if not self.has_conversation():
+            return
+        self.session_title = self.session_title or sessions.title_from(self.messages)
         f = self.session_file()
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps({"cwd": str(self.cwd), "model": self.settings.model, "messages": self.messages}))
+        data = {
+            "cwd": str(self.cwd),
+            "model": self.settings.model,
+            "name": self.session_name,
+            "title": self.session_title,
+            "messages": self.messages,
+        }
+        f.write_text(json.dumps(data))
+
+    def new_session(self) -> None:
+        self.reset()
+        self.session_id = self.new_session_id()
+        self.session_name = ""
+        self.session_title = ""
+
+    def rename(self, name: str) -> None:
+        self.session_name = " ".join(name.split())
+        self.save()
+
+    def load(self, info: sessions.SessionInfo) -> str:
+        """Resume a saved session. Returns a note about the working directory, if it changed."""
+        try:
+            data = json.loads(info.path.read_text())
+        except (OSError, ValueError) as e:
+            raise OSError(f"can't read session {info.id}: {e}") from e
+        note = ""
+        saved_cwd = Path(info.cwd) if info.cwd else self.cwd
+        if saved_cwd != self.cwd:
+            if saved_cwd.is_dir():
+                self.cwd = saved_cwd.resolve()
+                note = f"Working directory is now {self.cwd}"
+            else:
+                note = f"The session's directory {saved_cwd} no longer exists; staying in {self.cwd}"
+        self.messages = [{"role": "system", "content": self.system_prompt()}, *data.get("messages", [])[1:]]
+        self.session_id = info.id
+        self.session_name = data.get("name", "")
+        self.session_title = data.get("title") or sessions.title_from(self.messages)
+        self.tools.read_mtimes.clear()  # files may have changed since; the model must read them again
+        self.ctx_used = sum(len(json.dumps(m)) for m in self.messages) // 3
+        return note
 
     def load_latest(self) -> bool:
-        for f in sorted((STATE_DIR / "sessions").glob("*.json"), reverse=True):
-            try:
-                data = json.loads(f.read_text())
-            except (OSError, json.JSONDecodeError):
-                continue
-            if data.get("cwd") == str(self.cwd):
-                self.messages = [{"role": "system", "content": self.system_prompt()}, *data["messages"][1:]]
-                self.session_id = f.stem
-                self.ctx_used = sum(len(json.dumps(m)) for m in self.messages) // 3
-                return True
-        return False
+        latest = sessions.list_sessions(self.cwd, limit=1)
+        if latest:
+            self.load(latest[0])
+        return bool(latest)
 
     # -- model calls
     def options(self) -> dict:

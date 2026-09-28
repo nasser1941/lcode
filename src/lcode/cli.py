@@ -370,7 +370,7 @@ def cmd_chat(args) -> None:
         permission_mode=mode,
     )
     agent = Agent(ollama, settings, cwd, console=console)
-    repl(agent, prompt=args.prompt, resume=args.cont, hardware=hw)
+    repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -384,7 +384,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-m", "--model", help="catalog key (see `lcode models`) or any installed Ollama model")
     parser.add_argument("--context", "--ctx", dest="context", help="context window, e.g. 65536, 128k or 1m")
     parser.add_argument("-r", "--repo", default=".", help="working directory (default: current directory)")
-    parser.add_argument("-c", "--continue", dest="cont", action="store_true", help="resume the last session here")
+    parser.add_argument("-c", "--continue", dest="cont", action="store_true", help="continue the last session here")
+    parser.add_argument(
+        "--resume",
+        nargs="?",
+        const="",
+        metavar="SESSION",
+        help="resume a saved session: pick from a list, or give its number, name or id",
+    )
     parser.add_argument("--auto-edit", action="store_true", help="apply file edits without asking")
     parser.add_argument("--yolo", action="store_true", help="never ask for permission (edits and commands)")
     parser.add_argument("--no-think", action="store_true", help="disable model reasoning (faster, less accurate)")

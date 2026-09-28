@@ -86,7 +86,8 @@ Read-only commands such as `ls`, `cat`, `grep` and `git status` run without aski
 
 - ++ctrl+c++ interrupts the model or a running command; you keep the conversation.
 - `/compact` summarizes a long conversation to free context (this also happens automatically at 85%).
-- `lcode -c` resumes the last session in the current directory.
+- `lcode -c` continues the last session in this folder; `/rename` names a session and `/resume`
+  picks one from a list.
 - `/help` lists everything else.
 
 Next: [everything lcode can do](usage.md), or [choosing models and context windows](models.md).
