@@ -52,7 +52,10 @@ Two lessons from tuning the default model on a 12 GB GPU shaped the defaults:
   out-of-memory crashes at large batch sizes. lcode creates text-only variants (`lcode-<key>`) that
   reuse the downloaded weights.
 - **Prompt batch size dominates prompt-reading speed** when experts sit in system RAM: 512 → 280
-  tokens/s, 1024 → 500 tokens/s. 2048 (~700 tokens/s) doesn't fit next to a 256K cache on 12 GB.
+  tokens/s, 1024 → 500 tokens/s. But the model's speculative-decoding context grows with the batch
+  (0.8 GB at 512, 1.1 GB at 1024), and at 1024 it only fits next to a 256K cache on 12 GB when little
+  else uses VRAM; otherwise CUDA fails with "illegal memory access". lcode therefore uses Ollama's
+  default of 512 and, if a larger configured batch runs out of memory, retries with 512.
 
 ## Security model
 

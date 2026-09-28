@@ -25,6 +25,8 @@ from lcode.permissions import Permissions
 from lcode.render import MarkdownStreamer
 from lcode.tools import SCHEMAS, Toolbox, is_binary, parse_text_tool_calls, tree, truncate
 
+GPU_MEMORY_ERRORS = ("out of memory", "illegal memory access", "cudamalloc failed")
+SAFE_NUM_BATCH = 512  # Ollama's default prompt batch
 MAX_STEPS_PER_TURN = 150  # safety cap on tool-call iterations for one request
 AUTO_COMPACT_RATIO = 0.85  # summarize the history when the context is this full
 PROJECT_FILES = ("AGENTS.md", "LCODE.md", "CLAUDE.md")
@@ -211,18 +213,32 @@ class Agent:
         }
         if tools:
             payload["tools"] = tools
+        started = False
         try:
-            yield from self.ollama.chat_stream(payload)
+            for chunk in self.ollama.chat_stream(payload):
+                started = True
+                yield chunk
         except OllamaError as e:
-            if think and "think" in str(e) and "support" in str(e):
+            error = str(e).lower()
+            if not started and think and "think" in error and "support" in error:
                 self.settings.think = False
                 self.console.print(f"[dim]{self.settings.model} does not support reasoning; continuing without.[/]")
-                yield from self.ollama.chat_stream({**payload, "think": False})
+                yield from self.chat(messages, tools, False)
                 return
-            if "out of memory" in str(e).lower():
+            if any(marker in error for marker in GPU_MEMORY_ERRORS):
+                batch = self.settings.num_batch
+                if not started and batch and batch > SAFE_NUM_BATCH:
+                    # Larger batches read prompts faster but need extra VRAM that isn't always free.
+                    self.settings.num_batch = SAFE_NUM_BATCH
+                    self.console.print(
+                        f"[yellow]The GPU ran out of memory with a prompt batch of {batch}; retrying with "
+                        f"{SAFE_NUM_BATCH}.[/] [dim]To skip this retry: lcode config set num_batch {SAFE_NUM_BATCH}[/]"
+                    )
+                    yield from self.chat(messages, tools, think)
+                    return
                 raise OllamaError(
-                    f"{e}\nThe model ran out of GPU memory. Try a smaller context (/ctx 128k) or a smaller "
-                    "prompt batch (`lcode config set num_batch 512`)."
+                    f"{e}\nThe model ran out of GPU memory. Try a smaller context (/ctx 128k), close other programs "
+                    "using the GPU, or pick a smaller model (/models)."
                 ) from e
             raise
 

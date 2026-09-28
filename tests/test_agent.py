@@ -68,6 +68,36 @@ def test_out_of_memory_gets_a_hint(make_agent):
         agent.run_turn("hi")
 
 
+def test_gpu_memory_error_retries_with_a_smaller_batch(make_agent):
+    agent = make_agent(num_batch=1024)
+
+    def chat_stream(payload):
+        agent.ollama.payloads.append(payload)
+        if payload["options"].get("num_batch") == 1024:
+            raise OllamaError("Ollama error 500: CUDA error: an illegal memory access was encountered")
+        yield from reply("recovered")
+
+    agent.ollama.chat_stream = chat_stream
+    agent.run_turn("hi")
+    assert agent.settings.num_batch == 512
+    assert agent.messages[-1]["content"] == "recovered"
+    assert "retrying with 512" in output(agent)
+
+
+def test_errors_after_output_are_not_retried(make_agent):
+    agent = make_agent(num_batch=1024)
+
+    def chat_stream(payload):
+        agent.ollama.payloads.append(payload)
+        yield {"message": {"content": "partial answer"}, "done": False}
+        raise OllamaError("Ollama error: CUDA error: out of memory")
+
+    agent.ollama.chat_stream = chat_stream
+    with pytest.raises(OllamaError, match="smaller context"):
+        agent.run_turn("hi")
+    assert len(agent.ollama.payloads) == 1  # no duplicate answer from a retry
+
+
 def test_mentions_attach_files(agent):
     text = agent.expand_mentions("explain @src/pkg/math.py please, mail me@example.com")
     assert '<file path="src/pkg/math.py">' in text
