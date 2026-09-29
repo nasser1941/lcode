@@ -43,8 +43,8 @@ moe = false
 size_gb = 17.7
 max_context = 262144
 kv_kib_per_token = 68
-tested = false
-notes = "Newest Qwen. Dense: excellent when it fits entirely in GPU/unified memory, slow when split."
+tested = true
+notes = "Newest Qwen. Dense: clean, accurate tool use; ~8 tok/s when split on a 12 GB GPU, fast when it fits in GPU/unified memory."
 
 [[model]]
 key = "qwen3.6-27b"
@@ -56,8 +56,8 @@ moe = false
 size_gb = 17.8
 max_context = 262144
 kv_kib_per_token = 68
-tested = false
-notes = "Dense coding model. Best on 24 GB+ GPUs or Macs with 48 GB+ unified memory."
+tested = true
+notes = "Dense coding model: clean, accurate tool use; ~7 tok/s when split on a 12 GB GPU. Best on 24 GB+ GPUs or 48 GB+ Macs."
 
 [[model]]
 key = "laguna-xs-2.1"
@@ -69,10 +69,9 @@ moe = true
 size_gb = 20.3
 max_context = 262144
 kv_kib_per_token = 40
-kv_estimated = true
 swe_bench_verified = 70.9
-tested = false
-notes = "Agentic-coding MoE built for local machines; slightly smaller than Qwen3.6 35B."
+tested = true
+notes = "Agentic-coding MoE built for local machines; 15-38 tok/s at 256K on a 12 GB GPU. Full KV cache in 10 of 40 layers."
 
 [[model]]
 key = "nemotron-3.5-lightning"
@@ -84,21 +83,8 @@ moe = true
 size_gb = 25.4
 max_context = 1048576
 kv_kib_per_token = 7
-tested = false
-notes = "Hybrid Mamba-Transformer: tiny KV cache, up to 1M tokens of context."
-
-[[model]]
-key = "gpt-oss-20b"
-tag = "gpt-oss:20b"
-name = "gpt-oss 20B"
-publisher = "OpenAI"
-params = "21B MoE · 3.6B active"
-moe = true
-size_gb = 13.8
-max_context = 131072
-kv_kib_per_token = 24
-tested = false
-notes = "Compact MoE with 128K context; fits 16 GB GPUs and 24 GB Macs."
+tested = true
+notes = "Hybrid Mamba-Transformer: tiny KV cache, up to 1M tokens (512K on a 12 GB GPU); 44 tok/s on a 12 GB GPU."
 
 [[model]]
 key = "qwen3.5-9b"
@@ -112,6 +98,19 @@ max_context = 262144
 kv_kib_per_token = 32
 tested = true
 notes = "Small and capable: 64 tok/s fully on a 12 GB GPU at 128K context. For 8-12 GB GPUs and 16-24 GB Macs."
+
+[[model]]
+key = "gpt-oss-20b"
+tag = "gpt-oss:20b"
+name = "gpt-oss 20B"
+publisher = "OpenAI"
+params = "21B MoE · 3.6B active"
+moe = true
+size_gb = 13.8
+max_context = 131072
+kv_kib_per_token = 24
+tested = true
+notes = "Compact MoE with 128K context: 43 tok/s on a 12 GB GPU. Sometimes invents tool arguments but corrects itself."
 
 [[model]]
 key = "qwen3.5-4b"

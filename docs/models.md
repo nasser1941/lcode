@@ -8,17 +8,17 @@ size, and it works with any other Ollama model that supports tool calling.
 | Key | Model | Type | Download | Max context | Status |
 |---|---|---|---|---|---|
 | `qwen3.6-35b` | Qwen3.6 35B-A3B Coding | MoE, 3B active | 22.6 GB | 256K | **default**, tested |
-| `qwen3.8-27b` | Qwen3.8 27B | dense | 17.7 GB | 256K | untested |
-| `qwen3.6-27b` | Qwen3.6 27B Coding | dense | 17.8 GB | 256K | untested |
-| `laguna-xs-2.1` | Poolside Laguna XS 2.1 | MoE, 3B active | 20.3 GB | 256K | untested |
-| `nemotron-3.5-lightning` | NVIDIA Nemotron 3.5 Lightning | hybrid MoE, 3B active | 25.4 GB | 1M | untested |
-| `gpt-oss-20b` | OpenAI gpt-oss 20B | MoE, 3.6B active | 13.8 GB | 128K | untested |
+| `qwen3.8-27b` | Qwen3.8 27B | dense | 17.7 GB | 256K | tested |
+| `qwen3.6-27b` | Qwen3.6 27B Coding | dense | 17.8 GB | 256K | tested |
+| `laguna-xs-2.1` | Poolside Laguna XS 2.1 | MoE, 3B active | 20.3 GB | 256K | tested |
+| `nemotron-3.5-lightning` | NVIDIA Nemotron 3.5 Lightning | hybrid MoE, 3B active | 25.4 GB | 1M | tested |
 | `qwen3.5-9b` | Qwen3.5 9B | dense | 6.6 GB | 256K | tested |
+| `gpt-oss-20b` | OpenAI gpt-oss 20B | MoE, 3.6B active | 13.8 GB | 128K | tested |
 | `qwen3.5-4b` | Qwen3.5 4B | dense | 3.4 GB | 256K | tested |
 
-*Tested* means the maintainers verified multi-step tool use (exploring a repo, editing files,
-running commands) end to end. Untested models are expected to work; please
-[report how they do](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml).
+*Tested* means the model passed lcode's two acceptance tasks end to end (see
+[test results](#test-results)). Results on other hardware are very welcome: please
+[report how a model does](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml).
 
 Run `lcode models` to see the same list with what fits on **your** machine:
 
@@ -112,10 +112,10 @@ makes long windows affordable:
 | Model | KV cache per token | 32K | 128K | 256K |
 |---|---|---|---|---|
 | qwen3.6-35b | 22 KiB | 23 GB | 25 GB | 28 GB (measured: 26 GB) |
-| qwen3.8-27b / qwen3.6-27b | 68 KiB | 20 GB | 26 GB | 35 GB |
-| laguna-xs-2.1 | ~40 KiB (estimated) | 21 GB | 25 GB | 30 GB |
-| nemotron-3.5-lightning | 7 KiB | 25 GB | 26 GB | 26 GB (1M: 32 GB) |
-| gpt-oss-20b | 24 KiB | 15 GB | 17 GB | — |
+| qwen3.8-27b / qwen3.6-27b | 68 KiB | 20 GB | 26 GB (measured: 24 GB) | 35 GB |
+| laguna-xs-2.1 | 40 KiB | 21 GB | 25 GB | 30 GB (measured: 23 GB) |
+| nemotron-3.5-lightning | 7 KiB | 25 GB | 26 GB | 26 GB (measured: 26 GB; 1M: 32 GB) |
+| gpt-oss-20b | 24 KiB | 15 GB | 17 GB (measured: 14 GB) | — |
 | qwen3.5-9b | 32 KiB | 8 GB | 11 GB (measured: 9.8 GB) | 15 GB (measured: 16 GB) |
 | qwen3.5-4b | 32 KiB | 5 GB | 8 GB (measured: 8.0 GB) | 12 GB |
 
@@ -140,10 +140,41 @@ results on your machine are welcome in the
 | Mac with M4 Pro / M4 Max, 36 GB | ~24 GB | qwen3.6-35b | 64K | fast |
 | Mac with M4 Pro, 48 GB | ~36 GB | qwen3.6-35b | 256K | fast |
 | Mac with M4 Max, 64–128 GB | 48–96 GB | qwen3.6-35b | 256K | fast |
-| NVIDIA 8 GB + 16 GB RAM | ~16 GB | qwen3.5-4b | 64K | fast |
+| NVIDIA 8 GB + 16 GB RAM | ~16 GB | gpt-oss-20b | 64K | good (experts in RAM) |
 | NVIDIA 8–16 GB + 32 GB RAM | 32–40 GB | qwen3.6-35b | 256K | good (experts in RAM) |
 | NVIDIA 24 GB + 64 GB RAM | ~80 GB | qwen3.6-35b | 256K | good (experts in RAM) |
 | CPU only, 32 GB RAM | ~24 GB | qwen3.5-4b | 256K | slow |
+
+### Test results
+
+Every catalog model runs the same two tasks through lcode with its default settings for the machine
+(the context lcode picks, `yolo` mode, reasoning on):
+
+1. **Bug fix:** tests fail in a small project; the model must find the bug, fix it and re-run the tests.
+2. **Repo question + script:** in the `requests` source, say where the `Authorization` header is
+   stripped on redirects with `file:line` citations, then write and run an `ast`-based script.
+
+On an RTX 4080 Laptop GPU (12 GB), i9-13980HX, 32 GB RAM:
+
+| Model | Context | Memory | On GPU | Bug fix | Repo question + script | Speed |
+|---|---|---|---|---|---|---|
+| qwen3.6-35b | 256K | 23.0 GB | 25% | ✓ 30 s | ✓ 45 s | 50–55 tok/s |
+| qwen3.8-27b | 128K | 24.4 GB | 29% | ✓ 86 s | ✓ 284 s | 7–8 tok/s |
+| qwen3.6-27b | 128K | 24.3 GB | 29% | ✓ 78 s | ✓ 267 s | 7 tok/s |
+| laguna-xs-2.1 | 256K | 22.6 GB | 15% | ✓ 67 s | ✓ 195 s | 15–38 tok/s |
+| nemotron-3.5-lightning | 512K² | 27.2 GB | 25% | ✓ 62 s | ✓ 127 s | 44 tok/s |
+| qwen3.5-9b | 128K | 9.8 GB | 100% | ✓ 21 s | ✓ 37 s (2 of 3 runs)¹ | 61–64 tok/s |
+| gpt-oss-20b | 128K | 14.3 GB | 54% | ✓ 16 s | ✓ 36 s | 43 tok/s |
+| qwen3.5-4b | 128K | 8.0 GB | 100% | ✓ 21 s | ✓ 24 s | 93–97 tok/s |
+
+¹ In one run the 9B saved the script in the wrong folder. `gpt-oss-20b` and `nemotron-3.5-lightning`
+sometimes call tools with arguments that don't exist; they correct themselves from lcode's error
+messages.
+² At its full 1M context Nemotron's cache (7 GB) has to sit in VRAM next to the model and doesn't fit
+on a 12 GB GPU; 512K (3.5 GB) loads fine: `lcode --model nemotron-3.5-lightning --context 512k`.
+
+The dense 27B models are accurate but slow here because only ~30% of them fits in 12 GB of VRAM;
+on a 24 GB GPU or a Mac with enough unified memory they run fully accelerated.
 
 ### Measured performance
 

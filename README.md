@@ -43,7 +43,8 @@ through [Ollama](https://ollama.com), so your code never leaves your machine.
   largest context that fits: `lcode setup` does it in one step.
 - **Safe by default.** Every edit is shown as a diff and every command that isn't read-only needs
   your approval. `auto-edit` and `yolo` modes when you want speed.
-- **Bring your own model.** Eight curated open-weight models, or any Ollama model with tool calling.
+- **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
+  with tool calling.
 - **Private.** No telemetry, no accounts, no API keys.
 
 ## Install
@@ -94,12 +95,12 @@ lcode
 | Key | Model | Download | Max context | |
 |---|---|---|---|---|
 | `qwen3.6-35b` | Qwen3.6 35B-A3B Coding (MoE, 3B active) | 22.6 GB | 256K | **default**, tested |
-| `qwen3.8-27b` | Qwen3.8 27B (dense) | 17.7 GB | 256K | |
-| `qwen3.6-27b` | Qwen3.6 27B Coding (dense) | 17.8 GB | 256K | |
-| `laguna-xs-2.1` | Poolside Laguna XS 2.1 (MoE, 3B active) | 20.3 GB | 256K | |
-| `nemotron-3.5-lightning` | NVIDIA Nemotron 3.5 Lightning (hybrid MoE) | 25.4 GB | 1M | |
-| `gpt-oss-20b` | OpenAI gpt-oss 20B (MoE) | 13.8 GB | 128K | |
+| `qwen3.8-27b` | Qwen3.8 27B (dense) | 17.7 GB | 256K | tested |
+| `qwen3.6-27b` | Qwen3.6 27B Coding (dense) | 17.8 GB | 256K | tested |
+| `laguna-xs-2.1` | Poolside Laguna XS 2.1 (MoE, 3B active) | 20.3 GB | 256K | tested |
+| `nemotron-3.5-lightning` | NVIDIA Nemotron 3.5 Lightning (hybrid MoE) | 25.4 GB | 1M | tested |
 | `qwen3.5-9b` | Qwen3.5 9B (dense) | 6.6 GB | 256K | tested |
+| `gpt-oss-20b` | OpenAI gpt-oss 20B (MoE) | 13.8 GB | 128K | tested |
 | `qwen3.5-4b` | Qwen3.5 4B (dense) | 3.4 GB | 256K | tested |
 
 What `lcode setup` picks for common machines:
@@ -111,7 +112,7 @@ What `lcode setup` picks for common machines:
 | Mac with M4 Pro / M4 Max, 36 GB | qwen3.6-35b | 64K |
 | Mac with M4 Pro, 48 GB · M4 Max, 64 GB+ | qwen3.6-35b | 256K |
 | NVIDIA 8–24 GB + 32 GB RAM | qwen3.6-35b | 256K |
-| NVIDIA 8 GB + 16 GB RAM | qwen3.5-4b | 64K |
+| NVIDIA 8 GB + 16 GB RAM | gpt-oss-20b | 64K |
 
 On an RTX 4080 Laptop GPU (12 GB) the default model generates 50–60 tokens/s at 256K context, and
 qwen3.5-9b 64 tokens/s at 128K. See
