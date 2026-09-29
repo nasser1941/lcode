@@ -127,3 +127,14 @@ def test_truncate_keeps_head_and_tail():
     text = "a" * 50 + "b" * 50
     out = truncate(text, limit=30)
     assert out.startswith("a" * 20) and out.endswith("b" * 10) and "truncated" in out
+
+
+def test_edits_in_ask_mode(make_agent, repo: Path, monkeypatch):
+    """Regression: file edits used to crash with IndexError whenever lcode asked for permission."""
+    agent = make_agent(mode="ask")
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    assert agent.tools.run("write_file", {"path": "NOTES.md", "content": "# Notes\n"}).startswith("Created")
+    agent.tools.run("read_file", {"path": "src/pkg/math.py"})
+    out = agent.tools.run("edit_file", {"path": "src/pkg/math.py", "old_string": "a - b", "new_string": "b - a"})
+    assert out.startswith("Edited src/pkg/math.py")
+    assert "return b - a" in (repo / "src/pkg/math.py").read_text()

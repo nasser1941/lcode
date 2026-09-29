@@ -59,3 +59,12 @@ def test_always_and_modes(monkeypatch):
     assert perms.request("edit", "edit", "Edit", "diff")[0]
     perms.cycle()
     assert perms.mode == "yolo"
+
+
+@pytest.mark.parametrize(("kind", "key"), [("edit", "edit"), ("bash", "bash:rm"), ("web", "web:search")])
+def test_every_kind_can_ask_and_remember(monkeypatch, kind, key):
+    perms = Permissions(Console(file=io.StringIO()), "ask")
+    monkeypatch.setattr("builtins.input", lambda _: "a")
+    assert perms.request(key, kind, "Title", "body") == (True, "")
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("should not ask again"))
+    assert perms.request(key, kind, "Title", "body") == (True, "")

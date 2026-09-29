@@ -149,6 +149,18 @@ def test_malformed_tool_calls_give_up_eventually(make_agent):
         agent.run_turn("write a.py")
 
 
+def test_progress_line_keeps_counting_without_chunks(monkeypatch):
+    from lcode.agent import Progress
+
+    clock = [1000.0]
+    monkeypatch.setattr("lcode.agent.time.time", lambda: clock[0])
+    progress = Progress()
+    progress.update("Writing", "x" * 400)
+    assert progress.__rich__().plain.startswith("Writing… (100 tokens, 0s")
+    clock[0] += 125  # the model is silently writing a tool call
+    assert progress.__rich__().plain.startswith("Working… (100 tokens, 125s")
+
+
 def test_mentions_attach_files(agent):
     text = agent.expand_mentions("explain @src/pkg/math.py please, mail me@example.com")
     assert '<file path="src/pkg/math.py">' in text
