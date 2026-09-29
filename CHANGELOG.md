@@ -8,9 +8,6 @@ All notable changes to lcode are documented here. The format follows
 
 ### Added
 
-- All eight catalog models are now tested end to end (`qwen3.8-27b`, `qwen3.6-27b`, `laguna-xs-2.1`,
-  `nemotron-3.5-lightning` and `gpt-oss-20b` joined the three tested before), with a results table
-  in the models guide. `laguna-xs-2.1`'s cache size is now measured rather than estimated.
 - Named sessions and a session picker: `/rename <name>` names the current session, `/resume` lists
   saved sessions and resumes the one you pick (by number, name, id or title), `/resume all` shows
   every folder, and `lcode --resume [SESSION]` does the same from the shell. Resuming shows a short

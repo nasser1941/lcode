@@ -14,7 +14,7 @@ from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn, TimeR
 from rich.prompt import Confirm
 from rich.table import Table
 
-from lcode import __version__, catalog, config
+from lcode import __version__, catalog, config, limits
 from lcode.agent import Agent, Settings
 from lcode.catalog import ModelSpec
 from lcode.config import ConfigError, format_tokens, parse_context
@@ -78,9 +78,9 @@ def choose_context(
     if requested:
         ctx = requested
     elif spec:
-        ctx = spec.fit(hw)[0] or catalog.MIN_USEFUL_CONTEXT
+        ctx = limits.cap(model, spec.fit(hw)[0] or catalog.MIN_USEFUL_CONTEXT)
     else:
-        ctx = 32768
+        ctx = limits.cap(model, 32768)
     if limit and ctx > limit:
         ctx, note = limit, f"capped at the model maximum of {format_tokens(limit)}"
     if spec and requested and spec.memory_gib(ctx) > hw.budget_gib:
@@ -272,6 +272,13 @@ def cmd_doctor(args) -> None:
         if spec:
             detail += f" · ~{spec.memory_gib(ctx):.0f} GB needed, ~{hw.budget_gib:.0f} GB available"
         line("Context", detail + (f" ({note})" if note else ""), None if note else True)
+        if limits.get(model):
+            line(
+                "Limit",
+                f"{format_tokens(limits.get(model))} for {model}: larger contexts ran out of GPU memory "
+                f"here (delete {limits.path()} to try again)",
+                None,
+            )
         loaded = [m for m in ollama.running() if m.get("name") == model or m.get("model") == model]
         if loaded:
             m = loaded[0]

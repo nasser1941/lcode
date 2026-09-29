@@ -171,7 +171,9 @@ On an RTX 4080 Laptop GPU (12 GB), i9-13980HX, 32 GB RAM:
 sometimes call tools with arguments that don't exist; they correct themselves from lcode's error
 messages.
 ² At its full 1M context Nemotron's cache (7 GB) has to sit in VRAM next to the model and doesn't fit
-on a 12 GB GPU; 512K (3.5 GB) loads fine: `lcode --model nemotron-3.5-lightning --context 512k`.
+on a 12 GB GPU; 512K (3.5 GB) loads fine. lcode handles this by itself: when a model doesn't fit, it
+retries with half the context and remembers the size that worked (see
+[Troubleshooting](troubleshooting.md#out-of-memory-or-cuda-error-an-illegal-memory-access)).
 
 The dense 27B models are accurate but slow here because only ~30% of them fits in 12 GB of VRAM;
 on a 24 GB GPU or a Mac with enough unified memory they run fully accelerated.

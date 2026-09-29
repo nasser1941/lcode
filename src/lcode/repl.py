@@ -20,7 +20,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, catalog, sessions
+from lcode import __version__, catalog, limits, sessions
 from lcode.agent import INIT_PROMPT, Agent
 from lcode.catalog import MIN_USEFUL_CONTEXT
 from lcode.config import PERMISSION_MODES, STATE_DIR, ConfigError, format_tokens, parse_context
@@ -223,7 +223,7 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
             s.model = name
             s.num_batch = spec.num_batch if spec and name == spec.local_name else None
             if spec:  # size the context for the new model: largest window that fits this machine
-                s.context = spec.fit(hardware)[0] or MIN_USEFUL_CONTEXT
+                s.context = limits.cap(name, spec.fit(hardware)[0] or MIN_USEFUL_CONTEXT)
             agent.messages[0]["content"] = agent.system_prompt()
             c.print(f"[green]Switched to {name}[/] (context {format_tokens(s.context)}).")
     elif cmd == "/think":
