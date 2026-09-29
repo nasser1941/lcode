@@ -37,7 +37,8 @@ export PATH="$HOME/.local/bin:$PATH"
 The model plus its context don't fit.
 
 1. Lower the context: `/ctx 128k` in a session or `lcode config set context 128k`.
-2. Lower the prompt batch: `lcode config set num_batch 512`.
+2. If you raised the prompt batch, lower it again: `lcode config unset num_batch`. (When the GPU runs
+   out of memory before answering, lcode already retries once with a batch of 512.)
 3. Make sure no other model is loaded (`ollama ps`, then `ollama stop <name>`) and that other GPU
    apps are closed.
 4. Use a smaller model: `lcode models`.
@@ -49,8 +50,8 @@ of the text-only variant, run `lcode setup <key>` once to create the variant.
 
 - The first request loads the model (10–45 s). lcode starts loading in the background as soon as it
   starts, and `keep_alive` keeps it loaded between requests.
-- Reading many large files takes a while the first time (~500 tokens/s on a 12 GB GPU); follow-up
-  turns reuse the cache.
+- Reading many large files takes a while the first time (~280 tokens/s on a 12 GB GPU, ~500 with
+  `lcode config set num_batch 1024` if it fits); follow-up turns reuse the cache.
 - `ollama ps` shows how much of the model is on the GPU. Dense models are much slower when split;
   prefer the MoE models in `lcode models` on smaller GPUs.
 - `--no-think` skips reasoning for simple requests.

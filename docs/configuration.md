@@ -17,7 +17,7 @@ lcode config path                      # print the file location
 |---|---|---|
 | `model` | `qwen3.6-35b` | Catalog key (see `lcode models`) or any installed Ollama model tag |
 | `context` | largest that fits | Context window in tokens; accepts `128k`, `1m` |
-| `num_batch` | per model | Prompt batch size. Larger reads prompts faster but needs more GPU memory |
+| `num_batch` | 512 | Prompt batch size. Larger reads prompts faster but needs more GPU memory |
 | `keep_alive` | `30m` | How long Ollama keeps the model in memory after the last request |
 | `ollama_host` | `http://localhost:11434` | Ollama server URL |
 | `permission_mode` | `ask` | `ask`, `auto-edit` or `yolo` |
@@ -58,9 +58,11 @@ Sessions contain everything the model read, including file contents. Delete the 
 
 ## Tuning for speed and memory
 
-- **Out-of-memory errors:** lower the context (`/ctx 128k`) or the prompt batch
-  (`lcode config set num_batch 512`).
-- **Slow first answers on big files:** a larger `num_batch` (1024–2048) reads prompts faster if your
-  GPU has room. lcode uses 1024 for `qwen3.6-35b`, the most that fits a 12 GB GPU next to a 256K cache.
+- **Out-of-memory errors:** lower the context (`/ctx 128k`), close other programs using the GPU, or
+  pick a smaller model (`/models`).
+- **Slow first answers on big files:** a larger prompt batch reads prompts faster if your GPU has
+  room: `lcode config set num_batch 1024` makes `qwen3.6-35b` read prompts ~1.8x faster (~500 instead
+  of ~280 tokens/s on a 12 GB GPU). On a 12 GB GPU at 256K context it only fits when little else uses
+  VRAM; if the GPU runs out of memory before answering, lcode retries automatically with 512.
 - **Faster answers, less accuracy:** `--no-think` or `/think off`.
 - **Keep the model warm:** `keep_alive = "2h"` avoids reload delays between sessions but holds the memory.

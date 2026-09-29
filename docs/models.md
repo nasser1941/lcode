@@ -152,7 +152,7 @@ On an RTX 4080 Laptop GPU (12 GB) with an i9-13980HX and 32 GB RAM, `qwen3.6-35b
 | | |
 |---|---|
 | Generation | 50–60 tokens/s on code (speculative decoding with the model's multi-token prediction) |
-| Prompt reading | ~500 tokens/s: a 60K-token chunk of code takes about 2 minutes the first time |
+| Prompt reading | ~280 tokens/s (~500 with `num_batch 1024`): a 60K-token chunk of code takes 2–4 minutes the first time |
 | Follow-up turns | start in 1–2 s: Ollama reuses the cached prompt |
 | A real task | "explain X with file:line citations, then write and run a script" in about 2 minutes |
 
@@ -180,5 +180,5 @@ Apple Silicon numbers are not measured yet; please share yours.
 
 Some models (the Qwen3.6 family, for example) ship with a vision encoder that a coding agent doesn't
 use. `lcode setup` creates a text-only variant named `lcode-<key>` that reuses the downloaded
-weights, so it takes no extra disk space, and frees about 1 GB of GPU memory. On a 12 GB GPU that
-memory is what allows a larger prompt batch, which reads prompts ~1.8x faster.
+weights, so it takes no extra disk space, and frees about 1 GB of GPU memory for the context cache
+(and for a larger prompt batch, where it fits; see [tuning](configuration.md#tuning-for-speed-and-memory)).

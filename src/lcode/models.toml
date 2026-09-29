@@ -29,7 +29,6 @@ moe = true
 size_gb = 22.6
 max_context = 262144
 kv_kib_per_token = 22
-num_batch = 1024
 swe_bench_verified = 73.4
 tested = true
 notes = "Default. Strongest tool calling among local MoE coders; fast even with experts in RAM."
