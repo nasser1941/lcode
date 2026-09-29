@@ -101,6 +101,29 @@ def git_info(cwd: Path) -> str:
         return "unknown"
 
 
+class Progress:
+    """The status line under a running request.
+
+    It is re-rendered on every spinner frame, so the elapsed time keeps moving even when no text
+    arrives, for example while the model writes a long file into a tool call.
+    """
+
+    def __init__(self) -> None:
+        self.started = self.last_chunk = time.time()
+        self.phase = "Thinking"
+        self.chars = 0
+
+    def update(self, phase: str, text: str) -> None:
+        self.phase, self.chars, self.last_chunk = phase, self.chars + len(text), time.time()
+
+    def __rich__(self) -> Text:
+        now = time.time()
+        phase = self.phase if now - self.last_chunk < 3 else "Working"
+        return Text.from_markup(
+            f"[cyan]{phase}…[/] [dim]({self.chars // 4} tokens, {now - self.started:.0f}s · Ctrl+C to stop)[/]"
+        )
+
+
 @dataclass
 class Settings:
     model: str  # Ollama model name to call
@@ -301,35 +324,41 @@ class Agent:
         """Stream one model response, rendering thinking/content live. Returns the assistant message."""
         content, thinking, tool_calls, final = "", "", [], {}
         md = MarkdownStreamer(self.console)
-        status = self.console.status("[cyan]Thinking…[/]", spinner="dots")
-        status.start()
-        spinning, printed_thinking, t0 = True, False, time.time()
+        progress = Progress()
+        status = None
+        printed_thinking = False
+
+        def start_spinner() -> None:
+            nonlocal status
+            if status is None:
+                status = self.console.status(progress, spinner="dots")
+                status.start()
 
         def stop_spinner() -> None:
-            nonlocal spinning
-            if spinning:
+            nonlocal status
+            if status is not None:
                 status.stop()
-                spinning = False
+                status = None
 
+        start_spinner()
         try:
             for chunk in self.chat(self.messages, self.tool_schemas(), self.settings.think):
                 msg = chunk.get("message", {})
                 if msg.get("thinking"):
                     thinking += msg["thinking"]
+                    progress.update("Thinking", msg["thinking"])
                     if self.settings.show_thinking:
-                        stop_spinner()
+                        stop_spinner()  # raw text is printed as it streams
                         self.console.print(Text(msg["thinking"], style="dim italic"), end="")
                         printed_thinking = True
-                    else:
-                        status.update(
-                            f"[cyan]Thinking…[/] [dim]({len(thinking) // 4} tokens, {time.time() - t0:.0f}s)[/]"
-                        )
                 if msg.get("content"):
-                    stop_spinner()
                     if printed_thinking:
                         self.console.print("\n")
                         printed_thinking = False
                     content += msg["content"]
+                    progress.update("Writing", msg["content"])
+                    # Finished markdown blocks print above the spinner, which keeps running meanwhile.
+                    start_spinner()
                     md.feed(msg["content"])
                 if msg.get("tool_calls"):
                     tool_calls.extend(msg["tool_calls"])

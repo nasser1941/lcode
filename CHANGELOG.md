@@ -6,6 +6,15 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-29
+
+### Fixed
+
+- File edits and writes failed with "IndexError: list index out of range" in the default `ask`
+  permission mode, a regression in 0.2.0. `auto-edit` and `yolo` modes were not affected.
+- Slow models no longer look stuck: the status line keeps counting the elapsed time while the model
+  thinks, answers or silently writes a long file into a tool call, and reminds you that Ctrl+C stops it.
+
 ## [0.2.0] - 2026-09-29
 
 ### Added
@@ -98,7 +107,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/nasser1941/lcode/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/nasser1941/lcode/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/nasser1941/lcode/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nasser1941/lcode/compare/v0.1.0...v0.1.1

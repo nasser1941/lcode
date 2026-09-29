@@ -71,7 +71,7 @@ class Permissions:
         if self.mode == "yolo" or key in self.always or (kind == "edit" and self.mode == "auto-edit"):
             return True, ""
         self.console.print(Panel(body, title=title, title_align="left", border_style="yellow"))
-        scope = {"edit": "file edits", "bash": key.split(":", 1)[1], "web": key.split(":", 1)[1]}[kind]
+        scope = "file edits" if kind == "edit" else key.split(":", 1)[-1]
         try:
             answer = input(f"  Allow? [y]es / [a]lways for '{scope}' this session / [n]o (+ optional reason): ")
         except EOFError:
