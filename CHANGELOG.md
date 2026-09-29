@@ -6,8 +6,17 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-29
+
 ### Added
 
+- All eight catalog models are now tested end to end (`qwen3.8-27b`, `qwen3.6-27b`, `laguna-xs-2.1`,
+  `nemotron-3.5-lightning` and `gpt-oss-20b` joined the three tested before), with a results table
+  in the models guide. `laguna-xs-2.1`'s cache size is now measured rather than estimated.
+- When a model fails to load because its context doesn't fit in GPU memory, lcode retries with half the
+  context and remembers the size that worked for that model (`~/.local/state/lcode/limits.json`, shown
+  by `lcode doctor`), so later sessions don't fail first. Found with `nemotron-3.5-lightning`, whose 1M
+  context doesn't fit on a 12 GB GPU.
 - Named sessions and a session picker: `/rename <name>` names the current session, `/resume` lists
   saved sessions and resumes the one you pick (by number, name, id or title), `/resume all` shows
   every folder, and `lcode --resume [SESSION]` does the same from the shell. Resuming shows a short
@@ -80,6 +89,7 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/nasser1941/lcode/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nasser1941/lcode/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nasser1941/lcode/releases/tag/v0.1.0
