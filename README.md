@@ -117,8 +117,8 @@ What `lcode setup` picks for common machines:
 | NVIDIA 8–24 GB + 32 GB RAM | qwen3.6-35b | 256K |
 | NVIDIA 8 GB + 16 GB RAM | gpt-oss-20b | 64K |
 
-On an RTX 4080 Laptop GPU (12 GB) the default model generates 50–60 tokens/s at 256K context, and
-qwen3.5-9b 64 tokens/s at 128K. See
+At 256K context the default model generates 50–55 tokens/s on an RTX 4080 Laptop GPU (12 GB) and
+45 tokens/s on an M4 Pro Mac with 48 GB. See
 [Models & context windows](https://nasser1941.github.io/lcode/models/) for memory estimates and
 tuning.
 
@@ -132,11 +132,13 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 ## Roadmap
 
-- More models in the catalog, with community test reports ([request one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml))
-- Measured Apple Silicon performance numbers
-- MCP (Model Context Protocol) tool servers
-- Web fetch and search tools
-- Packaging on PyPI and Homebrew
+See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
+
+- [`/undo` and automatic checkpoints](https://github.com/nasser1941/lcode/issues/4)
+- [`lcode bench`: score models on your own hardware](https://github.com/nasser1941/lcode/issues/5)
+- [MCP tool servers](https://github.com/nasser1941/lcode/issues/6)
+- [Homebrew formula](https://github.com/nasser1941/lcode/issues/8) and an [optional sandbox for shell commands](https://github.com/nasser1941/lcode/issues/9)
+- More models in the catalog, and test reports from your hardware ([report one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml))
 
 ## Contributing
 
