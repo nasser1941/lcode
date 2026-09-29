@@ -12,7 +12,7 @@ hide:
 # lcode
 
 **A coding agent that runs entirely on your own machine.**
-Open-weight models · up to 256K tokens of context · your NVIDIA GPU or Apple Silicon Mac · no API keys, no cloud.
+Open-weight models · up to 256K tokens of context · your NVIDIA GPU or Apple Silicon Mac · your code stays local.
 
 [Get started](installation.md){ .md-button .md-button--primary }
 [View on GitHub](https://github.com/nasser1941/lcode){ .md-button }
@@ -37,8 +37,9 @@ until the task is done, asking before it changes anything.
 
     ---
 
-    Your code never leaves your machine. The model runs locally through [Ollama](https://ollama.com);
-    lcode sends no telemetry.
+    The model runs locally through [Ollama](https://ollama.com), lcode never uploads your files and
+    sends no telemetry. Web search is there when the model needs current information, and can be
+    turned off.
 
 -   :material-robot-outline:{ .lg .middle } **A real agent, not autocomplete**
 

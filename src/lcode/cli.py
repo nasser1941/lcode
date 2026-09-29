@@ -14,7 +14,7 @@ from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn, TimeR
 from rich.prompt import Confirm
 from rich.table import Table
 
-from lcode import __version__, catalog, config, limits
+from lcode import __version__, catalog, config, limits, web
 from lcode.agent import Agent, Settings
 from lcode.catalog import ModelSpec
 from lcode.config import ConfigError, format_tokens, parse_context
@@ -291,6 +291,18 @@ def cmd_doctor(args) -> None:
     except NotInstalled as e:
         line("Model", str(e), False)
         ok = False
+    backend = web.resolve_backend(cfg["search_backend"], cfg["searxng_url"])
+    if cfg["web"] == "off":
+        line("Web", "off (lcode config set web on)", None)
+    elif backend:
+        line("Web", f"{cfg['web']} · search via {web.BACKEND_NAMES[backend]} · page fetching", True)
+    else:
+        line(
+            "Web",
+            f"{cfg['web']} · page fetching only; for search set OLLAMA_API_KEY (free key: "
+            "https://ollama.com/settings/keys) or see the docs",
+            None,
+        )
     line(
         "ripgrep",
         "found" if shutil.which("rg") else "not found — install it for faster search",
@@ -375,6 +387,9 @@ def cmd_chat(args) -> None:
         think=cfg["think"] and not args.no_think,
         show_thinking=args.show_thinking,
         permission_mode=mode,
+        web="off" if args.no_web else cfg["web"],
+        search_backend=cfg["search_backend"],
+        searxng_url=cfg["searxng_url"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)
@@ -402,6 +417,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--auto-edit", action="store_true", help="apply file edits without asking")
     parser.add_argument("--yolo", action="store_true", help="never ask for permission (edits and commands)")
     parser.add_argument("--no-think", action="store_true", help="disable model reasoning (faster, less accurate)")
+    parser.add_argument("--no-web", action="store_true", help="don't let the model search or fetch web pages")
     parser.add_argument("--show-thinking", action="store_true", help="print the model's reasoning as it streams")
     parser.add_argument("-V", "--version", action="version", version=f"lcode {__version__}")
     return parser

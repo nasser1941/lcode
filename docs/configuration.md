@@ -22,6 +22,9 @@ lcode config path                      # print the file location
 | `ollama_host` | `http://localhost:11434` | Ollama server URL |
 | `permission_mode` | `ask` | `ask`, `auto-edit` or `yolo` |
 | `think` | `true` | Let the model reason before answering |
+| `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |
+| `search_backend` | `auto` | `auto`, `ollama`, `brave`, `tavily` or `searxng`; `auto` uses the first one configured |
+| `searxng_url` | | Your SearXNG instance, e.g. `http://localhost:8888` |
 
 Example file:
 
@@ -44,6 +47,8 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `LCODE_NUM_BATCH` | `num_batch` |
 | `LCODE_KEEP_ALIVE` | `keep_alive` |
 | `OLLAMA_HOST` | `ollama_host` (same variable the Ollama CLI uses) |
+| `LCODE_WEB` | `web` |
+| `OLLAMA_API_KEY`, `BRAVE_API_KEY`, `TAVILY_API_KEY` | API key for that [search provider](usage.md#web-search) (never stored in the config file) |
 | `LCODE_HOME` | where sessions and prompt history are stored |
 
 ## Files lcode creates

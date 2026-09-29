@@ -20,7 +20,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, catalog, limits, sessions
+from lcode import __version__, catalog, limits, sessions, web
 from lcode.agent import INIT_PROMPT, Agent
 from lcode.catalog import MIN_USEFUL_CONTEXT
 from lcode.config import PERMISSION_MODES, STATE_DIR, ConfigError, format_tokens, parse_context
@@ -134,7 +134,8 @@ def banner(agent: Agent) -> None:
                     f"[dim]model[/]    {s.model}\n"
                     f"[dim]context[/]  {format_tokens(s.context)} tokens\n"
                     f"[dim]cwd[/]      {agent.cwd}\n"
-                    f"[dim]mode[/]     {agent.perms.mode} [dim](Shift+Tab to cycle)[/]\n\n"
+                    f"[dim]mode[/]     {agent.perms.mode} [dim](Shift+Tab to cycle)[/]\n"
+                    f"[dim]web[/]      {web_status(agent)}\n\n"
                     "[dim]/help for commands · @file to attach · Esc+Enter for a newline[/]"
                 ),
             ),
@@ -142,6 +143,14 @@ def banner(agent: Agent) -> None:
             expand=False,
         )
     )
+
+
+def web_status(agent: Agent) -> str:
+    if agent.settings.web == "off":
+        return "off"
+    backend = agent.search_backend()
+    search = f"search via {web.BACKEND_NAMES[backend]}" if backend else "no search provider (see lcode doctor)"
+    return f"{agent.settings.web} · {search}"
 
 
 def run_safely(agent: Agent, text: str) -> None:

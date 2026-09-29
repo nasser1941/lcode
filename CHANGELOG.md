@@ -6,6 +6,13 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Web access for the model: `web_search` finds current information (latest releases, docs, error
+  messages) through Ollama web search, Brave Search, Tavily or a self-hosted SearXNG, and `web_fetch`
+  reads pages as clean text. On by default; `lcode config set web ask|off` or `lcode --no-web` limits
+  it. Search API keys are read from environment variables only. Closes #7.
+
 ## [0.1.2] - 2026-09-29
 
 ### Added

@@ -21,6 +21,7 @@ lcode config [set|unset]     # show or change settings
 | `--auto-edit` | Apply file edits without asking (commands still ask) |
 | `--yolo` | Never ask for permission |
 | `--no-think` | Turn off the model's reasoning: faster, less accurate |
+| `--no-web` | No web search or page fetching in this session |
 | `--show-thinking` | Print the model's reasoning as it streams |
 | `-V, --version` | Print the version |
 
@@ -71,6 +72,8 @@ reasoning is on.
 | `grep` | Regex search with ripgrep (falls back to Python if ripgrep is missing) |
 | `bash` | Run a shell command with live output, a timeout and a persistent working directory |
 | `todo_write` | Keep a visible task list for multi-step work |
+| `web_search` | Search the web for current information (needs a [search provider](#web-search)) |
+| `web_fetch` | Read a web page or text file by URL as clean text |
 
 lcode refuses to edit a file the model hasn't read in the session, or one that changed on disk since
 it was read, so the model always edits the current version.
@@ -94,6 +97,55 @@ or ++n++. Text after ++n++ goes to the model as instructions: `n run the tests w
 
     In `yolo` mode the model can run any command as your user. Use it in a container, a VM or a
     throwaway clone, not on a machine with data you care about.
+
+## Web search
+
+When the answer depends on information newer than the model's training data, such as the latest
+version of a library, a changed API, an error message or current documentation, lcode lets the model
+search the web and read pages by itself.
+
+- **`web_fetch`** works out of the box: lcode downloads the page and converts it to clean text.
+- **`web_search`** needs a search provider. Set one of these up once and lcode picks it automatically:
+
+| Provider | Setup | Notes |
+|---|---|---|
+| [Ollama web search](https://docs.ollama.com/capabilities/web-search) | `export OLLAMA_API_KEY=…` (free key at [ollama.com/settings/keys](https://ollama.com/settings/keys)) | Easiest; also renders pages lcode can't read directly |
+| [Brave Search API](https://brave.com/search/api/) | `export BRAVE_API_KEY=…` | |
+| [Tavily](https://tavily.com) | `export TAVILY_API_KEY=…` | Built for AI agents |
+| [SearXNG](https://docs.searxng.org/) (self-hosted) | `lcode config set searxng_url http://localhost:8888` | No account; enable the `json` format in its `settings.yml` |
+
+Put the `export` line in your `~/.bashrc` or `~/.zshrc`. API keys are only read from the environment,
+never stored in lcode's config. `lcode doctor` shows which provider is active, and the model is told
+to mention the URLs it relied on.
+
+??? note "Running SearXNG locally"
+
+    ```bash
+    mkdir -p ~/searxng && cat > ~/searxng/settings.yml <<'YAML'
+    use_default_settings: true
+    server:
+      secret_key: "change-me-to-something-random"
+      limiter: false
+    search:
+      formats: [html, json]
+    YAML
+    docker run -d --restart unless-stopped --name searxng -p 127.0.0.1:8888:8080 \
+      -v ~/searxng:/etc/searxng searxng/searxng
+    lcode config set searxng_url http://localhost:8888
+    ```
+
+**What leaves your machine:** search queries go to the provider, and fetched pages are downloaded
+from their websites. lcode never uploads your files, but the model writes the queries, so a query can
+contain names or snippets from your code. Choose how much web access the model gets:
+
+| Setting | Effect |
+|---|---|
+| `lcode config set web on` | Default: the model searches and fetches pages when it needs to |
+| `lcode config set web ask` | Ask before every search (and before fetching from each website) |
+| `lcode config set web off` | No web access at all; `lcode --no-web` does the same for one session |
+
+Web content is passed to the model marked as untrusted data, and the model is told never to follow
+instructions found in it. Command and edit approvals still apply.
 
 ## Project instructions: AGENTS.md
 

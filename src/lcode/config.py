@@ -22,6 +22,8 @@ else:
 
 DEFAULT_MODEL = "qwen3.6-35b"
 PERMISSION_MODES = ("ask", "auto-edit", "yolo")
+WEB_MODES = ("on", "ask", "off")
+SEARCH_BACKENDS = ("auto", "ollama", "brave", "tavily", "searxng")
 
 # key -> (default, type, help)
 SETTINGS: dict[str, tuple[object, type, str]] = {
@@ -32,6 +34,9 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "ollama_host": ("http://localhost:11434", str, "Ollama server URL"),
     "permission_mode": ("ask", str, "ask | auto-edit | yolo"),
     "think": (True, bool, "let the model reason before answering (slower, better)"),
+    "web": ("on", str, "web search and page fetching for the model: on | ask | off"),
+    "search_backend": ("auto", str, "auto | ollama | brave | tavily | searxng (keys come from environment variables)"),
+    "searxng_url": (None, str, "your SearXNG instance, e.g. http://localhost:8888"),
 }
 ENV_OVERRIDES = {
     "LCODE_MODEL": "model",
@@ -39,6 +44,7 @@ ENV_OVERRIDES = {
     "LCODE_NUM_BATCH": "num_batch",
     "LCODE_KEEP_ALIVE": "keep_alive",
     "OLLAMA_HOST": "ollama_host",
+    "LCODE_WEB": "web",
 }
 
 
@@ -83,8 +89,15 @@ def coerce(key: str, value: object) -> object:
     _, typ, _ = SETTINGS[key]
     if key == "context":
         return parse_context(value)  # type: ignore[arg-type]
-    if key == "ollama_host":
+    if key in ("ollama_host", "searxng_url"):
         return normalize_host(str(value))
+    if key == "web":
+        value = {"true": "on", "false": "off", "yes": "on", "no": "off"}.get(str(value).lower(), str(value).lower())
+        if value not in WEB_MODES:
+            raise ConfigError(f"web must be one of {', '.join(WEB_MODES)}")
+        return value
+    if key == "search_backend" and value not in SEARCH_BACKENDS:
+        raise ConfigError(f"search_backend must be one of {', '.join(SEARCH_BACKENDS)}")
     if key == "permission_mode" and value not in PERMISSION_MODES:
         raise ConfigError(f"permission_mode must be one of {', '.join(PERMISSION_MODES)}")
     if typ is bool and isinstance(value, str):
