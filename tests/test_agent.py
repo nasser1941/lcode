@@ -98,6 +98,38 @@ def test_errors_after_output_are_not_retried(make_agent):
     assert len(agent.ollama.payloads) == 1  # no duplicate answer from a retry
 
 
+def test_malformed_tool_calls_are_retried(make_agent):
+    agent = make_agent([reply("fixed it")])
+    calls = {"n": 0}
+    real = agent.ollama.chat_stream
+
+    def chat_stream(payload):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OllamaError(
+                'Ollama error: error parsing tool call: raw=\'{"path":"a.py"\', err=unexpected end of JSON input'
+            )
+        yield from real(payload)
+
+    agent.ollama.chat_stream = chat_stream
+    agent.run_turn("write a.py")
+    assert agent.messages[-1]["content"] == "fixed it"
+    nudge = agent.messages[-2]
+    assert nudge["role"] == "user" and "unexpected end of JSON input" in nudge["content"]
+
+
+def test_malformed_tool_calls_give_up_eventually(make_agent):
+    agent = make_agent()
+
+    def chat_stream(payload):
+        raise OllamaError("Ollama error: error parsing tool call: raw='{', err=unexpected end of JSON input")
+        yield
+
+    agent.ollama.chat_stream = chat_stream
+    with pytest.raises(OllamaError, match="error parsing tool call"):
+        agent.run_turn("write a.py")
+
+
 def test_mentions_attach_files(agent):
     text = agent.expand_mentions("explain @src/pkg/math.py please, mail me@example.com")
     assert '<file path="src/pkg/math.py">' in text

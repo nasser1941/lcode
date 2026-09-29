@@ -24,6 +24,9 @@ All notable changes to lcode are documented here. The format follows
   prompt batch of 1024 left too little VRAM for the model's speculative-decoding context. The default
   is now Ollama's 512 (1024 remains available with `lcode config set num_batch 1024`), and when the GPU
   runs out of memory before answering, lcode retries automatically with a batch of 512.
+- A tool call with invalid JSON arguments no longer aborts the request: lcode tells the model what
+  was wrong and lets it try again. Unknown or missing tool arguments are reported with the list of
+  valid arguments.
 - `lcode -c` continues the most recently *used* session in the folder, not the most recently created
   one. Empty sessions are no longer saved.
 - `/rename` saves the session right away, so a session named before its first request shows up in

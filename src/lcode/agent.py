@@ -27,7 +27,8 @@ from lcode.tools import SCHEMAS, Toolbox, is_binary, parse_text_tool_calls, tree
 
 GPU_MEMORY_ERRORS = ("out of memory", "illegal memory access", "cudamalloc failed")
 SAFE_NUM_BATCH = 512  # Ollama's default prompt batch
-MAX_STEPS_PER_TURN = 150  # safety cap on tool-call iterations for one request
+MAX_STEPS_PER_TURN = 150
+MAX_MALFORMED_CALL_RETRIES = 2  # Ollama rejects tool calls whose arguments aren't valid JSON  # safety cap on tool-call iterations for one request
 AUTO_COMPACT_RATIO = 0.85  # summarize the history when the context is this full
 PROJECT_FILES = ("AGENTS.md", "LCODE.md", "CLAUDE.md")
 
@@ -323,9 +324,26 @@ class Agent:
 
     def run_turn(self, user_text: str) -> None:
         self.messages.append({"role": "user", "content": self.expand_mentions(user_text)})
+        malformed = 0
         for _ in range(MAX_STEPS_PER_TURN):
             self.maybe_compact()
-            calls = self.assistant_step().get("tool_calls") or []
+            try:
+                calls = self.assistant_step().get("tool_calls") or []
+            except OllamaError as e:
+                if "error parsing tool call" not in str(e) or malformed >= MAX_MALFORMED_CALL_RETRIES:
+                    raise
+                malformed += 1
+                reason = str(e).rsplit("err=", 1)[-1].strip() if "err=" in str(e) else "invalid JSON"
+                self.console.print("[yellow]The model wrote a malformed tool call; asking it to try again.[/]")
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "content": f"[lcode] Your last tool call could not be parsed ({reason}): its arguments "
+                        "must be one complete, valid JSON object. Make the call again. If it writes a file, "
+                        "make sure the whole content is included and properly escaped.",
+                    }
+                )
+                continue
             if not calls:
                 break
             for i, call in enumerate(calls):
