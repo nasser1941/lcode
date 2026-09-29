@@ -67,11 +67,11 @@ class Permissions:
         self.mode = PERMISSION_MODES[(PERMISSION_MODES.index(self.mode) + 1) % len(PERMISSION_MODES)]
 
     def request(self, key: str, kind: str, title: str, body: RenderableType) -> tuple[bool, str]:
-        """Ask the user. kind is 'edit' or 'bash'. Returns (allowed, message for the model)."""
+        """Ask the user. kind is 'edit', 'bash' or 'web'. Returns (allowed, message for the model)."""
         if self.mode == "yolo" or key in self.always or (kind == "edit" and self.mode == "auto-edit"):
             return True, ""
         self.console.print(Panel(body, title=title, title_align="left", border_style="yellow"))
-        scope = key.split(":", 1)[1] if kind == "bash" else "file edits"
+        scope = {"edit": "file edits", "bash": key.split(":", 1)[1], "web": key.split(":", 1)[1]}[kind]
         try:
             answer = input(f"  Allow? [y]es / [a]lways for '{scope}' this session / [n]o (+ optional reason): ")
         except EOFError:
@@ -80,7 +80,7 @@ class Permissions:
         if answer.lower() in ("y", "yes", ""):
             return True, ""
         if answer.lower() in ("a", "always"):
-            self.always.add(key if kind == "bash" else "edit")
+            self.always.add("edit" if kind == "edit" else key)
             return True, ""
         # "n", "no", "n <reason>" or any other text, which is taken as the reason.
         reason = re.sub(r"^(no|n)\b[\s,:-]*", "", answer, flags=re.I).strip()

@@ -52,6 +52,16 @@ If it still fails:
 If you use the original tag of a model with a vision encoder (e.g. `qwen3.6:35b-a3b-coding`) instead
 of the text-only variant, run `lcode setup <key>` once to create the variant.
 
+### Web search doesn't work
+
+- `lcode doctor` shows the web status. "page fetching only" means no search provider is set up:
+  set `OLLAMA_API_KEY` (or another provider, see [Web search](usage.md#web-search)) in the shell
+  where you start lcode.
+- `rejected the request (HTTP 401)`: the API key is wrong or expired.
+- SearXNG `didn't return JSON`: add `json` to `search.formats` in its `settings.yml` and restart it.
+- Some sites block automated downloads or need JavaScript; with `OLLAMA_API_KEY` set, lcode retries
+  those through Ollama's fetch service.
+
 ### It's slow
 
 - The first request loads the model (10–45 s). lcode starts loading in the background as soon as it
@@ -81,8 +91,11 @@ Other apps are using unified memory. Close them, or pick a smaller context. See
 ## FAQ
 
 **Does my code leave my machine?**
-No. lcode talks only to the Ollama server you configure (your own machine by default) and has no
-telemetry.
+The model runs on the Ollama server you configure (your own machine by default), and lcode has no
+telemetry and never uploads your files. With web access on (the default), search queries go to your
+search provider and pages are downloaded from their websites; the model writes those queries, so they
+can mention names from your code. For sensitive work use `lcode --no-web` or
+`lcode config set web off`.
 
 **Can I use it without a GPU?**
 Yes, with small models (`qwen3.5-4b`), but expect a few tokens per second.

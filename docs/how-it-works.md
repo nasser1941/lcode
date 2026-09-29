@@ -62,8 +62,9 @@ Two lessons from tuning the default model on a 12 GB GPU shaped the defaults:
 lcode runs with your user's permissions and is not a sandbox. The permission prompts, the read-only
 allowlist and the "read before edit" rule are guardrails against mistakes, not against a determined
 attacker. Files and command output can contain prompt injections, so review commands before
-approving them, and keep `yolo` mode for disposable environments. lcode sends no telemetry and
-talks only to the Ollama server you configure. See the [security policy](https://github.com/nasser1941/lcode/blob/main/SECURITY.md).
+approving them, and keep `yolo` mode for disposable environments. lcode sends no telemetry; besides
+the Ollama server you configure, it only contacts the web when the model searches or fetches a page
+(see [Web search](usage.md#web-search)). See the [security policy](https://github.com/nasser1941/lcode/blob/main/SECURITY.md).
 
 ## Code map
 

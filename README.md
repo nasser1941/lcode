@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>A coding agent that runs entirely on your own machine.</b><br>
-  Open-weight models · up to 256K tokens of context · your NVIDIA GPU or Apple Silicon Mac · no API keys, no cloud
+  Open-weight models · up to 256K tokens of context · your NVIDIA GPU or Apple Silicon Mac · your code stays local
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@
 Point lcode at a repository and talk to it in your terminal. It explores the code, answers
 questions with `file:line` references, writes and edits files, runs your scripts and tests, and
 keeps going until the task is done, asking before it changes anything. The model runs locally
-through [Ollama](https://ollama.com), so your code never leaves your machine.
+through [Ollama](https://ollama.com), and when it needs current information it can search the web.
 
 ## Features
 
@@ -45,7 +45,10 @@ through [Ollama](https://ollama.com), so your code never leaves your machine.
   your approval. `auto-edit` and `yolo` modes when you want speed.
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
   with tool calling.
-- **Private.** No telemetry, no accounts, no API keys.
+- **Web search when needed.** Looks up the latest versions, docs and error messages with Ollama web
+  search, Brave, Tavily or your own SearXNG, and reads pages as clean text.
+- **Private.** The model runs on your machine, lcode never uploads your files and has no telemetry.
+  Web access is on by default and can be set to `ask` or `off`.
 
 ## Install
 

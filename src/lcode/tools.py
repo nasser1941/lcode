@@ -23,6 +23,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
+from lcode import web
 from lcode.permissions import bash_key, is_read_only
 
 if TYPE_CHECKING:
@@ -137,7 +138,27 @@ SCHEMAS = [
         ["todos"],
     ),
 ]
-TOOL_NAMES = {s["function"]["name"] for s in SCHEMAS}
+WEB_SEARCH_SCHEMA = _fn(
+    "web_search",
+    "Search the web for up-to-date information: latest versions and releases, documentation, API changes, "
+    "error messages, security advisories. Returns titles, URLs and snippets; read promising results with "
+    "web_fetch. Look in the repository first for questions about this codebase.",
+    {
+        "query": {"type": "string", "description": "Search query"},
+        "max_results": {"type": "integer", "description": "Number of results, 1-10 (default 5)"},
+    },
+    ["query"],
+)
+WEB_FETCH_SCHEMA = _fn(
+    "web_fetch",
+    "Download a web page or text file by URL and return its main content as text (HTML is converted).",
+    {
+        "url": {"type": "string", "description": "http(s) URL"},
+        "max_chars": {"type": "integer", "description": "Maximum characters to return (default 20000)"},
+    },
+    ["url"],
+)
+TOOL_NAMES = {s["function"]["name"] for s in [*SCHEMAS, WEB_SEARCH_SCHEMA, WEB_FETCH_SCHEMA]}
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -531,6 +552,42 @@ class Toolbox:
             Path(cwd_file).unlink(missing_ok=True)
         self.console.print(Text(f"  exit code {code}", style="green" if code == 0 else "red"))
         return truncate("".join(out)) + status + f"\n[exit code: {code}]"
+
+    # -- web
+    def _web_allowed(self, key: str, title: str, detail: str) -> tuple[bool, str]:
+        settings = self.agent.settings
+        if settings.web == "off":
+            return False, "Web access is turned off (web = off)."
+        if settings.web == "ask":
+            return self.agent.perms.request(key, "web", title, Text(detail))
+        return True, ""
+
+    def t_web_search(self, query: str, max_results: int = 5) -> str:
+        backend = self.agent.search_backend()
+        if backend is None:
+            raise ToolError("web search isn't configured on this machine; use web_fetch with a known URL instead")
+        ok, feedback = self._web_allowed("web:search", "Search the web", query)
+        if not ok:
+            return feedback
+        self.console.print(Text(f"  ⌕ {query}", style="cyan"))
+        try:
+            results = web.search(query, backend, max_results, self.agent.settings.searxng_url)
+        except web.WebError as e:
+            raise ToolError(str(e)) from e
+        self.console.print(Text(f"  ⎿ {len(results)} result(s)", style="dim"))
+        return web.format_results(query, results, backend)
+
+    def t_web_fetch(self, url: str, max_chars: int = 20000) -> str:
+        domain = web.urlparse(url).netloc or url
+        ok, feedback = self._web_allowed(f"web:{domain}", "Fetch a web page", url)
+        if not ok:
+            return feedback
+        self.console.print(Text(f"  ↓ {url}", style="cyan"))
+        try:
+            title, text = web.fetch(url)
+        except web.WebError as e:
+            raise ToolError(str(e)) from e
+        return web.format_page(url, title, text, max(1000, min(int(max_chars or 20000), MAX_TOOL_OUTPUT)))
 
     # -- planning
     def t_todo_write(self, todos: list | str) -> str:
