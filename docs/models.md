@@ -138,7 +138,7 @@ results on your machine are welcome in the
 | Mac with M4, 16 GB | ~11 GB | qwen3.5-9b | 64K | fast |
 | Mac with M4 / M4 Pro, 24 GB | ~16 GB | qwen3.5-9b | 256K | fast |
 | Mac with M4 Pro / M4 Max, 36 GB | ~24 GB | qwen3.6-35b | 64K | fast |
-| Mac with M4 Pro, 48 GB | ~36 GB | qwen3.6-35b | 256K | fast |
+| Mac with M4 Pro, 48 GB | ~36 GB | qwen3.6-35b | 256K | fast (measured: 45 tok/s) |
 | Mac with M4 Max, 64–128 GB | 48–96 GB | qwen3.6-35b | 256K | fast |
 | NVIDIA 8 GB + 16 GB RAM | ~16 GB | gpt-oss-20b | 64K | good (experts in RAM) |
 | NVIDIA 8–16 GB + 32 GB RAM | 32–40 GB | qwen3.6-35b | 256K | good (experts in RAM) |
@@ -200,7 +200,10 @@ The small models on the same GPU (a bug-fix task: read, run the failing tests, e
 Dense models slow down about 3x once they no longer fit in VRAM, which is why lcode sizes their
 context to stay on the GPU.
 
-Apple Silicon numbers are not measured yet; please share yours.
+On a Mac with an **Apple M4 Pro and 48 GB** of unified memory (reported by a user, Ollama 0.34), lcode
+picks the same `qwen3.6-35b` at 256K context and generates **45 tokens/s**, running entirely on the
+GPU's share of unified memory. Results from other Macs are very welcome in the
+[model reports](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml).
 
 ### Tips for Macs
 

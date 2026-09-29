@@ -82,8 +82,8 @@ until the task is done, asking before it changes anything.
 
 | Platform | Recommended hardware | Default choice |
 |---|---|---|
-| **Ubuntu / Linux** with NVIDIA GPU | 12 GB+ VRAM and 32 GB RAM | Qwen3.6 35B-A3B at 256K context |
-| **macOS on Apple Silicon** (M1–M4) | 48 GB+ unified memory | Qwen3.6 35B-A3B at 256K context |
+| **Ubuntu / Linux** with NVIDIA GPU | 12 GB+ VRAM and 32 GB RAM | Qwen3.6 35B-A3B at 256K context (50–55 tok/s on 12 GB) |
+| **macOS on Apple Silicon** (M1–M4) | 48 GB+ unified memory | Qwen3.6 35B-A3B at 256K context (45 tok/s on an M4 Pro) |
 | Smaller machines (16–24 GB Mac, 8 GB GPU) | — | Qwen3.5 9B / 4B with a smaller context |
 
 See [Models & context windows](models.md) for the full catalog and how lcode sizes models to your
