@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-29
+
 ### Added
 
 - Web access for the model: `web_search` finds current information (latest releases, docs, error
@@ -96,7 +98,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nasser1941/lcode/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/nasser1941/lcode/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nasser1941/lcode/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nasser1941/lcode/releases/tag/v0.1.0

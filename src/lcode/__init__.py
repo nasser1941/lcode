@@ -1,3 +1,3 @@
 """lcode — a local-first terminal coding agent powered by open-weight models via Ollama."""
 
-__version__ = "0.1.2"
+__version__ = "0.2.0"
