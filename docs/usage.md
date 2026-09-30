@@ -8,6 +8,7 @@ lcode setup [model]          # pick, download and configure a model
 lcode models                 # the model catalog and what fits this machine
 lcode doctor                 # check the installation (include this in bug reports)
 lcode config [set|unset]     # show or change settings
+lcode bench [models]         # score models on small coding tasks on this machine
 ```
 
 | Option | Meaning |

@@ -6,6 +6,7 @@ import argparse
 import platform
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import requests
@@ -343,6 +344,79 @@ def cmd_config(args) -> None:
         fail(str(e))
 
 
+# ----------------------------------------------------------------------------- lcode bench
+
+
+def cmd_bench(args) -> None:
+    from lcode import bench
+
+    if args.list:
+        bench.print_tasks(console)
+        return
+    try:
+        cfg = config.load()
+        context = parse_context(args.context) if args.context else bench.DEFAULT_CONTEXT
+        tasks = bench.select_tasks(args.tasks)
+    except (ConfigError, ValueError) as e:
+        fail(str(e))
+    if args.timeout <= 0:
+        fail("--timeout must be a positive number of seconds")
+    ollama = Ollama(cfg["ollama_host"])
+    hw = detect()
+    version = check_ollama(ollama, hw)
+    console.print(f"[bold]lcode bench[/] · {hw.describe()} · Ollama {version}")
+    console.print("[dim]Each task runs in a new temporary folder with every permission granted and web access off.[/]")
+    names = args.models or [cfg["model"]]
+    others = [m.get("name", "?") for m in ollama.running()]
+    if others:
+        console.print(
+            f"[yellow]Already loaded in Ollama: {', '.join(others)}. Models that share the GPU run slower; "
+            "for comparable results, stop other sessions first.[/]"
+        )
+    runs = []
+    for i, name in enumerate(names):
+        try:
+            model, spec = resolve_model(ollama, name)
+        except NotInstalled as e:
+            console.print(f"\n[yellow]Skipping {name}: {e}[/]")
+            runs.append(bench.ModelRun(name, name, error=str(e)))
+            continue
+        ctx, note = choose_context(ollama, model, spec, context, hw)
+        if note:
+            console.print(f"[yellow]{model}, context {format_tokens(ctx)}: {note}[/]")
+        num_batch = cfg["num_batch"]
+        if num_batch is None and spec and spec.num_batch and model == spec.local_name:
+            num_batch = spec.num_batch
+        settings = Settings(
+            model=model,
+            context=ctx,
+            num_batch=num_batch,
+            keep_alive=cfg["keep_alive"],
+            think=cfg["think"] and not args.no_think,
+            permission_mode="yolo",
+            web="off",
+            checkpoints=False,
+        )
+        run = bench.run_model(ollama, name, settings, tasks, console, args.timeout, args.keep, args.verbose)
+        runs.append(run)
+        if run.interrupted:
+            break
+        if i < len(names) - 1:
+            try:
+                ollama.unload(model)  # so the next model gets all the GPU memory
+            except OllamaError:
+                pass
+    bench.print_summary(console, runs, tasks)
+    if args.json:
+        path = Path(args.json).expanduser()
+        bench.write_json(path, bench.report(runs, hw, version))
+        console.print(f"Results saved to {path}")
+    if args.markdown:
+        print("\n" + bench.markdown(runs, tasks, hw, version))
+    if args.keep:
+        console.print(f"[dim]Task folders are kept in {tempfile.gettempdir()} (lcode-bench-*).[/]")
+
+
 # ----------------------------------------------------------------------------- lcode (chat)
 
 
@@ -400,7 +474,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lcode",
         description="A local-first terminal coding agent powered by open-weight models via Ollama.",
-        epilog="Subcommands: lcode setup | models | doctor | config  (lcode <subcommand> --help). "
+        epilog="Subcommands: lcode setup | models | doctor | config | bench  (lcode <subcommand> --help). "
         "Docs: https://nasser1941.github.io/lcode/",
     )
     parser.add_argument("-p", "--prompt", help="run one request non-interactively and exit")
@@ -438,10 +512,25 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument("key", nargs="?", choices=list(config.SETTINGS))
     p.add_argument("value", nargs="?")
     subs["config"] = p
+    p = argparse.ArgumentParser(
+        prog="lcode bench",
+        description="Score models on small coding tasks on this machine: pass rate, speed and memory.",
+    )
+    p.add_argument("models", nargs="*", help="catalog keys or Ollama tags (default: the configured model)")
+    p.add_argument("--context", "--ctx", dest="context", help="context window (default: 32k, the same everywhere)")
+    p.add_argument("--tasks", help="comma-separated task ids to run (default: all; see --list)")
+    p.add_argument("--timeout", type=float, default=300, help="seconds per task (default: 300)")
+    p.add_argument("--json", metavar="FILE", help="also save the results as JSON")
+    p.add_argument("--markdown", action="store_true", help="also print a Markdown table for a test report")
+    p.add_argument("--no-think", action="store_true", help="run without model reasoning")
+    p.add_argument("--keep", action="store_true", help="keep each task's folder and transcript for inspection")
+    p.add_argument("-v", "--verbose", action="store_true", help="show the model working, like a normal session")
+    p.add_argument("--list", action="store_true", help="list the tasks and exit")
+    subs["bench"] = p
     return subs
 
 
-COMMANDS = {"setup": cmd_setup, "models": cmd_models, "doctor": cmd_doctor, "config": cmd_config}
+COMMANDS = {"setup": cmd_setup, "models": cmd_models, "doctor": cmd_doctor, "config": cmd_config, "bench": cmd_bench}
 
 
 def main(argv: list[str] | None = None) -> None:

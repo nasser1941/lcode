@@ -6,6 +6,16 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `lcode bench` scores models on this machine with eight small coding tasks: fixing a bug, finding
+  code, writing a script from a spec, renaming across files, a one-line edit in a long file,
+  recovering from failing commands, fixing a function to match its spec and adding a feature across
+  files. Each task runs in a temporary folder and has an automatic check, some with hidden tests.
+  It reports tasks passed, time, generation and prompt speed, tool-call errors and memory use.
+  `lcode bench model-a model-b` compares models, `--json` saves the results (a documented, versioned
+  format) and `--markdown` prints a table for a model test report.
+
 ## [0.3.0] - 2026-09-30
 
 ### Added

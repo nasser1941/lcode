@@ -36,6 +36,11 @@ body:
     validations:
       required: true
   - type: textarea
+    id: bench
+    attributes:
+      label: Output of `lcode bench <model> --markdown`
+      description: Optional, but the most useful thing you can add. It takes a few minutes; see https://nasser1941.github.io/lcode/bench/
+  - type: textarea
     id: doctor
     attributes:
       label: Output of `lcode doctor`

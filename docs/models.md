@@ -17,8 +17,8 @@ size, and it works with any other Ollama model that supports tool calling.
 | `qwen3.5-4b` | Qwen3.5 4B | dense | 3.4 GB | 256K | tested |
 
 *Tested* means the model passed lcode's two acceptance tasks end to end (see
-[test results](#test-results)). Results on other hardware are very welcome: please
-[report how a model does](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml).
+[test results](#test-results)). Results on other hardware are very welcome: run
+[`lcode bench`](bench.md) and [report how a model does](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml).
 
 Run `lcode models` to see the same list with what fits on **your** machine:
 

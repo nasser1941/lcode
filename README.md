@@ -40,7 +40,8 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   plans multi-step tasks with a visible todo list.
 - **Long context.** 256K tokens with the default model (1M with Nemotron). You choose the window.
 - **Hardware-aware.** Detects your NVIDIA GPU or Apple Silicon Mac and picks the best model and the
-  largest context that fits: `lcode setup` does it in one step.
+  largest context that fits: `lcode setup` does it in one step. `lcode bench` compares models on
+  real coding tasks on your machine.
 - **Safe by default.** Every edit is shown as a diff and every command that isn't read-only needs
   your approval. `auto-edit` and `yolo` modes when you want speed.
 - **Undo.** lcode saves a checkpoint before the model changes files; `/undo` takes back the last
@@ -92,6 +93,7 @@ lcode
 | `lcode -c` / `lcode --resume` | continue the last session here / pick a saved session from a list |
 | `lcode --model qwen3.5-9b --context 128k` | pick a model and context window for this session |
 | `lcode models` / `lcode doctor` | what fits this machine / check the installation |
+| `lcode bench qwen3.6-35b qwen3.5-9b` | compare models on small coding tasks on this machine |
 | `/undo`, `/rewind` | take back the last request's file changes, or go back further |
 | `/rename`, `/resume` | name the current session, resume a saved one |
 | `/model`, `/context`, `/compact`, `/help` | switch model, resize the context window (pick from a list), summarize, list commands |
@@ -137,7 +139,6 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
 
-- [`lcode bench`: score models on your own hardware](https://github.com/nasser1941/lcode/issues/5)
 - [MCP tool servers](https://github.com/nasser1941/lcode/issues/6)
 - [Homebrew formula](https://github.com/nasser1941/lcode/issues/8) and an [optional sandbox for shell commands](https://github.com/nasser1941/lcode/issues/9)
 - More models in the catalog, and test reports from your hardware ([report one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml))
