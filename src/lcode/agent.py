@@ -19,6 +19,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from lcode import catalog, limits, sessions, web
+from lcode.checkpoints import Checkpoints
 from lcode.config import format_tokens
 from lcode.ollama import Ollama, OllamaError
 from lcode.permissions import Permissions
@@ -136,6 +137,7 @@ class Settings:
     web: str = "on"  # on | ask | off
     search_backend: str = "auto"
     searxng_url: str | None = None
+    checkpoints: bool = True  # snapshot files before the model changes them, for /undo
 
 
 class Agent:
@@ -147,6 +149,7 @@ class Agent:
         self.perms = Permissions(self.console, settings.permission_mode)
         self.tools = Toolbox(self)
         self.session_id = self.new_session_id()
+        self.checkpoints = Checkpoints(self.console, settings.checkpoints)
         self.session_name = ""
         self.session_title = ""
         self.ctx_used = 0
@@ -220,6 +223,7 @@ class Agent:
             "name": self.session_name,
             "title": self.session_title,
             "messages": self.messages,
+            "checkpoints": self.checkpoints.to_json(),
         }
         f.write_text(json.dumps(data))
 
@@ -228,6 +232,7 @@ class Agent:
         self.session_id = self.new_session_id()
         self.session_name = ""
         self.session_title = ""
+        self.checkpoints.reset(self.session_id)
 
     def rename(self, name: str) -> None:
         self.session_name = " ".join(name.split())
@@ -249,6 +254,7 @@ class Agent:
                 note = f"The session's directory {saved_cwd} no longer exists; staying in {self.cwd}"
         self.messages = [{"role": "system", "content": self.system_prompt()}, *data.get("messages", [])[1:]]
         self.session_id = info.id
+        self.checkpoints.load(info.id, data.get("checkpoints") or [])
         self.session_name = data.get("name", "")
         self.session_title = data.get("title") or sessions.title_from(self.messages)
         self.tools.read_mtimes.clear()  # files may have changed since; the model must read them again
@@ -406,6 +412,17 @@ class Agent:
         return name
 
     def run_turn(self, user_text: str) -> None:
+        self.checkpoints.begin_turn(self.session_id, user_text, len(self.messages))
+        try:
+            self._run_turn(user_text)
+        finally:
+            self.checkpoints.end_turn()
+
+    def checkpoint(self) -> None:
+        """Called before the model changes files: snapshot them once per request, for /undo."""
+        self.checkpoints.before_change(self.cwd)
+
+    def _run_turn(self, user_text: str) -> None:
         self.messages.append({"role": "user", "content": self.expand_mentions(user_text)})
         malformed = 0
         for _ in range(MAX_STEPS_PER_TURN):

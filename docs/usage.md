@@ -49,6 +49,9 @@ reasoning is on.
 | `/clear` | Start a new conversation (the current one stays saved) |
 | `/rename NAME` | Name the current session so it's easy to find later |
 | `/resume [SESSION]` | Resume a saved session: pick from a list, or give its number or name; `/resume all` lists every folder |
+| `/undo` | Undo the file changes of the last request ([details](#undo-and-checkpoints)) |
+| `/rewind [N]` | Go back to before request N: its files, and optionally the conversation |
+| `/checkpoints` | List the requests that changed files, and which files |
 | `/compact [focus]` | Summarize the conversation to free context |
 | `/context [size]` | Show how full the context window is and change its size: pick from a list with memory estimates, or give a size like `/context 128k` (`/ctx` is a shortcut) |
 | `/model [name]`, `/models` | Switch model, list models |
@@ -96,6 +99,38 @@ or ++n++. Text after ++n++ goes to the model as instructions: `n run the tests w
 
     In `yolo` mode the model can run any command as your user. Use it in a container, a VM or a
     throwaway clone, not on a machine with data you care about.
+
+## Undo and checkpoints
+
+Before the model first changes anything in a request (an edit, a new file, or a shell command that
+isn't read-only), lcode saves a checkpoint of your project. If the result isn't what you wanted,
+`/undo` puts the files back:
+
+```text
+❯ /undo
+Undoing request 3: switch the parser to the new tokenizer
+  restore src/parser.py
+  restore tests/test_parser.py
+  remove  src/tokenizer_v2.py
+Done: restored src/parser.py, tests/test_parser.py; removed src/tokenizer_v2.py.
+```
+
+- `/undo` again goes one more request back. The model is told which files were restored, so it
+  reads them again instead of assuming its changes are still there.
+- `/checkpoints` lists the requests that changed files. `/rewind 2` goes back to before request 2
+  in one step (undoing every request after it too) and offers to remove those requests from the
+  conversation as well.
+- Changes made by shell commands are covered too (`sed -i`, generated files, `rm`), in any folder,
+  whether or not it's a git repository.
+- If you edited one of those files yourself after the model did, lcode lists it and asks before
+  going back, since that would lose your edit. Files the model didn't touch are never changed.
+
+Checkpoints are stored in a separate git repository under `~/.local/state/lcode/checkpoints/`. Your
+own repository (its index, branches, stash and history) is never touched. Ignored files (per
+`.gitignore`), `node_modules`, virtual environments and files over 10 MB aren't included. Folders
+with more than 20,000 files, or your home folder itself, aren't checkpointed; lcode says so once and
+carries on. Checkpoints are deleted after 14 days. To turn them off:
+`lcode config set checkpoints false`.
 
 ## Web search
 

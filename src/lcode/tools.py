@@ -438,6 +438,7 @@ class Toolbox:
         ok, feedback = self.agent.perms.request("edit", "edit", f"{verb} {self.rel(p)}", body)
         if not ok:
             return feedback
+        self.agent.checkpoint()
         self._write(p, content)
         n = len(content.splitlines())
         self.console.print(f"  [green]✓[/] {'Updated' if exists else 'Created'} {self.rel(p)} ({n} lines)")
@@ -472,6 +473,7 @@ class Toolbox:
         ok, feedback = self.agent.perms.request("edit", "edit", f"Edit {self.rel(p)}", self._diff(p, text, new_text))
         if not ok:
             return feedback
+        self.agent.checkpoint()
         self._write(p, new_text)
         self.console.print(f"  [green]✓[/] Edited {self.rel(p)}")
         idx = new_text.find(new_string) if new_string else -1
@@ -493,6 +495,7 @@ class Toolbox:
             )
             if not ok:
                 return feedback
+            self.agent.checkpoint()
         self.console.print(Text(f"  $ {command}", style="bold cyan"))
         fd, cwd_file = tempfile.mkstemp(prefix="lcode_cwd_")
         os.close(fd)

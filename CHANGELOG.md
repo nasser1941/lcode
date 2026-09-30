@@ -6,6 +6,16 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `/undo` takes back the file changes of the last request: lcode saves a checkpoint before the model
+  first changes files in a request, and restores edited and deleted files and removes new ones,
+  including changes made by shell commands. `/undo` again goes further back, `/rewind N` goes back
+  to before request N (optionally removing those requests from the conversation too), and
+  `/checkpoints` lists them. Checkpoints live in a separate git repository in lcode's state folder,
+  so your own repository is never touched, and work in folders that aren't git repositories.
+  Turn them off with `lcode config set checkpoints false`.
+
 ## [0.2.2] - 2026-09-30
 
 ### Added

@@ -43,6 +43,8 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   largest context that fits: `lcode setup` does it in one step.
 - **Safe by default.** Every edit is shown as a diff and every command that isn't read-only needs
   your approval. `auto-edit` and `yolo` modes when you want speed.
+- **Undo.** lcode saves a checkpoint before the model changes files; `/undo` takes back the last
+  request's edits, new files and shell-command changes, without touching your git history.
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
   with tool calling.
 - **Web search when needed.** Looks up the latest versions, docs and error messages with Ollama web
@@ -90,6 +92,7 @@ lcode
 | `lcode -c` / `lcode --resume` | continue the last session here / pick a saved session from a list |
 | `lcode --model qwen3.5-9b --context 128k` | pick a model and context window for this session |
 | `lcode models` / `lcode doctor` | what fits this machine / check the installation |
+| `/undo`, `/rewind` | take back the last request's file changes, or go back further |
 | `/rename`, `/resume` | name the current session, resume a saved one |
 | `/model`, `/context`, `/compact`, `/help` | switch model, resize the context window (pick from a list), summarize, list commands |
 
@@ -134,7 +137,6 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
 
-- [`/undo` and automatic checkpoints](https://github.com/nasser1941/lcode/issues/4)
 - [`lcode bench`: score models on your own hardware](https://github.com/nasser1941/lcode/issues/5)
 - [MCP tool servers](https://github.com/nasser1941/lcode/issues/6)
 - [Homebrew formula](https://github.com/nasser1941/lcode/issues/8) and an [optional sandbox for shell commands](https://github.com/nasser1941/lcode/issues/9)

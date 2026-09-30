@@ -37,6 +37,8 @@ user, in your working directory**. It is not a sandbox. Keep in mind:
   snippets from your code. Use `web = ask` to approve each search, or `web = off` / `--no-web` to
   keep everything local.
 - Sessions (including file contents the model read) are stored in `~/.local/state/lcode/sessions`.
+  Checkpoints for `/undo` keep copies of your project's files (except ignored ones) in
+  `~/.local/state/lcode/checkpoints` for 14 days; turn them off with `checkpoints = false`.
 
 Reports about bypassing the permission prompts, the read-only allowlist, or data leaving the
 machine unexpectedly are especially welcome.
