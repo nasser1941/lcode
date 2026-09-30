@@ -310,6 +310,19 @@ def cmd_doctor(args) -> None:
         bool(shutil.which("rg")) or None,
     )
     line("git", "found" if shutil.which("git") else "not found", bool(shutil.which("git")) or None)
+    from lcode.mcp import config as mcp_config
+
+    try:
+        servers = mcp_config.load_user()
+        names = ", ".join(n for n, raw in servers.items() if not (isinstance(raw, dict) and raw.get("disabled")))
+        line(
+            "MCP", f"{names} (check them with lcode mcp list)" if names else "no servers (see lcode mcp catalog)", True
+        )
+    except ValueError as e:
+        line("MCP", str(e), False)
+        ok = False
+    node = shutil.which("npx")
+    line("Node.js", "found" if node else "not found (some MCP servers need npx)", True if node else None)
     sys.exit(0 if ok else 1)
 
 
@@ -467,14 +480,22 @@ def cmd_chat(args) -> None:
         checkpoints=cfg["checkpoints"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
-    repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)
+    if not args.no_mcp:
+        from lcode.mcp.commands import start_session
+
+        agent.mcp = start_session(cwd, cfg["mcp_tools"], console, interactive=not args.prompt)
+    try:
+        repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)
+    finally:
+        if agent.mcp:
+            agent.mcp.close()
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lcode",
         description="A local-first terminal coding agent powered by open-weight models via Ollama.",
-        epilog="Subcommands: lcode setup | models | doctor | config | bench  (lcode <subcommand> --help). "
+        epilog="Subcommands: lcode setup | models | doctor | config | bench | mcp  (lcode <subcommand> --help). "
         "Docs: https://nasser1941.github.io/lcode/",
     )
     parser.add_argument("-p", "--prompt", help="run one request non-interactively and exit")
@@ -493,6 +514,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--yolo", action="store_true", help="never ask for permission (edits and commands)")
     parser.add_argument("--no-think", action="store_true", help="disable model reasoning (faster, less accurate)")
     parser.add_argument("--no-web", action="store_true", help="don't let the model search or fetch web pages")
+    parser.add_argument("--no-mcp", action="store_true", help="don't start MCP servers in this session")
     parser.add_argument("--show-thinking", action="store_true", help="print the model's reasoning as it streams")
     parser.add_argument("-V", "--version", action="version", version=f"lcode {__version__}")
     return parser
@@ -527,10 +549,26 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument("-v", "--verbose", action="store_true", help="show the model working, like a normal session")
     p.add_argument("--list", action="store_true", help="list the tasks and exit")
     subs["bench"] = p
+    from lcode.mcp.commands import build_parser as mcp_parser
+
+    subs["mcp"] = mcp_parser()
     return subs
 
 
-COMMANDS = {"setup": cmd_setup, "models": cmd_models, "doctor": cmd_doctor, "config": cmd_config, "bench": cmd_bench}
+def cmd_mcp(args) -> None:
+    from lcode.mcp.commands import run
+
+    sys.exit(run(args, console))
+
+
+COMMANDS = {
+    "setup": cmd_setup,
+    "models": cmd_models,
+    "doctor": cmd_doctor,
+    "config": cmd_config,
+    "bench": cmd_bench,
+    "mcp": cmd_mcp,
+}
 
 
 def main(argv: list[str] | None = None) -> None:

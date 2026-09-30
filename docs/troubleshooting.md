@@ -62,6 +62,12 @@ of the text-only variant, run `lcode setup <key>` once to create the variant.
 - Some sites block automated downloads or need JavaScript; with `OLLAMA_API_KEY` set, lcode retries
   those through Ollama's fetch service.
 
+### An MCP server doesn't work
+
+Run `lcode mcp list`: it connects to every server and shows why one fails. A local server's error
+output is in `~/.local/state/lcode/mcp-logs/<name>.log`. Remote servers that say *needs sign-in*
+need `lcode mcp login <name>`. More in [MCP servers: Troubleshooting](mcp.md#troubleshooting).
+
 ### It's slow
 
 - The first request loads the model (10–45 s). lcode starts loading in the background as soon as it

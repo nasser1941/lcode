@@ -69,6 +69,13 @@ until the task is done, asking before it changes anything.
     Every edit is shown as a diff and every non-read-only command needs your approval, unless you
     choose otherwise. `/undo` takes back a request's file changes.
 
+-   :material-connection:{ .lg .middle } **MCP servers**
+
+    ---
+
+    Jira, GitHub, AWS, Google Drive, Grafana and more, one command each:
+    [`lcode mcp add atlassian`](mcp.md). Browser sign-in is built in.
+
 -   :material-swap-horizontal:{ .lg .middle } **Bring your own model**
 
     ---

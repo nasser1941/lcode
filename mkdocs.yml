@@ -94,6 +94,7 @@ nav:
       - Using lcode: usage.md
       - Models & context windows: models.md
       - Benchmarking models: bench.md
+      - MCP servers: mcp.md
       - Configuration: configuration.md
   - Reference:
       - How it works: how-it-works.md

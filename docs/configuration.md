@@ -25,6 +25,7 @@ lcode config path                      # print the file location
 | `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |
 | `search_backend` | `auto` | `auto`, `ollama`, `brave`, `tavily` or `searxng`; `auto` uses the first one configured |
 | `searxng_url` | | Your SearXNG instance, e.g. `http://localhost:8888` |
+| `mcp_tools` | `auto` | How [MCP](mcp.md#context) tool definitions reach the model: `auto`, `direct` or `search` (on demand) |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
 
 Example file:
@@ -59,6 +60,9 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `~/.config/lcode/config.toml` | Settings |
 | `~/.local/state/lcode/sessions/` | Saved conversations (for `lcode -c`) |
 | `~/.local/state/lcode/history` | Prompt history (++up++ in the prompt) |
+| `~/.config/lcode/mcp.json` | [MCP servers](mcp.md) (readable only by you; may contain tokens) |
+| `~/.local/state/lcode/mcp-auth/` | Sign-in tokens for remote MCP servers (readable only by you) |
+| `~/.local/state/lcode/mcp-logs/` | Error output of local MCP servers |
 | `~/.local/state/lcode/checkpoints/` | Checkpoints for `/undo` (copies of your project's files; deleted after 14 days) |
 | `~/.local/state/lcode/limits.json` | Context sizes that ran out of GPU memory on this machine (safe to delete) |
 

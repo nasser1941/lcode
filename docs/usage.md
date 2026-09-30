@@ -9,6 +9,7 @@ lcode models                 # the model catalog and what fits this machine
 lcode doctor                 # check the installation (include this in bug reports)
 lcode config [set|unset]     # show or change settings
 lcode bench [models]         # score models on small coding tasks on this machine
+lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases… (see MCP servers)
 ```
 
 | Option | Meaning |
@@ -23,6 +24,7 @@ lcode bench [models]         # score models on small coding tasks on this machin
 | `--yolo` | Never ask for permission |
 | `--no-think` | Turn off the model's reasoning: faster, less accurate |
 | `--no-web` | No web search or page fetching in this session |
+| `--no-mcp` | Don't start [MCP servers](mcp.md) in this session |
 | `--show-thinking` | Print the model's reasoning as it streams |
 | `-V, --version` | Print the version |
 
@@ -53,6 +55,7 @@ reasoning is on.
 | `/undo` | Undo the file changes of the last request ([details](#undo-and-checkpoints)) |
 | `/rewind [N]` | Go back to before request N: its files, and optionally the conversation |
 | `/checkpoints` | List the requests that changed files, and which files |
+| `/mcp [tools\|login\|restart NAME]` | [MCP servers](mcp.md), their status and tools |
 | `/compact [focus]` | Summarize the conversation to free context |
 | `/context [size]` | Show how full the context window is and change its size: pick from a list with memory estimates, or give a size like `/context 128k` (`/ctx` is a shortcut) |
 | `/model [name]`, `/models` | Switch model, list models |
