@@ -75,6 +75,7 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `agent.py` | System prompt, streaming, tool loop, compaction, sessions |
 | `tools.py` | Tool schemas and implementations |
 | `permissions.py` | Approval prompts and the read-only allowlist |
+| `checkpoints.py` | Snapshots before the model changes files, for `/undo` and `/rewind` |
 | `catalog.py`, `models.toml` | Model catalog and memory estimates |
 | `hardware.py` | NVIDIA / Apple Silicon detection |
 | `ollama.py` | Ollama HTTP client |

@@ -390,6 +390,7 @@ def cmd_chat(args) -> None:
         web="off" if args.no_web else cfg["web"],
         search_backend=cfg["search_backend"],
         searxng_url=cfg["searxng_url"],
+        checkpoints=cfg["checkpoints"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)

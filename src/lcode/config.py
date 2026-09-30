@@ -37,6 +37,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "web": ("on", str, "web search and page fetching for the model: on | ask | off"),
     "search_backend": ("auto", str, "auto | ollama | brave | tavily | searxng (keys come from environment variables)"),
     "searxng_url": (None, str, "your SearXNG instance, e.g. http://localhost:8888"),
+    "checkpoints": (True, bool, "snapshot files before the model changes them, so /undo can restore them"),
 }
 ENV_OVERRIDES = {
     "LCODE_MODEL": "model",

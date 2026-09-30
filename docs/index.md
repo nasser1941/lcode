@@ -67,7 +67,7 @@ until the task is done, asking before it changes anything.
     ---
 
     Every edit is shown as a diff and every non-read-only command needs your approval, unless you
-    choose otherwise.
+    choose otherwise. `/undo` takes back a request's file changes.
 
 -   :material-swap-horizontal:{ .lg .middle } **Bring your own model**
 

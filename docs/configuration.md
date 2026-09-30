@@ -25,6 +25,7 @@ lcode config path                      # print the file location
 | `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |
 | `search_backend` | `auto` | `auto`, `ollama`, `brave`, `tavily` or `searxng`; `auto` uses the first one configured |
 | `searxng_url` | | Your SearXNG instance, e.g. `http://localhost:8888` |
+| `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
 
 Example file:
 
@@ -58,6 +59,7 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `~/.config/lcode/config.toml` | Settings |
 | `~/.local/state/lcode/sessions/` | Saved conversations (for `lcode -c`) |
 | `~/.local/state/lcode/history` | Prompt history (++up++ in the prompt) |
+| `~/.local/state/lcode/checkpoints/` | Checkpoints for `/undo` (copies of your project's files; deleted after 14 days) |
 | `~/.local/state/lcode/limits.json` | Context sizes that ran out of GPU memory on this machine (safe to delete) |
 
 Sessions contain everything the model read, including file contents. Delete the folder to clear them.
