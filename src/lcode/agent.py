@@ -154,6 +154,7 @@ class Agent:
         self.session_title = ""
         self.ctx_used = 0
         self.last_speed = 0.0
+        self.usage = {"requests": 0, "prompt_tokens": 0, "prompt_ns": 0, "output_tokens": 0, "output_ns": 0}
         self.messages: list[dict] = []
         self.reset()
 
@@ -390,6 +391,11 @@ class Agent:
             message["tool_calls"] = tool_calls
         self.messages.append(message)
         if final:
+            self.usage["requests"] += 1
+            self.usage["prompt_tokens"] += final.get("prompt_eval_count", 0)
+            self.usage["prompt_ns"] += final.get("prompt_eval_duration", 0)
+            self.usage["output_tokens"] += final.get("eval_count", 0)
+            self.usage["output_ns"] += final.get("eval_duration", 0)
             self.ctx_used = final.get("prompt_eval_count", 0) + final.get("eval_count", 0)
             seconds = final.get("eval_duration", 0) / 1e9
             self.last_speed = final.get("eval_count", 0) / seconds if seconds else 0.0

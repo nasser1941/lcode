@@ -31,6 +31,12 @@ class FakeOllama:
     def load(self, *args, **kwargs) -> None:
         pass
 
+    def unload(self, model: str) -> None:
+        pass
+
+    def running(self) -> list[dict]:
+        return [{"name": "lcode-qwen3.6-35b:latest", "size": 23_000_000_000, "size_vram": 11_500_000_000}]
+
 
 def reply(content: str = "", tool_calls: list[dict] | None = None, thinking: str = "") -> list[dict]:
     message: dict = {"role": "assistant", "content": content}

@@ -147,6 +147,10 @@ class Ollama:
                         raise OllamaError(f"Ollama error: {chunk['error']}")
                     yield chunk
 
+    def unload(self, model: str) -> None:
+        """Free the memory a model is using."""
+        self._post("/api/generate", {"model": model, "keep_alive": 0}, timeout=60)
+
     def load(self, model: str, options: dict, keep_alive: str) -> None:
         """Load a model into memory without generating anything."""
         self._post(
