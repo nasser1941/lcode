@@ -850,31 +850,33 @@ def run_task(
     ollama: Ollama, settings: Settings, task: Task, timeout: float, log: Console, keep: bool, usage: dict
 ) -> TaskResult:
     folder = Path(tempfile.mkdtemp(prefix=f"lcode-bench-{task.id}-"))
-    for rel, content in task.files.items():
-        (folder / rel).parent.mkdir(parents=True, exist_ok=True)
-        (folder / rel).write_text(content)
-    agent = Agent(ollama, settings, folder, console=log)
-    error = None
-    started = time.monotonic()
     try:
-        with time_limit(timeout):
-            agent.run_turn(task.prompt)
-    except TaskTimeout:
-        error = f"timed out after {timeout:.0f}s"
-    except OllamaError as e:
-        error = str(e).splitlines()[0][:200]
-    seconds = time.monotonic() - started
-    for key, value in agent.usage.items():
-        usage[key] = usage.get(key, 0) + value
-    answer = next((m.get("content", "") for m in reversed(agent.messages) if m.get("role") == "assistant"), "")
-    try:
-        check = task.check(folder, answer)
-    except Exception as e:  # a check must never crash the benchmark
-        check = Check(False, f"check failed: {type(e).__name__}: {e}")
-    if keep:
-        (folder / "lcode-bench.log").write_text(log.file.getvalue() if isinstance(log.file, io.StringIO) else "")
-    else:
-        shutil.rmtree(folder, ignore_errors=True)
+        for rel, content in task.files.items():
+            (folder / rel).parent.mkdir(parents=True, exist_ok=True)
+            (folder / rel).write_text(content)
+        agent = Agent(ollama, settings, folder, console=log)
+        error = None
+        started = time.monotonic()
+        try:
+            with time_limit(timeout):
+                agent.run_turn(task.prompt)
+        except TaskTimeout:
+            error = f"timed out after {timeout:.0f}s"
+        except OllamaError as e:
+            error = str(e).splitlines()[0][:200]
+        seconds = time.monotonic() - started
+        for key, value in agent.usage.items():
+            usage[key] = usage.get(key, 0) + value
+        answer = next((m.get("content", "") for m in reversed(agent.messages) if m.get("role") == "assistant"), "")
+        try:
+            check = task.check(folder, answer)
+        except Exception as e:  # a check must never crash the benchmark
+            check = Check(False, f"check failed: {type(e).__name__}: {e}")
+    finally:  # also when Ctrl+C stops the task
+        if keep:
+            (folder / "lcode-bench.log").write_text(log.file.getvalue() if isinstance(log.file, io.StringIO) else "")
+        else:
+            shutil.rmtree(folder, ignore_errors=True)
     return TaskResult(
         id=task.id,
         passed=check.passed and error is None,
@@ -1010,7 +1012,7 @@ def summary_rows(runs: list[ModelRun], tasks: list[Task]) -> list[tuple[str, lis
         return "—" if run.error else value
 
     rows += [
-        ("Passed", [cell(r, f"{r.passed}/{len(r.tasks)}") for r in runs]),
+        ("Passed", [cell(r, f"{r.passed}/{len(r.tasks)}" + (" (stopped)" if r.interrupted else "")) for r in runs]),
         ("Time", [cell(r, duration(r.seconds)) for r in runs]),
         ("Generation", [cell(r, f"{r.generation_tps:.1f} tok/s" if r.generation_tps else "?") for r in runs]),
         ("Prompt reading", [cell(r, f"{r.prompt_tps:,.0f} tok/s" if r.prompt_tps else "?") for r in runs]),

@@ -6,6 +6,12 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `lcode bench`: stopping a run with Ctrl+C no longer leaves the running task's temporary folder
+  behind, and the summary marks the model as stopped.
+- `lcode bench` no longer lists the model it's about to benchmark as "already loaded".
+
 ## [0.3.1] - 2026-09-30
 
 ### Added
