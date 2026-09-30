@@ -50,8 +50,7 @@ reasoning is on.
 | `/rename NAME` | Name the current session so it's easy to find later |
 | `/resume [SESSION]` | Resume a saved session: pick from a list, or give its number or name; `/resume all` lists every folder |
 | `/compact [focus]` | Summarize the conversation to free context |
-| `/context` | Show how full the context window is |
-| `/ctx [size]` | Show or change the context window |
+| `/context [size]` | Show how full the context window is and change its size: pick from a list with memory estimates, or give a size like `/context 128k` (`/ctx` is a shortcut) |
 | `/model [name]`, `/models` | Switch model, list models |
 | `/think [on\|off]` | Toggle reasoning |
 | `/verbose` | Toggle showing the reasoning text |

@@ -6,7 +6,7 @@ lcode is young; security fixes go into the latest release on `main`.
 
 | Version | Supported |
 |---|---|
-| 0.1.x (latest) | ✅ |
+| 0.2.x (latest) | ✅ |
 | older | ❌ |
 
 ## Reporting a vulnerability
