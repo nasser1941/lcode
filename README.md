@@ -91,7 +91,7 @@ lcode
 | `lcode --model qwen3.5-9b --context 128k` | pick a model and context window for this session |
 | `lcode models` / `lcode doctor` | what fits this machine / check the installation |
 | `/rename`, `/resume` | name the current session, resume a saved one |
-| `/model`, `/ctx 128k`, `/compact`, `/help` | switch model, resize context, summarize, list commands |
+| `/model`, `/context`, `/compact`, `/help` | switch model, resize the context window (pick from a list), summarize, list commands |
 
 ## Models
 

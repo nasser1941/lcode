@@ -6,6 +6,13 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `/context` now lets you change the context window mid-session: it lists the sizes the model
+  supports with the memory each needs and whether it fits on the GPU, and you pick one (or type
+  `/context 128k`). If the conversation is too long for a smaller size, lcode summarizes it first.
+  `/ctx` is a shortcut for the same command.
+
 ## [0.2.1] - 2026-09-29
 
 ### Fixed

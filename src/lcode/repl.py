@@ -21,7 +21,7 @@ from rich.table import Table
 from rich.text import Text
 
 from lcode import __version__, catalog, limits, sessions, web
-from lcode.agent import INIT_PROMPT, Agent
+from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
 from lcode.catalog import MIN_USEFUL_CONTEXT
 from lcode.config import PERMISSION_MODES, STATE_DIR, ConfigError, format_tokens, parse_context
 from lcode.hardware import Hardware
@@ -35,8 +35,8 @@ COMMANDS = {
     "/rename": "Name this session so you can find it later, e.g. /rename auth refactor",
     "/resume": "Resume a saved session: pick from a list, or /resume <number|name> (/resume all: every folder)",
     "/compact": "Summarize the conversation to free context (optional: what to focus on)",
-    "/context": "Show context-window usage",
-    "/ctx": "Show or change the context window, e.g. /ctx 128k",
+    "/context": "Show context usage and change the window size: pick from a list, or /context 128k",
+    "/ctx": "Shortcut for /context",
     "/model": "Show or switch model, e.g. /model qwen3.5-9b",
     "/models": "List models and how they fit this machine",
     "/think": "Toggle model reasoning on/off",
@@ -145,6 +145,114 @@ def banner(agent: Agent) -> None:
     )
 
 
+CONTEXT_CHOICES = (16384, 32768, 65536, 131072, 262144, 524288, 1048576)
+
+
+def context_options(agent: Agent, hardware: Hardware) -> list[dict]:
+    """The context sizes this model supports, with how each one fits this machine."""
+    s = agent.settings
+    spec = catalog.find(s.model)
+    try:
+        max_ctx = agent.ollama.max_context(s.model) or (spec.max_context if spec else None)
+    except OllamaError:
+        max_ctx = spec.max_context if spec else None
+    sizes = {c for c in CONTEXT_CHOICES if not max_ctx or c <= max_ctx} | {s.context}
+    if max_ctx:
+        sizes.add(max_ctx)
+    learned = limits.get(s.model)
+    recommended = limits.cap(s.model, spec.fit(hardware)[0]) if spec and spec.fit(hardware)[0] else None
+    options = []
+    for size in sorted(sizes):
+        if spec:
+            memory = spec.memory_gib(size)
+            if hardware.unified:
+                fit = "fits" if memory <= hardware.budget_gib - catalog.HEADROOM_GIB else "too large"
+            elif hardware.gpu and memory <= hardware.vram_gib:
+                fit = "on GPU"
+            elif memory <= hardware.budget_gib - catalog.HEADROOM_GIB:
+                fit = "GPU + RAM" if spec.moe else "GPU + RAM, slow"
+            else:
+                fit = "too large"
+            note = f"~{memory:.0f} GB · {fit}"
+        else:
+            note = "no memory estimate for this model"
+        if learned and size > learned:
+            note += " · ran out of memory here before"
+        options.append({"size": size, "note": note, "current": size == s.context, "recommended": size == recommended})
+    return options
+
+
+def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
+    """Show context usage and change the window size, from a list or directly (/context 128k)."""
+    c, s = agent.console, agent.settings
+    c.print(
+        f"In use: {format_tokens(agent.ctx_used)} of {format_tokens(s.context)} tokens "
+        f"({100 * agent.ctx_used / s.context:.0f}%) in {len(agent.messages)} message"
+        f"{'' if len(agent.messages) == 1 else 's'}; auto-compacts at 85%."
+    )
+    if arg:
+        try:
+            apply_context(agent, parse_context(arg), hardware)
+        except ConfigError as e:
+            c.print(f"[red]{e}[/]")
+        return
+    options = context_options(agent, hardware)
+    table = Table(title=f"Context window for {s.model}", title_justify="left", header_style="bold")
+    table.add_column("#", justify="right", style="cyan")
+    table.add_column("Size", justify="right")
+    table.add_column("Memory · fit")
+    table.add_column("")
+    for i, option in enumerate(options, 1):
+        marks = []
+        if option["current"]:
+            marks.append("[bold]current[/]")
+        if option["recommended"]:
+            marks.append("[cyan]recommended[/]")
+        table.add_row(str(i), format_tokens(option["size"]), option["note"], ", ".join(marks))
+    c.print(table)
+    try:
+        answer = input(f"  Choose a number, a size like 96k, or press Enter to keep {format_tokens(s.context)}: ")
+    except EOFError:
+        return
+    answer = answer.strip()
+    if not answer:
+        c.print(f"Keeping {format_tokens(s.context)}.")
+        return
+    if answer.isdigit() and 1 <= int(answer) <= len(options):
+        size = options[int(answer) - 1]["size"]
+    else:
+        try:
+            size = parse_context(answer)
+        except ConfigError as e:
+            c.print(f"[red]{e}[/]")
+            return
+    apply_context(agent, size, hardware)
+
+
+def apply_context(agent: Agent, size: int, hardware: Hardware) -> None:
+    c, s = agent.console, agent.settings
+    if size == s.context:
+        c.print(f"The context window is already {format_tokens(size)}.")
+        return
+    if agent.has_conversation() and agent.ctx_used > AUTO_COMPACT_RATIO * size:
+        c.print(
+            f"This conversation uses {format_tokens(agent.ctx_used)} tokens, too much for {format_tokens(size)}; "
+            "summarizing it first."
+        )
+        try:
+            agent.compact()
+        except OllamaError as e:
+            c.print(f"[red]Couldn't summarize the conversation, so the context stays the same: {e}[/]")
+            return
+    c.print(agent.set_context(size))
+    spec = catalog.find(s.model)
+    if spec and spec.memory_gib(s.context) > hardware.budget_gib:
+        c.print(
+            f"[yellow]~{spec.memory_gib(s.context):.0f} GB needed but ~{hardware.budget_gib:.0f} GB available; "
+            "this may run out of memory, in which case lcode falls back to a smaller size.[/]"
+        )
+
+
 def web_status(agent: Agent) -> str:
     if agent.settings.web == "off":
         return "off"
@@ -196,28 +304,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
             resume_session(agent, info)
     elif cmd == "/compact":
         agent.compact(arg)
-    elif cmd == "/context":
-        c.print(
-            f"Context: {format_tokens(agent.ctx_used)} of {format_tokens(s.context)} tokens "
-            f"({100 * agent.ctx_used / s.context:.1f}%) in {len(agent.messages)} messages; "
-            "auto-compacts at 85%."
-        )
-    elif cmd == "/ctx":
-        if not arg:
-            spec = catalog.find(s.model)
-            extra = f" · model maximum {format_tokens(spec.max_context)}" if spec else ""
-            c.print(f"Context window: {format_tokens(s.context)} tokens{extra}. Change it with /ctx 128k")
-        else:
-            try:
-                c.print(agent.set_context(parse_context(arg)))
-            except ConfigError as e:
-                c.print(f"[red]{e}[/]")
-            spec = catalog.find(s.model)
-            if spec and spec.memory_gib(s.context) > hardware.budget_gib:
-                c.print(
-                    f"[yellow]~{spec.memory_gib(s.context):.0f} GB needed but ~{hardware.budget_gib:.0f} GB "
-                    "available; this may run out of memory.[/]"
-                )
+    elif cmd in ("/context", "/ctx"):
+        context_command(agent, arg, hardware)
     elif cmd == "/models":
         print_models(agent.ollama, hardware, s.model)
     elif cmd == "/model":

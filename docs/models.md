@@ -91,9 +91,20 @@ lcode --context 64k                      # this session only
 lcode config set context 128k            # change the saved default
 ```
 
+Inside a session, `/context` lists the sizes the model supports, with the memory each needs and
+whether it fits on the GPU, and lets you pick one (or type `/context 128k` directly). The model
+reloads with the new size on your next message; if the conversation is too long for a smaller size,
+lcode summarizes it first.
+
 ```text
-❯ /ctx 128k      # inside a session (the model reloads on the next request)
-❯ /ctx           # show the current window and the model maximum
+❯ /context
+Context window for lcode-qwen3.6-35b
+ #  Size  Memory · fit
+ 1   16K  ~22 GB · GPU + RAM
+ 2   32K  ~23 GB · GPU + RAM
+ …
+ 5  256K  ~28 GB · GPU + RAM   current, recommended
+  Choose a number, a size like 96k, or press Enter to keep 256K: 2
 ```
 
 Sizes accept `k` and `m` suffixes (`128k` = 131,072 tokens, `1m` = 1,048,576). When the window is
