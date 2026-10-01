@@ -23,6 +23,12 @@ All notable changes to lcode are documented here. The format follows
     on demand instead (`mcp_tools` setting). `/mcp` shows servers, tools and their context cost;
     `lcode --no-mcp` starts without them.
 
+### Fixed
+
+- `lcode bench`: stopping a run with Ctrl+C no longer leaves the running task's temporary folder
+  behind, and the summary marks the model as stopped.
+- `lcode bench` no longer lists the model it's about to benchmark as "already loaded".
+
 ## [0.3.1] - 2026-09-30
 
 ### Added

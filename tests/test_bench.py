@@ -270,3 +270,18 @@ def test_feature_needs_old_todos_to_keep_working(tmp_path):
     replace(tmp_path / "todo.py", "t.get('priority', 'normal')", "t['priority']")  # old todos have none
     result = task.check(tmp_path, "")
     assert not result.passed and "todo.py list" in result.detail
+
+
+class InterruptedOllama(FakeOllama):
+    def chat_stream(self, payload):
+        raise KeyboardInterrupt
+        yield
+
+
+def test_ctrl_c_stops_the_run_and_cleans_up(monkeypatch, tmp_path):
+    monkeypatch.setattr(bench.tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(bench, "prompt_speed", lambda *args: None)
+    run = bench.run_model(InterruptedOllama(), "m", settings(), bench.select_tasks("fix-bug,rename"), quiet())
+    assert run.interrupted and run.tasks == []
+    assert not list(tmp_path.iterdir())  # the stopped task's folder is gone too
+    assert dict(bench.summary_rows([run], bench.select_tasks("fix-bug,rename")))["Passed"] == ["0/0 (stopped)"]
