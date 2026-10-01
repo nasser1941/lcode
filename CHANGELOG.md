@@ -6,6 +6,13 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Homebrew: `brew install nasser1941/tap/lcode` on macOS (Apple Silicon and Intel) and Linux. The
+  [tap](https://github.com/nasser1941/homebrew-tap) tests the formula on both and updates it
+  automatically for each release, about a day after it's published.
+- Python 3.14 is supported and tested.
+
 ## [0.4.0] - 2026-10-01
 
 ### Added

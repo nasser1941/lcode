@@ -74,6 +74,13 @@ uv tool install lcode-cli      # or: pipx install lcode-cli
 lcode setup
 ```
 
+On a Mac with [Homebrew](https://brew.sh):
+
+```bash
+brew install nasser1941/tap/lcode
+lcode setup
+```
+
 See the [installation guide](https://nasser1941.github.io/lcode/installation/) for details.
 
 ## Quickstart
@@ -143,7 +150,7 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
 
-- [Homebrew formula](https://github.com/nasser1941/lcode/issues/8) and an [optional sandbox for shell commands](https://github.com/nasser1941/lcode/issues/9)
+- An [optional sandbox for shell commands](https://github.com/nasser1941/lcode/issues/9)
 - More models in the catalog, and test reports from your hardware ([report one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml))
 
 ## Contributing

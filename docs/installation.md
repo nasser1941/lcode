@@ -56,6 +56,19 @@ The [installer](https://github.com/nasser1941/lcode/blob/main/install.sh) instal
 [PyPI](https://pypi.org/project/lcode-cli/) with its own Python into `~/.local/bin`, checks that
 Ollama is running, and starts `lcode setup`.
 
+!!! tip "Homebrew"
+
+    On a Mac (or with Homebrew on Linux) you can install lcode with Homebrew instead:
+
+    ```bash
+    brew install nasser1941/tap/lcode
+    brew install ollama && brew services start ollama   # if you don't have Ollama yet
+    lcode setup
+    ```
+
+    Upgrade with `brew upgrade lcode`. New releases reach the
+    [tap](https://github.com/nasser1941/homebrew-tap) about a day after they're published.
+
 ??? note "Prefer to do it by hand?"
 
     lcode is published on PyPI as `lcode-cli` (the command is `lcode`). With
@@ -146,8 +159,8 @@ steps. NVIDIA GPUs work inside WSL2 with the regular Windows driver.
 ## Upgrade and uninstall
 
 ```bash
-uv tool upgrade lcode-cli        # upgrade (pipx: pipx upgrade lcode-cli)
-uv tool uninstall lcode-cli      # remove lcode
+uv tool upgrade lcode-cli        # upgrade (pipx: pipx upgrade lcode-cli; Homebrew: brew upgrade lcode)
+uv tool uninstall lcode-cli      # remove lcode (Homebrew: brew uninstall lcode)
 rm -rf ~/.config/lcode ~/.local/state/lcode    # remove settings and saved sessions
 ollama rm lcode-qwen3.6-35b qwen3.6:35b-a3b-coding   # remove downloaded models
 ```
