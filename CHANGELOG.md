@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-01
+
 ### Added
 
 - MCP (Model Context Protocol) servers: the model can use tools from Jira, GitHub, AWS, databases and
@@ -163,7 +165,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/nasser1941/lcode/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/nasser1941/lcode/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/nasser1941/lcode/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/nasser1941/lcode/compare/v0.2.1...v0.2.2
