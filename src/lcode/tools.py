@@ -365,6 +365,11 @@ class Toolbox:
             if not ok:
                 return feedback
         if mcp.needs_gpu(state, tool):
+            # The tool must finish before lcode's model comes back: a job left running in the
+            # background would compete with it for the GPU.
+            properties = (tool.get("inputSchema") or {}).get("properties") or {}
+            if (properties.get("wait") or {}).get("type") == "boolean" and arguments.get("wait") is not True:
+                arguments = {**arguments, "wait": True}
             freed = self.agent.free_gpu()
             if freed:
                 self.console.print(

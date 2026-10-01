@@ -540,3 +540,19 @@ def test_gpu_hungry_tools_get_the_gpu(make_agent, tmp_path, monkeypatch):
     assert "freed the GPU for img (lcode-qwen3.6-35b reloads afterwards)" in output(agent)
     assert mcp_config.parse("x", {"command": "y", "free_gpu": True}).free_gpu is True
     agent.mcp.close()
+
+
+def test_gpu_tools_run_to_completion(make_agent, tmp_path, monkeypatch):
+    """A free_gpu tool with a `wait` option always waits, so it doesn't share the GPU with lcode's model."""
+    agent = make_agent([reply(tool_calls=[call("mcp__img__add", a=1, b=2, wait=False)]), reply("done")])
+    agent.mcp = ready_manager(tmp_path, server_config("img", free_gpu=["add"]))
+    state = agent.mcp.servers["img"]
+    add = next(t for t in state.tools if t["name"] == "add")
+    add["inputSchema"]["properties"]["wait"] = {"type": "boolean", "default": True}
+    sent = []
+    monkeypatch.setattr(
+        agent.mcp, "call", lambda state, tool, arguments, image_text=None: sent.append(arguments) or "ok"
+    )
+    agent.run_turn("make an image")
+    assert sent == [{"a": 1, "b": 2, "wait": True}]
+    agent.mcp.close()
