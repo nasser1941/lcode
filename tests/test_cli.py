@@ -91,3 +91,28 @@ def test_learned_limits_cap_the_automatic_context(tmp_path, monkeypatch):
     assert cli.choose_context(FakeOllama(max_ctx=1048576), "nemo", spec, None, big)[0] == 524288
     # An explicit --context is respected (and falls back at runtime if it doesn't fit).
     assert cli.choose_context(FakeOllama(max_ctx=1048576), "nemo", spec, 1048576, big)[0] == 1048576
+
+
+def test_bench_warns_only_about_models_it_isnt_running(tmp_path, monkeypatch):
+    import io
+
+    from rich.console import Console
+
+    from lcode import bench
+
+    class Busy(FakeOllama):
+        def running(self):
+            return [{"name": "lcode-qwen3.6-35b:latest"}, {"name": "qwen2.5-coder:14b"}]
+
+    out = Console(file=io.StringIO(), width=200)
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
+    monkeypatch.setattr(cli, "console", out)
+    monkeypatch.setattr(cli, "Ollama", lambda host: Busy())
+    monkeypatch.setattr(cli, "detect", lambda: HW)
+    monkeypatch.setattr(cli, "check_ollama", lambda *args: "0.32.0")
+    ran = []
+    monkeypatch.setattr(bench, "run_model", lambda ollama, name, *args: ran.append(name) or bench.ModelRun(name, name))
+    cli.main(["bench", "qwen3.6-35b", "gpt-oss-20b"])
+    text = out.file.getvalue()
+    assert "Already loaded in Ollama: qwen2.5-coder:14b." in text
+    assert "Skipping gpt-oss-20b" in text and ran == ["qwen3.6-35b"]

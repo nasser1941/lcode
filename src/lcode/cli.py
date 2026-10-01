@@ -367,7 +367,14 @@ def cmd_bench(args) -> None:
     console.print(f"[bold]lcode bench[/] · {hw.describe()} · Ollama {version}")
     console.print("[dim]Each task runs in a new temporary folder with every permission granted and web access off.[/]")
     names = args.models or [cfg["model"]]
-    others = [m.get("name", "?") for m in ollama.running()]
+    resolved: dict[str, tuple[str, ModelSpec | None] | NotInstalled] = {}
+    for name in names:
+        try:
+            resolved[name] = resolve_model(ollama, name)
+        except NotInstalled as e:
+            resolved[name] = e
+    benched = {r[0] for r in resolved.values() if isinstance(r, tuple)}
+    others = [m.get("name", "?") for m in ollama.running() if m.get("name", "").removesuffix(":latest") not in benched]
     if others:
         console.print(
             f"[yellow]Already loaded in Ollama: {', '.join(others)}. Models that share the GPU run slower; "
@@ -375,12 +382,12 @@ def cmd_bench(args) -> None:
         )
     runs = []
     for i, name in enumerate(names):
-        try:
-            model, spec = resolve_model(ollama, name)
-        except NotInstalled as e:
-            console.print(f"\n[yellow]Skipping {name}: {e}[/]")
-            runs.append(bench.ModelRun(name, name, error=str(e)))
+        found = resolved[name]
+        if isinstance(found, NotInstalled):
+            console.print(f"\n[yellow]Skipping {name}: {found}[/]")
+            runs.append(bench.ModelRun(name, name, error=str(found)))
             continue
+        model, spec = found
         ctx, note = choose_context(ollama, model, spec, context, hw)
         if note:
             console.print(f"[yellow]{model}, context {format_tokens(ctx)}: {note}[/]")
