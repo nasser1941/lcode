@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-01
+
 ### Added
 
 - lcode can look at images: attach a screenshot, mockup or diagram with `@path`, and the model can
@@ -17,6 +19,9 @@ All notable changes to lcode are documented here. The format follows
 - `lcode mcp add comfyui`: generate and edit images with models you run locally in ComfyUI (FLUX,
   SDXL, Stable Diffusion 1.5, Qwen-Image), through ComfyUI's official MCP server, with only its local
   tools enabled.
+- MCP servers can mark tools that need the GPU to themselves (`free_gpu` in `mcp.json`): lcode
+  unloads its own model before they run and reloads it afterwards. On for ComfyUI's generation tools,
+  so image models work on a 12 GB GPU next to a large coding model.
 
 ## [0.5.0] - 2026-10-01
 
@@ -198,7 +203,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/nasser1941/lcode/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/nasser1941/lcode/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/nasser1941/lcode/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/nasser1941/lcode/compare/v0.3.1...v0.4.0
