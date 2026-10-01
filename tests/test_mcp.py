@@ -522,3 +522,21 @@ def test_options_and_the_server_command_are_kept_apart():
 
     args = build_parser().parse_args(["add", "db", "--env", "URL=postgres://x", "--", "uvx", "pg", "--read-only"])
     assert (args.name, args.env, args.command) == ("db", ["URL=postgres://x"], ["uvx", "pg", "--read-only"])
+
+
+def test_gpu_hungry_tools_get_the_gpu(make_agent, tmp_path, monkeypatch):
+    """Before a tool listed under free_gpu runs, lcode unloads its own models (and nobody else's)."""
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("mcp__img__add", a=1, b=2)]),  # listed under free_gpu
+            reply(tool_calls=[call("mcp__img__echo", text="x")]),  # not listed
+            reply("done"),
+        ]
+    )
+    agent.ollama.loaded = [{"name": "lcode-qwen3.6-35b:latest"}, {"name": "someone-elses:7b"}]
+    agent.mcp = ready_manager(tmp_path, server_config("img", free_gpu=["add"]))
+    agent.run_turn("make an image")
+    assert agent.ollama.unloaded == ["lcode-qwen3.6-35b:latest"]
+    assert "freed the GPU for img (lcode-qwen3.6-35b reloads afterwards)" in output(agent)
+    assert mcp_config.parse("x", {"command": "y", "free_gpu": True}).free_gpu is True
+    agent.mcp.close()

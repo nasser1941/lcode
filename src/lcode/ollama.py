@@ -68,6 +68,10 @@ class Ollama:
                 names.add(m["name"][: -len(":latest")])
         return names
 
+    def chat(self, payload: dict, timeout: float = 900) -> dict:
+        """One chat request without streaming."""
+        return self._post("/api/chat", {**payload, "stream": False}, timeout=timeout)
+
     def show(self, model: str) -> dict:
         return self._post("/api/show", {"model": model})
 

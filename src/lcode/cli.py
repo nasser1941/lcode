@@ -273,6 +273,17 @@ def cmd_doctor(args) -> None:
         if spec:
             detail += f" · ~{spec.memory_gib(ctx):.0f} GB needed, ~{hw.budget_gib:.0f} GB available"
         line("Context", detail + (f" ({note})" if note else ""), None if note else True)
+        from lcode import vision
+
+        seer = vision.pick_model(ollama, model, cfg["vision_model"])
+        if seer:
+            line(
+                "Vision",
+                f"{seer} looks at screenshots and images" + ("" if seer == model else " (loaded when needed)"),
+                True,
+            )
+        else:
+            line("Vision", "off" if cfg["vision_model"] == "off" else vision.INSTALL_HINT, None)
         if limits.get(model):
             line(
                 "Limit",
@@ -497,6 +508,7 @@ def cmd_chat(args) -> None:
         sandbox=(cfg["sandbox"] if cfg["sandbox"] != "off" else "docker") if args.sandbox else cfg["sandbox"],
         sandbox_image=cfg["sandbox_image"],
         sandbox_network=cfg["sandbox_network"],
+        vision_model=cfg["vision_model"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     if agent.sandbox:

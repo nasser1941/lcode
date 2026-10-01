@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import json
 import platform
@@ -19,7 +20,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
-from lcode import catalog, limits, sessions, web
+from lcode import catalog, limits, sessions, vision, web
 from lcode.checkpoints import Checkpoints
 from lcode.config import format_tokens
 from lcode.mcp import McpManager
@@ -29,9 +30,11 @@ from lcode.render import MarkdownStreamer
 from lcode.sandbox import Sandbox, SandboxError, project_root
 from lcode.tools import (
     SCHEMAS,
+    VIEW_IMAGE_SCHEMA,
     WEB_FETCH_SCHEMA,
     WEB_SEARCH_SCHEMA,
     Toolbox,
+    ToolError,
     is_binary,
     parse_text_tool_calls,
     tree,
@@ -144,6 +147,7 @@ class Settings:
     sandbox: str = "off"  # off, docker or podman: where the model's shell commands run
     sandbox_image: str | None = None
     sandbox_network: bool = False
+    vision_model: str = "auto"  # auto, off or an Ollama model that can see images
 
 
 class Agent:
@@ -163,6 +167,7 @@ class Agent:
             else None
         )
         self._mcp_prompt = ""  # the MCP part at the end of the system prompt
+        self._vision: str | bool | None = False  # the model that looks at images; False = not decided yet
         self.session_name = ""
         self.session_title = ""
         self.ctx_used = 0
@@ -204,9 +209,64 @@ class Agent:
         schemas = list(SCHEMAS)
         if self.settings.web != "off":
             schemas += [*([WEB_SEARCH_SCHEMA] if self.search_backend() else []), WEB_FETCH_SCHEMA]
+        if self.vision_model():
+            schemas.append(VIEW_IMAGE_SCHEMA)
         if self.mcp:
             schemas += self.mcp.schemas(self.settings.context)
         return schemas
+
+    def vision_model(self) -> str | None:
+        """The model that looks at images for this session, if any (see lcode.vision)."""
+        if self._vision is False:
+            self._vision = vision.pick_model(self.ollama, self.settings.model, self.settings.vision_model)
+        return self._vision or None
+
+    def free_gpu(self) -> list[str]:
+        """Unload lcode's models from Ollama so another program can use the GPU; the next request reloads.
+
+        Only lcode's own models: the session's and the one that looks at images.
+        """
+        mine = {self.settings.model, *([self._vision] if isinstance(self._vision, str) else [])}
+        freed = []
+        for entry in self.ollama.running():
+            name = entry.get("name") or entry.get("model") or ""
+            if name in mine or name.removesuffix(":latest") in mine:
+                try:
+                    self.ollama.unload(name)
+                    freed.append(name.removesuffix(":latest"))
+                except OllamaError:
+                    pass
+        return freed
+
+    def look(self, path: Path, question: str = "") -> str:
+        """Describe an image with the vision model. Raises ToolError if it can't."""
+        model = self.vision_model()
+        if not model:
+            raise ToolError(f"can't look at {path.name}: {vision.INSTALL_HINT}")
+        try:
+            image = vision.read_image(path)
+            # The session's own model keeps its settings, so Ollama doesn't reload it.
+            options = self.options() if model == self.settings.model else None
+            loading = "" if model == self.settings.model else " (loads it; the next request reloads the main model)"
+            with self.console.status(f"Looking at {path.name} with {model}{loading}…", spinner="dots"):
+                return vision.describe(self.ollama, model, image, question, options, self.settings.keep_alive)
+        except vision.VisionError as e:
+            raise ToolError(str(e)) from e
+
+    def describe_image_data(self, data: str, mime: str) -> str:
+        """For images that tools return (e.g. an MCP browser's screenshots): a description, or a note."""
+        model = self.vision_model()
+        if not model:
+            return f"[{mime} image not shown: {vision.INSTALL_HINT}]"
+        options = self.options() if model == self.settings.model else None
+        try:
+            with self.console.status(f"Looking at the {mime} image with {model}…", spinner="dots"):
+                text = vision.describe(
+                    self.ollama, model, base64.b64decode(data), "", options, self.settings.keep_alive
+                )
+        except (vision.VisionError, ValueError) as e:
+            return f"[{mime} image not shown: {e}]"
+        return f"[{mime} image, as described by {model}]\n{text}"
 
     def prepare_mcp(self) -> None:
         """Before a request: wait for MCP servers still starting and describe them in the system prompt."""
@@ -559,7 +619,17 @@ class Agent:
         attached = []
         for ref in re.findall(r"(?<!\S)@([\w./~\-]+)", text):
             p = self.tools.resolve(ref)
-            if p.is_file() and not is_binary(p) and p.stat().st_size < 200_000:
+            if p.is_file() and vision.is_image(p):
+                try:
+                    description = self.look(p, re.sub(r"(?<!\S)@[\w./~\-]+", "", text))
+                    who = f' described_by="{self.vision_model()}"'
+                except ToolError as e:
+                    description, who = f"(lcode couldn't look at this image: {e})", ""
+                    self.console.print(Text(f"  ⎿ {e}", style="yellow"))
+                else:
+                    self.console.print(Text(f"  ⎿ looked at {self.tools.rel(p)}", style="dim"))
+                attached.append(f'<image path="{self.tools.rel(p)}"{who}>\n{description}\n</image>')
+            elif p.is_file() and not is_binary(p) and p.stat().st_size < 200_000:
                 attached.append(f'<file path="{self.tools.rel(p)}">\n{p.read_text(errors="replace")}\n</file>')
                 self.tools.read_mtimes[str(p)] = p.stat().st_mtime
                 self.console.print(Text(f"  ⎿ attached {self.tools.rel(p)}", style="dim"))

@@ -28,6 +28,7 @@ and find the code for the top one."*
 | `gcp` | `gcloud` commands on your Google Cloud projects | `npx` and the `gcloud` CLI, signed in |
 | `github` | Repositories, issues, pull requests, Actions | a GitHub token (or the GitHub CLI) |
 | `playwright` | A real (headless) browser: open pages, click, fill forms | `npx` |
+| `comfyui` | Generate and edit images with local models (FLUX, SDXL, SD 1.5, Qwen-Image) | `uvx` and [ComfyUI](#images-with-comfyui) running locally |
 | `context7` | Up-to-date docs and examples for thousands of libraries | nothing (an API key is optional) |
 | `sentry` | Errors, issues, traces and releases | a Sentry account (browser sign-in) |
 | `postgres` | Schemas, read-only queries, query performance | `uvx`, a connection URL |
@@ -82,6 +83,57 @@ Google Cloud project:
 See [Google's guide](https://developers.google.com/workspace/guides/configure-mcp-servers) for
 details.
 
+### Images with ComfyUI
+
+[ComfyUI](https://github.com/comfyanonymous/ComfyUI) runs image generation and editing models
+locally; its official MCP server lets lcode use it, for app icons, illustrations, mockups or
+placeholder art.
+
+```bash
+uv tool install comfy-cli && comfy install                 # ComfyUI, once
+comfy launch --background -- --disable-smart-memory          # start it (http://127.0.0.1:8188)
+lcode mcp add comfyui
+```
+
+Then add models in ComfyUI (its model manager, or ask lcode: *"download FLUX.2 Klein 4B in
+ComfyUI"*), and ask for images: *"make a 512×512 app icon of a paper plane and save it in
+assets/"*. To edit an image, ask lcode to upload it and run an editing workflow (Kontext or
+Qwen-Image-Edit).
+
+| Model | Good for | On a 12 GB GPU |
+|---|---|---|
+| FLUX.2 Klein 4B | Generation and editing, fast | Fits (about 8 GB) |
+| SDXL and its community models | Generation, inpainting | Fits |
+| Stable Diffusion 1.5 and its community models | Light generation, inpainting | Fits easily |
+| FLUX.1 Dev and finetunes | High-quality generation | Needs an fp8 or GGUF version; slower |
+| FLUX.1 Kontext Dev | Editing an image from instructions | Needs an fp8 or GGUF version; slower |
+| Qwen-Image / Qwen-Image-Edit | Generation and editing, good text in images | Heavy: a GGUF version and RAM offloading |
+
+Only ComfyUI's local tools are turned on; Comfy Cloud's partner tools are left out, so prompts and
+images stay on your machine.
+
+**Sharing one GPU.** A GPU rarely holds a coding model and an image model at the same time, so the
+two take turns: before ComfyUI generates, lcode unloads its own model (the `free_gpu` setting), and
+ComfyUI started with `--disable-smart-memory` gives the GPU back after each image. lcode's model
+then reloads for the next step, which adds a few seconds to half a minute per image request. With
+enough GPU memory for both (or on a Mac with plenty of memory), remove `free_gpu` from the server's
+settings in `mcp.json`. lcode can also look at the results ([Images](usage.md#images)).
+
+Measured on an RTX 4080 Laptop GPU (12 GB) with qwen3.6-35b at 64K context and FLUX.2 Klein Base 4B
+(fp8, 512×512, 20 steps):
+
+| | |
+|---|---|
+| Generating while lcode's model is loaded | Fails: ComfyUI runs out of GPU memory |
+| Freeing the GPU (lcode unloads its model) | 0.2 s |
+| Generating one image | about 12 s |
+| Reloading lcode's model afterwards | about 20 s |
+
+The first time, the model has to find the right template and fill in its settings (model file names,
+size, prompt), which can take several minutes of trial and error. Once an image comes out right, ask
+lcode to save that workflow in your project (for example `assets/icon.workflow.json`) and reuse it:
+later images are a single `run_workflow` call.
+
 ## Adding your own servers
 
 Any MCP server works. For a remote server, give its URL; for a local one, the command that starts it:
@@ -122,6 +174,7 @@ document, so you can also paste a server's example config into that file:
 | `allow` | Tools that run without asking; `["*"]` for all of the server's tools |
 | `timeout` | Seconds a tool call may take (default 300) |
 | `disabled` | `true` to turn the server off (`lcode mcp disable <name>`) |
+| `free_gpu` | Tools that need the GPU to themselves (`true` for all): lcode unloads its model first and reloads it afterwards |
 | `oauth` | For servers that need a pre-registered OAuth client: `client_id`, `client_secret`, `scopes`, `authorize_params` |
 
 Values can use environment variables: `${NAME}`, or `${NAME:-default}`. Keep tokens in environment

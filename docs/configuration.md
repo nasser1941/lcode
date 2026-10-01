@@ -28,6 +28,7 @@ lcode config path                      # print the file location
 | `sandbox` | `off` | Run shell commands in a container: `docker` or `podman` ([Sandbox](sandbox.md)) |
 | `sandbox_image` | lcode's image | Container image for the sandbox; any image with bash and setsid |
 | `sandbox_network` | `false` | Let commands in the sandbox use the network |
+| `vision_model` | `auto` | The model that [looks at images](usage.md#images): `auto`, `off` or an Ollama model that can see |
 | `mcp_tools` | `auto` | How [MCP](mcp.md#context) tool definitions reach the model: `auto`, `direct` or `search` (on demand) |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
 

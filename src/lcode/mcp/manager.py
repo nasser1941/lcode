@@ -317,15 +317,20 @@ class McpManager:
             raise McpError("`arguments` must be a JSON object")
         return found[0], found[1], arguments
 
+    def needs_gpu(self, state: ServerState, tool: dict) -> bool:
+        """Whether lcode should free the GPU (unload its model) before this tool runs."""
+        wanted = state.cfg.free_gpu
+        return wanted is True or (isinstance(wanted, list) and tool["name"] in wanted)
+
     def allowed(self, state: ServerState, tool: dict) -> bool:
         """Tools the user allowed in mcp.json run without asking."""
         return "*" in state.cfg.allow or tool["name"] in state.cfg.allow
 
-    def call(self, state: ServerState, tool: dict, arguments: dict) -> str:
+    def call(self, state: ServerState, tool: dict, arguments: dict, image_text=None) -> str:
         try:
             if state.conn is None:
                 raise TransportError("the server isn't connected")
-            return result_text(state.conn.call_tool(tool, arguments, state.cfg.timeout))
+            return result_text(state.conn.call_tool(tool, arguments, state.cfg.timeout), image_text)
         except AuthRequired:
             state.status = "login"
             state.error = f"sign-in expired: run /mcp login {state.name}"
@@ -336,7 +341,7 @@ class McpManager:
                 self.restart(state.name)
                 if state.status == "ready" and state.conn:
                     try:
-                        return result_text(state.conn.call_tool(tool, arguments, state.cfg.timeout))
+                        return result_text(state.conn.call_tool(tool, arguments, state.cfg.timeout), image_text)
                     except McpError as again:
                         return f"Error: {again}"
             return f"Error: {state.name}: {e}"

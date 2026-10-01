@@ -25,6 +25,7 @@ from rich.text import Text
 from lcode import web
 from lcode.permissions import bash_key, is_read_only
 from lcode.sandbox import SandboxError
+from lcode.vision import is_image
 
 if TYPE_CHECKING:
     from lcode.agent import Agent
@@ -162,7 +163,17 @@ WEB_FETCH_SCHEMA = _fn(
     },
     ["url"],
 )
-TOOL_NAMES = {s["function"]["name"] for s in [*SCHEMAS, WEB_SEARCH_SCHEMA, WEB_FETCH_SCHEMA]}
+VIEW_IMAGE_SCHEMA = _fn(
+    "view_image",
+    "Look at an image file (screenshot, diagram, photo, mockup): returns a detailed description with all visible "
+    "text transcribed. Ask a specific question to focus it.",
+    {
+        "path": {"type": "string", "description": "Image file: png, jpg, webp or gif"},
+        "question": {"type": "string", "description": "What you need to know from the image (optional)"},
+    },
+    ["path"],
+)
+TOOL_NAMES = {s["function"]["name"] for s in [*SCHEMAS, WEB_SEARCH_SCHEMA, WEB_FETCH_SCHEMA, VIEW_IMAGE_SCHEMA]}
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -329,6 +340,11 @@ class Toolbox:
         valid = ", ".join(p if params[p].default is inspect.Parameter.empty else f"{p} (optional)" for p in params)
         return f"{'; '.join(parts)}. Valid arguments: {valid}."
 
+    # -- images
+    def t_view_image(self, path: str, question: str = "") -> str:
+        p = self.path(path)
+        return f"[{self.rel(p)}, as described by {self.agent.vision_model()}]\n" + self.agent.look(p, question)
+
     # -- MCP servers
     def _mcp(self, name: str, args: dict) -> str:
         mcp = self.agent.mcp
@@ -348,7 +364,13 @@ class Toolbox:
             ok, feedback = self.agent.perms.request(f"mcp:{state.name}:{tool['name']}", "mcp", title, body)
             if not ok:
                 return feedback
-        result = mcp.call(state, tool, arguments)
+        if mcp.needs_gpu(state, tool):
+            freed = self.agent.free_gpu()
+            if freed:
+                self.console.print(
+                    Text(f"  ⎿ freed the GPU for {state.name} ({', '.join(freed)} reloads afterwards)", style="dim")
+                )
+        result = mcp.call(state, tool, arguments, image_text=self.agent.describe_image_data)
         if result.startswith("Error:"):
             return result
         self.console.print(Text(f"  ⎿ {result.count(chr(10)) + 1} line(s) from {state.name}", style="dim"))
@@ -361,6 +383,8 @@ class Toolbox:
             raise ToolError(f"{path} does not exist")
         if p.is_dir():
             raise ToolError(f"{path} is a directory; use list_dir")
+        if is_image(p):
+            raise ToolError(f"{path} is an image; look at it with view_image")
         if is_binary(p):
             raise ToolError(f"{path} is a binary file ({p.stat().st_size} bytes)")
         lines = p.read_text(errors="replace").splitlines()
