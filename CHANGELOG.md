@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-01
+
 ### Fixed
 
 - Tools marked `free_gpu` (such as ComfyUI's `run_workflow`) now always run to completion
@@ -209,7 +211,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/nasser1941/lcode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/nasser1941/lcode/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/nasser1941/lcode/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/nasser1941/lcode/compare/v0.4.0...v0.4.1
