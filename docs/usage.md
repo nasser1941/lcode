@@ -86,6 +86,34 @@ reasoning is on.
 lcode refuses to edit a file the model hasn't read in the session, or one that changed on disk since
 it was read, so the model always edits the current version.
 
+## Images
+
+lcode can look at screenshots, mockups, diagrams and photos:
+
+```text
+❯ the layout breaks on mobile, see @screenshots/mobile.png
+❯ make the settings page match @design/settings.png
+```
+
+- Attach an image with `@path`, like a file. lcode describes it in detail, with all visible text
+  transcribed and with your question in mind, and the model works from that description.
+- The model can open images itself with the `view_image` tool, for example a screenshot a test wrote.
+- Screenshots that [MCP](mcp.md) tools return, such as the Playwright browser's, are described too.
+
+**Which model looks.** lcode's text-only model variants leave out the vision part to save GPU
+memory, so lcode borrows the original model, which `lcode setup` already downloaded (for example
+`qwen3.6:35b-a3b-coding` for `qwen3.6-35b`). If your model can see, it looks itself. `lcode doctor`
+shows which one is used. With another model, install one that can see and point lcode to it:
+
+```bash
+ollama pull qwen3-vl:8b
+lcode config set vision_model qwen3-vl:8b
+```
+
+Loading a second model takes a moment: on a 12 GB GPU, describing an image with the original
+`qwen3.6:35b-a3b-coding` takes about a minute, and the next request reloads the main model. Turn
+image support off with `lcode config set vision_model off`.
+
 ## Permissions
 
 | Mode | File edits | Shell commands |

@@ -225,7 +225,9 @@ GPU's share of unified memory. Results from other Macs are very welcome in the
 
 ## Text-only variants
 
-Some models (the Qwen3.6 family, for example) ship with a vision encoder that a coding agent doesn't
-use. `lcode setup` creates a text-only variant named `lcode-<key>` that reuses the downloaded
+Some models (the Qwen3.6 family, for example) ship with a vision encoder that a coding agent rarely
+needs. `lcode setup` creates a text-only variant named `lcode-<key>` that reuses the downloaded
 weights, so it takes no extra disk space, and frees about 1 GB of GPU memory for the context cache
 (and for a larger prompt batch, where it fits; see [tuning](configuration.md#tuning-for-speed-and-memory)).
+When you show lcode an image, it borrows the original model, vision encoder included, to look at it
+(see [Images](usage.md#images)).

@@ -28,6 +28,7 @@ and find the code for the top one."*
 | `gcp` | `gcloud` commands on your Google Cloud projects | `npx` and the `gcloud` CLI, signed in |
 | `github` | Repositories, issues, pull requests, Actions | a GitHub token (or the GitHub CLI) |
 | `playwright` | A real (headless) browser: open pages, click, fill forms | `npx` |
+| `comfyui` | Generate and edit images with local models (FLUX, SDXL, SD 1.5, Qwen-Image) | `uvx` and [ComfyUI](#images-with-comfyui) running locally |
 | `context7` | Up-to-date docs and examples for thousands of libraries | nothing (an API key is optional) |
 | `sentry` | Errors, issues, traces and releases | a Sentry account (browser sign-in) |
 | `postgres` | Schemas, read-only queries, query performance | `uvx`, a connection URL |
@@ -81,6 +82,38 @@ Google Cloud project:
 
 See [Google's guide](https://developers.google.com/workspace/guides/configure-mcp-servers) for
 details.
+
+### Images with ComfyUI
+
+[ComfyUI](https://github.com/comfyanonymous/ComfyUI) runs image generation and editing models
+locally; its official MCP server lets lcode use it, for app icons, illustrations, mockups or
+placeholder art.
+
+```bash
+uv tool install comfy-cli && comfy install && comfy launch   # ComfyUI on http://127.0.0.1:8188
+lcode mcp add comfyui
+```
+
+Then add models in ComfyUI (its model manager, or ask lcode: *"download FLUX.2 Klein 4B in
+ComfyUI"*), and ask for images: *"make a 512×512 app icon of a paper plane and save it in
+assets/"*. To edit an image, ask lcode to upload it and run an editing workflow (Kontext or
+Qwen-Image-Edit).
+
+| Model | Good for | On a 12 GB GPU |
+|---|---|---|
+| FLUX.2 Klein 4B | Generation and editing, fast | Fits (about 8 GB) |
+| SDXL and its community models | Generation, inpainting | Fits |
+| Stable Diffusion 1.5 and its community models | Light generation, inpainting | Fits easily |
+| FLUX.1 Dev and finetunes | High-quality generation | Needs an fp8 or GGUF version; slower |
+| FLUX.1 Kontext Dev | Editing an image from instructions | Needs an fp8 or GGUF version; slower |
+| Qwen-Image / Qwen-Image-Edit | Generation and editing, good text in images | Heavy: a GGUF version and RAM offloading |
+
+Only ComfyUI's local tools are turned on; Comfy Cloud's partner tools are left out, so prompts and
+images stay on your machine. One GPU can't hold a large coding model and an image model at the
+same time: while lcode's model is loaded, ComfyUI runs slowly or runs out of memory. Use a smaller
+image model, generate between requests (the `free_memory` tool frees ComfyUI's memory; Ollama frees
+lcode's after `keep_alive`), or run ComfyUI on another machine and give its address when adding.
+lcode can also look at the results ([Images](usage.md#images)).
 
 ## Adding your own servers
 

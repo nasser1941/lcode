@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+from collections.abc import Callable
 
 from lcode import __version__
 
@@ -99,8 +100,8 @@ def param_headers(schema: dict, arguments: dict) -> dict[str, str] | None:
     return headers if walk(schema, arguments) else None
 
 
-def result_text(result: dict) -> str:
-    """Turn a tools/call result into text for the model."""
+def result_text(result: dict, image_text: Callable[[str, str], str] | None = None) -> str:
+    """Turn a tools/call result into text for the model. `image_text(data, mime)` describes images."""
     parts = []
     for item in result.get("content") or []:
         if not isinstance(item, dict):
@@ -108,6 +109,8 @@ def result_text(result: dict) -> str:
         kind = item.get("type")
         if kind == "text":
             parts.append(str(item.get("text", "")))
+        elif kind == "image" and image_text and item.get("data"):
+            parts.append(image_text(item["data"], item.get("mimeType", "image/png")))
         elif kind in ("image", "audio"):
             parts.append(f"[{kind} ({item.get('mimeType', 'unknown type')}) not shown]")
         elif kind == "resource_link":

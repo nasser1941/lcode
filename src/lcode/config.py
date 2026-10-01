@@ -43,6 +43,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "sandbox": ("off", str, "run the model's shell commands in a container: off | docker | podman"),
     "sandbox_image": (None, str, "container image for the sandbox (default: lcode's, built on first use)"),
     "sandbox_network": (False, bool, "let commands in the sandbox use the network"),
+    "vision_model": ("auto", str, "model that looks at images: auto | off | an Ollama model with vision"),
     "mcp_tools": ("auto", str, "how MCP tools reach the model: auto | direct | search (on demand, saves context)"),
 }
 ENV_OVERRIDES = {

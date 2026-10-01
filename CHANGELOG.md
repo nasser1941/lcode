@@ -6,6 +6,18 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- lcode can look at images: attach a screenshot, mockup or diagram with `@path`, and the model can
+  open images itself with the new `view_image` tool. A model that can see describes the image in
+  detail (all text transcribed, with your question in mind): your model itself if it can see, or
+  the original model behind lcode's text-only variant, which `lcode setup` already downloaded
+  (`vision_model` setting; `lcode doctor` shows which). Screenshots returned by MCP tools, such as
+  Playwright's, are described too.
+- `lcode mcp add comfyui`: generate and edit images with models you run locally in ComfyUI (FLUX,
+  SDXL, Stable Diffusion 1.5, Qwen-Image), through ComfyUI's official MCP server, with only its local
+  tools enabled.
+
 ## [0.5.0] - 2026-10-01
 
 ### Added

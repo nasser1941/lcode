@@ -17,6 +17,16 @@ class FakeOllama:
         self.payloads: list[dict] = []
         self.max_ctx = max_ctx
         self.host = "http://fake"
+        self.capabilities: dict[str, list[str]] = {}  # model -> Ollama capabilities, e.g. ["vision"]
+        self.chats: list[dict] = []  # non-streaming requests (image descriptions)
+        self.description = "A login form with a red 'Sign in' button."
+
+    def show(self, model: str) -> dict:
+        return {"capabilities": self.capabilities.get(model, ["completion", "tools"])}
+
+    def chat(self, payload: dict) -> dict:
+        self.chats.append(payload)
+        return {"message": {"role": "assistant", "content": self.description}}
 
     def chat_stream(self, payload: dict):
         self.payloads.append(payload)

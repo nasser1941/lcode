@@ -321,11 +321,11 @@ class McpManager:
         """Tools the user allowed in mcp.json run without asking."""
         return "*" in state.cfg.allow or tool["name"] in state.cfg.allow
 
-    def call(self, state: ServerState, tool: dict, arguments: dict) -> str:
+    def call(self, state: ServerState, tool: dict, arguments: dict, image_text=None) -> str:
         try:
             if state.conn is None:
                 raise TransportError("the server isn't connected")
-            return result_text(state.conn.call_tool(tool, arguments, state.cfg.timeout))
+            return result_text(state.conn.call_tool(tool, arguments, state.cfg.timeout), image_text)
         except AuthRequired:
             state.status = "login"
             state.error = f"sign-in expired: run /mcp login {state.name}"
@@ -336,7 +336,7 @@ class McpManager:
                 self.restart(state.name)
                 if state.status == "ready" and state.conn:
                     try:
-                        return result_text(state.conn.call_tool(tool, arguments, state.cfg.timeout))
+                        return result_text(state.conn.call_tool(tool, arguments, state.cfg.timeout), image_text)
                     except McpError as again:
                         return f"Error: {again}"
             return f"Error: {state.name}: {e}"
