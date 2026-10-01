@@ -317,6 +317,11 @@ class McpManager:
             raise McpError("`arguments` must be a JSON object")
         return found[0], found[1], arguments
 
+    def needs_gpu(self, state: ServerState, tool: dict) -> bool:
+        """Whether lcode should free the GPU (unload its model) before this tool runs."""
+        wanted = state.cfg.free_gpu
+        return wanted is True or (isinstance(wanted, list) and tool["name"] in wanted)
+
     def allowed(self, state: ServerState, tool: dict) -> bool:
         """Tools the user allowed in mcp.json run without asking."""
         return "*" in state.cfg.allow or tool["name"] in state.cfg.allow

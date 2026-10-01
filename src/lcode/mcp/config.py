@@ -2,7 +2,8 @@
 
 Both use the `mcpServers` format that most MCP servers document, so a snippet from a server's README
 can be pasted in as is. lcode adds a few optional keys per server: `disabled`, `tools` (only offer
-these tools to the model), `allow` (tools that don't need approval), `timeout` and `oauth`.
+these tools to the model), `allow` (tools that don't need approval), `timeout`, `oauth` and
+`free_gpu` (tools that need the GPU to themselves, so lcode unloads its model first).
 Values can refer to environment variables as ${NAME} or ${NAME:-default}.
 """
 
@@ -69,6 +70,7 @@ class ServerConfig:
     timeout: float = DEFAULT_TIMEOUT
     oauth: dict = field(default_factory=dict)
     disabled: bool = False
+    free_gpu: list[str] | bool = False  # tools (or all, if True) that need lcode's model off the GPU
     error: str = ""  # a problem with the settings; the server can't start
 
     @property
@@ -121,6 +123,8 @@ def parse(name: str, raw: dict, source: str = "user") -> ServerConfig:
         cfg.error = f"the environment variable {e} isn't set"
     tools = raw.get("tools")
     cfg.tools = [str(t) for t in tools] if isinstance(tools, list) else None
+    free_gpu = raw.get("free_gpu", False)
+    cfg.free_gpu = [str(t) for t in free_gpu] if isinstance(free_gpu, list) else bool(free_gpu)
     cfg.allow = [str(t) for t in raw.get("allow") or []] if isinstance(raw.get("allow"), list) else []
     try:
         cfg.timeout = float(raw.get("timeout", DEFAULT_TIMEOUT))

@@ -19,6 +19,8 @@ class FakeOllama:
         self.host = "http://fake"
         self.capabilities: dict[str, list[str]] = {}  # model -> Ollama capabilities, e.g. ["vision"]
         self.chats: list[dict] = []  # non-streaming requests (image descriptions)
+        self.loaded = [{"name": "lcode-qwen3.6-35b:latest", "size": 23_000_000_000, "size_vram": 11_500_000_000}]
+        self.unloaded: list[str] = []
         self.description = "A login form with a red 'Sign in' button."
 
     def show(self, model: str) -> dict:
@@ -42,10 +44,10 @@ class FakeOllama:
         pass
 
     def unload(self, model: str) -> None:
-        pass
+        self.unloaded.append(model)
 
     def running(self) -> list[dict]:
-        return [{"name": "lcode-qwen3.6-35b:latest", "size": 23_000_000_000, "size_vram": 11_500_000_000}]
+        return self.loaded
 
 
 def reply(content: str = "", tool_calls: list[dict] | None = None, thinking: str = "") -> list[dict]:

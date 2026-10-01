@@ -90,7 +90,8 @@ locally; its official MCP server lets lcode use it, for app icons, illustrations
 placeholder art.
 
 ```bash
-uv tool install comfy-cli && comfy install && comfy launch   # ComfyUI on http://127.0.0.1:8188
+uv tool install comfy-cli && comfy install                 # ComfyUI, once
+comfy launch --background -- --disable-smart-memory          # start it (http://127.0.0.1:8188)
 lcode mcp add comfyui
 ```
 
@@ -109,11 +110,29 @@ Qwen-Image-Edit).
 | Qwen-Image / Qwen-Image-Edit | Generation and editing, good text in images | Heavy: a GGUF version and RAM offloading |
 
 Only ComfyUI's local tools are turned on; Comfy Cloud's partner tools are left out, so prompts and
-images stay on your machine. One GPU can't hold a large coding model and an image model at the
-same time: while lcode's model is loaded, ComfyUI runs slowly or runs out of memory. Use a smaller
-image model, generate between requests (the `free_memory` tool frees ComfyUI's memory; Ollama frees
-lcode's after `keep_alive`), or run ComfyUI on another machine and give its address when adding.
-lcode can also look at the results ([Images](usage.md#images)).
+images stay on your machine.
+
+**Sharing one GPU.** A GPU rarely holds a coding model and an image model at the same time, so the
+two take turns: before ComfyUI generates, lcode unloads its own model (the `free_gpu` setting), and
+ComfyUI started with `--disable-smart-memory` gives the GPU back after each image. lcode's model
+then reloads for the next step, which adds a few seconds to half a minute per image request. With
+enough GPU memory for both (or on a Mac with plenty of memory), remove `free_gpu` from the server's
+settings in `mcp.json`. lcode can also look at the results ([Images](usage.md#images)).
+
+Measured on an RTX 4080 Laptop GPU (12 GB) with qwen3.6-35b at 64K context and FLUX.2 Klein Base 4B
+(fp8, 512×512, 20 steps):
+
+| | |
+|---|---|
+| Generating while lcode's model is loaded | Fails: ComfyUI runs out of GPU memory |
+| Freeing the GPU (lcode unloads its model) | 0.2 s |
+| Generating one image | about 12 s |
+| Reloading lcode's model afterwards | about 20 s |
+
+The first time, the model has to find the right template and fill in its settings (model file names,
+size, prompt), which can take several minutes of trial and error. Once an image comes out right, ask
+lcode to save that workflow in your project (for example `assets/icon.workflow.json`) and reuse it:
+later images are a single `run_workflow` call.
 
 ## Adding your own servers
 
@@ -155,6 +174,7 @@ document, so you can also paste a server's example config into that file:
 | `allow` | Tools that run without asking; `["*"]` for all of the server's tools |
 | `timeout` | Seconds a tool call may take (default 300) |
 | `disabled` | `true` to turn the server off (`lcode mcp disable <name>`) |
+| `free_gpu` | Tools that need the GPU to themselves (`true` for all): lcode unloads its model first and reloads it afterwards |
 | `oauth` | For servers that need a pre-registered OAuth client: `client_id`, `client_secret`, `scopes`, `authorize_params` |
 
 Values can use environment variables: `${NAME}`, or `${NAME:-default}`. Keep tokens in environment

@@ -221,6 +221,23 @@ class Agent:
             self._vision = vision.pick_model(self.ollama, self.settings.model, self.settings.vision_model)
         return self._vision or None
 
+    def free_gpu(self) -> list[str]:
+        """Unload lcode's models from Ollama so another program can use the GPU; the next request reloads.
+
+        Only lcode's own models: the session's and the one that looks at images.
+        """
+        mine = {self.settings.model, *([self._vision] if isinstance(self._vision, str) else [])}
+        freed = []
+        for entry in self.ollama.running():
+            name = entry.get("name") or entry.get("model") or ""
+            if name in mine or name.removesuffix(":latest") in mine:
+                try:
+                    self.ollama.unload(name)
+                    freed.append(name.removesuffix(":latest"))
+                except OllamaError:
+                    pass
+        return freed
+
     def look(self, path: Path, question: str = "") -> str:
         """Describe an image with the vision model. Raises ToolError if it can't."""
         model = self.vision_model()

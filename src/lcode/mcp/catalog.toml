@@ -136,20 +136,22 @@ description = "Generate and edit images with models you run locally in ComfyUI: 
 homepage = "https://github.com/Comfy-Org/comfy-mcp"
 requires = ["uvx"]
 setup = """Needs ComfyUI on this machine (http://127.0.0.1:8188) with at least one image model:
-  uv tool install comfy-cli && comfy install && comfy launch
-Download models with ComfyUI's model manager or ask lcode to (search_models, download_model). Only the
-local tools are on: generating, running workflows and templates, models, uploading an image to edit,
-jobs and memory. Comfy Cloud's partner tools are left out, so nothing leaves this machine."""
+  uv tool install comfy-cli && comfy install
+  comfy launch --background -- --disable-smart-memory
+--disable-smart-memory makes ComfyUI give the GPU back after each image. Before generating, lcode
+unloads its own model so ComfyUI has the GPU; it reloads afterwards. Only the local tools are on;
+Comfy Cloud's partner tools are left out, so nothing leaves this machine."""
 
 [comfyui.server]
 command = "uvx"
 args = ["--python", "3.12", "--from", "comfy-mcp", "--with", "comfy-cli>=1.14.0", "comfy-mcp"]
 env = { COMFYUI_URL = "${COMFYUI_URL}" }
 tools = [
-  "server_info", "generate_image", "run_workflow", "run_template", "search_templates", "get_template",
+  "server_info", "generate_image", "run_workflow", "run_template", "search_templates", "get_template", "fetch_template",
   "list_workflow_slots", "set_workflow_slot", "job", "fetch_outputs", "upload_file", "search_models",
   "download_model", "system_stats", "free_memory", "launch_comfyui",
 ]
+free_gpu = ["generate_image", "run_workflow", "run_template"]
 
 [[comfyui.inputs]]
 var = "COMFYUI_URL"

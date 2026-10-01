@@ -364,6 +364,12 @@ class Toolbox:
             ok, feedback = self.agent.perms.request(f"mcp:{state.name}:{tool['name']}", "mcp", title, body)
             if not ok:
                 return feedback
+        if mcp.needs_gpu(state, tool):
+            freed = self.agent.free_gpu()
+            if freed:
+                self.console.print(
+                    Text(f"  ⎿ freed the GPU for {state.name} ({', '.join(freed)} reloads afterwards)", style="dim")
+                )
         result = mcp.call(state, tool, arguments, image_text=self.agent.describe_image_data)
         if result.startswith("Error:"):
             return result
