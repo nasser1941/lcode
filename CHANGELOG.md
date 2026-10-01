@@ -6,6 +6,16 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- An optional sandbox for shell commands: with `lcode --sandbox` (or `sandbox = "docker"` /
+  `"podman"`), the model's commands run in a container that only sees the project folder, as your
+  user, with no network access unless you allow it (`/sandbox network on`, `sandbox_network`), no
+  Linux capabilities and a process limit. The file tools are limited to the project too. lcode builds
+  a default image with Python, Node.js, git and build tools on first use (`sandbox_image` for your
+  own). In `auto-edit` mode, sandboxed commands run without asking. If the sandbox can't start, lcode
+  stops instead of running commands without it.
+
 ## [0.4.1] - 2026-10-01
 
 ### Added

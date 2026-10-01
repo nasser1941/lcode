@@ -25,8 +25,13 @@ user, in your working directory**. It is not a sandbox. Keep in mind:
 
 - In the default `ask` mode, every file edit and every shell command that isn't on the read-only
   allowlist (`ls`, `cat`, `grep`, `git status`, …) is shown to you and needs your approval.
-  `auto-edit` skips approval for edits; `yolo` skips all approval — use it only in disposable
-  environments (a container, a VM, a throwaway clone).
+  `auto-edit` skips approval for edits; `yolo` skips all approval — use it only with the sandbox or
+  in disposable environments (a VM, a throwaway clone).
+- The optional sandbox (`sandbox = "docker"` or `"podman"`, or `lcode --sandbox`) runs shell commands
+  in a container that sees only the project folder, as your user, without network access unless
+  allowed. The file tools are then limited to the project too. It doesn't cover web or MCP tools,
+  the project folder itself stays writable, and a container shares the host kernel; see
+  https://nasser1941.github.io/lcode/sandbox/ for its limits.
 - Content the model reads (files, command output, search results and web pages) can contain prompt
   injections that try to make it run harmful commands. lcode marks web content as untrusted, but
   review commands before approving them.

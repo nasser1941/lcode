@@ -39,6 +39,7 @@ COMMANDS = {
     "/undo": "Undo the file changes of the last request (lcode saves a checkpoint before changing files)",
     "/rewind": "Go back to before an earlier request: its files, and optionally the conversation",
     "/checkpoints": "List the requests that changed files, and which files",
+    "/sandbox": "Shell-command sandbox: status, or /sandbox network on|off",
     "/mcp": "MCP servers and their tools: /mcp, /mcp tools NAME, /mcp login NAME, /mcp restart NAME",
     "/compact": "Summarize the conversation to free context (optional: what to focus on)",
     "/context": "Show context usage and change the window size: pick from a list, or /context 128k",
@@ -143,6 +144,11 @@ def banner(agent: Agent) -> None:
                     f"[dim]mode[/]     {agent.perms.mode} [dim](Shift+Tab to cycle)[/]\n"
                     f"[dim]web[/]      {web_status(agent)}\n"
                     + (f"[dim]mcp[/]      {escape(', '.join(agent.mcp.servers))} [dim](/mcp)[/]\n" if agent.mcp else "")
+                    + (
+                        f"[dim]sandbox[/]  {escape(agent.sandbox.describe())} [dim](/sandbox)[/]\n"
+                        if agent.sandbox
+                        else ""
+                    )
                     + "\n"
                     "[dim]/help for commands · @file to attach · Esc+Enter for a newline[/]"
                 ),
@@ -238,6 +244,31 @@ def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
             c.print(f"[red]{e}[/]")
             return
     apply_context(agent, size, hardware)
+
+
+def sandbox_command(agent: Agent, arg: str) -> None:
+    c, sandbox = agent.console, agent.sandbox
+    if sandbox is None:
+        c.print(
+            "The sandbox is off: shell commands run directly on this machine. Start lcode with --sandbox, or "
+            "turn it on for every session with: lcode config set sandbox docker"
+        )
+        return
+    words = arg.split()
+    if len(words) == 2 and words[0] == "network" and words[1] in ("on", "off"):
+        sandbox.network = words[1] == "on"
+        sandbox.stop()  # the next command starts a container with the new setting
+        c.print(f"Network access in the sandbox is {words[1]} from the next command.")
+        return
+    if arg:
+        c.print("[yellow]Use /sandbox or /sandbox network on|off.[/]")
+        return
+    where = f" · container {sandbox.container}, mounting {sandbox.root}" if sandbox.container else ""
+    c.print(f"Sandbox: {escape(sandbox.describe())}{escape(where)}")
+    c.print(
+        "[dim]Shell commands run in the container and can only see this project; file tools are limited to it "
+        "too. In auto-edit mode, commands run without asking.[/]"
+    )
 
 
 def mcp_command(agent: Agent, arg: str) -> None:
@@ -515,6 +546,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         print_checkpoints(agent)
     elif cmd == "/mcp":
         mcp_command(agent, arg)
+    elif cmd == "/sandbox":
+        sandbox_command(agent, arg)
     elif cmd == "/compact":
         agent.compact(arg)
     elif cmd in ("/context", "/ctx"):

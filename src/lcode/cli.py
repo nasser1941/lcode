@@ -321,6 +321,15 @@ def cmd_doctor(args) -> None:
     except ValueError as e:
         line("MCP", str(e), False)
         ok = False
+    if cfg["sandbox"] == "off":
+        line("Sandbox", "off (lcode config set sandbox docker)", True)
+    else:
+        from lcode.sandbox import engine_problem
+
+        problem = engine_problem(cfg["sandbox"])
+        network = "network on" if cfg["sandbox_network"] else "no network"
+        line("Sandbox", problem or f"{cfg['sandbox']} · {network}", problem is None)
+        ok &= problem is None
     node = shutil.which("npx")
     line("Node.js", "found" if node else "not found (some MCP servers need npx)", True if node else None)
     sys.exit(0 if ok else 1)
@@ -485,8 +494,20 @@ def cmd_chat(args) -> None:
         search_backend=cfg["search_backend"],
         searxng_url=cfg["searxng_url"],
         checkpoints=cfg["checkpoints"],
+        sandbox=(cfg["sandbox"] if cfg["sandbox"] != "off" else "docker") if args.sandbox else cfg["sandbox"],
+        sandbox_image=cfg["sandbox_image"],
+        sandbox_network=cfg["sandbox_network"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
+    if agent.sandbox:
+        # Never run commands unsandboxed when the user asked for a sandbox: stop here instead.
+        from lcode.sandbox import SandboxError
+
+        try:
+            with console.status("Starting the sandbox…"):
+                agent.sandbox.ensure(cwd)
+        except SandboxError as e:
+            fail(f"the sandbox can't start: {e}\nTurn it off with: lcode config set sandbox off")
     if not args.no_mcp:
         from lcode.mcp.commands import start_session
 
@@ -496,6 +517,8 @@ def cmd_chat(args) -> None:
     finally:
         if agent.mcp:
             agent.mcp.close()
+        if agent.sandbox:
+            agent.sandbox.stop()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -522,6 +545,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-think", action="store_true", help="disable model reasoning (faster, less accurate)")
     parser.add_argument("--no-web", action="store_true", help="don't let the model search or fetch web pages")
     parser.add_argument("--no-mcp", action="store_true", help="don't start MCP servers in this session")
+    parser.add_argument("--sandbox", action="store_true", help="run shell commands in a container (Docker or Podman)")
     parser.add_argument("--show-thinking", action="store_true", help="print the model's reasoning as it streams")
     parser.add_argument("-V", "--version", action="version", version=f"lcode {__version__}")
     return parser

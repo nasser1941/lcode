@@ -26,6 +26,7 @@ from lcode.mcp import McpManager
 from lcode.ollama import Ollama, OllamaError
 from lcode.permissions import Permissions
 from lcode.render import MarkdownStreamer
+from lcode.sandbox import Sandbox, SandboxError, project_root
 from lcode.tools import (
     SCHEMAS,
     WEB_FETCH_SCHEMA,
@@ -140,6 +141,9 @@ class Settings:
     search_backend: str = "auto"
     searxng_url: str | None = None
     checkpoints: bool = True  # snapshot files before the model changes them, for /undo
+    sandbox: str = "off"  # off, docker or podman: where the model's shell commands run
+    sandbox_image: str | None = None
+    sandbox_network: bool = False
 
 
 class Agent:
@@ -153,6 +157,11 @@ class Agent:
         self.session_id = self.new_session_id()
         self.checkpoints = Checkpoints(self.console, settings.checkpoints)
         self.mcp: McpManager | None = None  # set by the CLI when MCP servers are configured
+        self.sandbox = (
+            Sandbox(settings.sandbox, settings.sandbox_image, settings.sandbox_network, self.console)
+            if settings.sandbox != "off"
+            else None
+        )
         self._mcp_prompt = ""  # the MCP part at the end of the system prompt
         self.session_name = ""
         self.session_title = ""
@@ -461,6 +470,15 @@ class Agent:
             self._run_turn(user_text)
         finally:
             self.checkpoints.end_turn()
+
+    def sandbox_root(self) -> Path | None:
+        """The folder the model is limited to while the sandbox is on (None when it's off)."""
+        if not self.sandbox:
+            return None
+        try:
+            return project_root(self.cwd)
+        except SandboxError:
+            return self.cwd
 
     def checkpoint(self) -> None:
         """Called before the model changes files: snapshot them once per request, for /undo."""

@@ -25,6 +25,7 @@ lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases
 | `--no-think` | Turn off the model's reasoning: faster, less accurate |
 | `--no-web` | No web search or page fetching in this session |
 | `--no-mcp` | Don't start [MCP servers](mcp.md) in this session |
+| `--sandbox` | Run shell commands in a container that only sees the project ([Sandbox](sandbox.md)) |
 | `--show-thinking` | Print the model's reasoning as it streams |
 | `-V, --version` | Print the version |
 
@@ -55,6 +56,7 @@ reasoning is on.
 | `/undo` | Undo the file changes of the last request ([details](#undo-and-checkpoints)) |
 | `/rewind [N]` | Go back to before request N: its files, and optionally the conversation |
 | `/checkpoints` | List the requests that changed files, and which files |
+| `/sandbox [network on\|off]` | The [sandbox](sandbox.md) for shell commands |
 | `/mcp [tools\|login\|restart NAME]` | [MCP servers](mcp.md), their status and tools |
 | `/compact [focus]` | Summarize the conversation to free context |
 | `/context [size]` | Show how full the context window is and change its size: pick from a list with memory estimates, or give a size like `/context 128k` (`/ctx` is a shortcut) |
@@ -101,8 +103,12 @@ or ++n++. Text after ++n++ goes to the model as instructions: `n run the tests w
 
 !!! warning "yolo mode"
 
-    In `yolo` mode the model can run any command as your user. Use it in a container, a VM or a
-    throwaway clone, not on a machine with data you care about.
+    In `yolo` mode the model can run any command as your user. Use it with the
+    [sandbox](sandbox.md), in a VM or in a throwaway clone, not on a machine with data you care
+    about.
+
+With the [sandbox](sandbox.md) on, `auto-edit` mode runs shell commands without asking too: they can
+only reach the project, and `/undo` can take their changes back.
 
 ## Undo and checkpoints
 
