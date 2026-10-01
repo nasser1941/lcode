@@ -284,6 +284,8 @@ class Toolbox:
             return str(p)
 
     def run(self, name: str, args: dict) -> str:
+        if self.agent.mcp and self.agent.mcp.owns(name):
+            return self._mcp(name, args)
         fn = getattr(self, f"t_{name}", None)
         if fn is None:
             return f"Error: unknown tool '{name}'. Available: {', '.join(sorted(TOOL_NAMES))}"
@@ -314,6 +316,31 @@ class Toolbox:
             parts.append(f"missing required argument(s) {', '.join(map(repr, missing))}")
         valid = ", ".join(p if params[p].default is inspect.Parameter.empty else f"{p} (optional)" for p in params)
         return f"{'; '.join(parts)}. Valid arguments: {valid}."
+
+    # -- MCP servers
+    def _mcp(self, name: str, args: dict) -> str:
+        mcp = self.agent.mcp
+        assert mcp is not None
+        if name == "mcp_find_tools":
+            result = mcp.find(str(args.get("query", "")))
+            found = sum(1 for line in result.splitlines() if line.startswith("mcp__"))
+            self.console.print(Text(f"  ⎿ {found} tool(s) found", style="dim"))
+            return result
+        try:
+            state, tool, arguments = mcp.resolve(name, args)
+        except Exception as e:
+            return f"Error: {e}"
+        if not mcp.allowed(state, tool):
+            body = Syntax(json.dumps(arguments, indent=2, ensure_ascii=False), "json", theme="monokai", word_wrap=True)
+            title = f"Use {state.name} › {tool['name']}"
+            ok, feedback = self.agent.perms.request(f"mcp:{state.name}:{tool['name']}", "mcp", title, body)
+            if not ok:
+                return feedback
+        result = mcp.call(state, tool, arguments)
+        if result.startswith("Error:"):
+            return result
+        self.console.print(Text(f"  ⎿ {result.count(chr(10)) + 1} line(s) from {state.name}", style="dim"))
+        return truncate(result)
 
     # -- read-only
     def t_read_file(self, path: str, offset: int = 1, limit: int = 2000) -> str:

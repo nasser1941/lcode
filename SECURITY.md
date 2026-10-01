@@ -36,6 +36,12 @@ user, in your working directory**. It is not a sandbox. Keep in mind:
   pages are downloaded from their websites. The model writes the queries, so they can contain names or
   snippets from your code. Use `web = ask` to approve each search, or `web = off` / `--no-web` to
   keep everything local.
+- MCP servers you add run as your user (local servers) or act on your accounts (remote servers).
+  Every MCP tool call needs your approval unless you're in `yolo` mode or listed the tool under
+  `allow`. A project's `.mcp.json` is only used after you approve it, and again after it changes.
+  MCP tool results can contain prompt injections, like web pages. Tokens you enter are stored in
+  `~/.config/lcode/mcp.json` and sign-in tokens in `~/.local/state/lcode/mcp-auth/`, both readable
+  only by you.
 - Sessions (including file contents the model read) are stored in `~/.local/state/lcode/sessions`.
   Checkpoints for `/undo` keep copies of your project's files (except ignored ones) in
   `~/.local/state/lcode/checkpoints` for 14 days; turn them off with `checkpoints = false`.

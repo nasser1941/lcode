@@ -48,6 +48,9 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   request's edits, new files and shell-command changes, without touching your git history.
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
   with tool calling.
+- **MCP servers, ready to go.** Connect Jira and Confluence, GitHub, AWS, Google Drive, Grafana,
+  Google Cloud, Sentry, Linear, Notion, Postgres, Kubernetes and more with one command
+  (`lcode mcp add atlassian`), or any other MCP server. Browser sign-in (OAuth) is built in.
 - **Web search when needed.** Looks up the latest versions, docs and error messages with Ollama web
   search, Brave, Tavily or your own SearXNG, and reads pages as clean text.
 - **Private.** The model runs on your machine, lcode never uploads your files and has no telemetry.
@@ -95,6 +98,7 @@ lcode
 | `lcode models` / `lcode doctor` | what fits this machine / check the installation |
 | `lcode bench qwen3.6-35b qwen3.5-9b` | compare models on small coding tasks on this machine |
 | `/undo`, `/rewind` | take back the last request's file changes, or go back further |
+| `lcode mcp catalog` / `lcode mcp add github` | ready-made MCP servers / add one |
 | `/rename`, `/resume` | name the current session, resume a saved one |
 | `/model`, `/context`, `/compact`, `/help` | switch model, resize the context window (pick from a list), summarize, list commands |
 
@@ -139,7 +143,6 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
 
-- [MCP tool servers](https://github.com/nasser1941/lcode/issues/6)
 - [Homebrew formula](https://github.com/nasser1941/lcode/issues/8) and an [optional sandbox for shell commands](https://github.com/nasser1941/lcode/issues/9)
 - More models in the catalog, and test reports from your hardware ([report one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml))
 

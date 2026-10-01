@@ -1,0 +1,198 @@
+# Ready-made MCP servers: `lcode mcp add <key>` sets one up.
+#
+# server   the entry written to mcp.json (the standard mcpServers format). ${NAME} refers to an input
+#          below or to an environment variable.
+# inputs   values lcode asks for when the variable isn't set in the environment. Secrets are typed
+#          hidden and saved in mcp.json, which only you can read.
+# requires commands that must be installed.
+# login    sign in through the browser (OAuth) after adding.
+#
+# Commands and URLs were checked against each project's documentation in September 2026.
+
+[atlassian]
+name = "Atlassian"
+description = "Jira, Confluence, Jira Service Management, Compass and Bitbucket"
+homepage = "https://github.com/atlassian/atlassian-mcp-server"
+login = true
+setup = "Sign in with your Atlassian account in the browser."
+server = { type = "http", url = "https://mcp.atlassian.com/v2/mcp" }
+
+[aws]
+name = "AWS"
+description = "Run AWS CLI commands against your account (read-only unless you change it)"
+homepage = "https://awslabs.github.io/mcp/servers/aws-api-mcp-server"
+requires = ["uvx"]
+setup = "Uses your local AWS credentials (aws configure or aws sso login). Read-only to start: set READ_OPERATIONS_ONLY to \"false\" in mcp.json to allow changes; lcode still asks before every call."
+
+[aws.server]
+command = "uvx"
+args = ["--python", "3.12", "awslabs.aws-api-mcp-server@latest"]
+env = { AWS_REGION = "${AWS_REGION}", AWS_API_MCP_PROFILE_NAME = "${AWS_PROFILE}", READ_OPERATIONS_ONLY = "true", AWS_API_MCP_TELEMETRY = "false" }
+
+[[aws.inputs]]
+var = "AWS_REGION"
+prompt = "AWS region"
+default = "us-east-1"
+
+[[aws.inputs]]
+var = "AWS_PROFILE"
+prompt = "AWS profile (from ~/.aws/config)"
+default = "default"
+
+[aws-knowledge]
+name = "AWS Knowledge"
+description = "Up-to-date AWS documentation, code samples and regional availability (no AWS account needed)"
+homepage = "https://awslabs.github.io/mcp/servers/aws-knowledge-mcp-server"
+server = { type = "http", url = "https://knowledge-mcp.global.api.aws" }
+
+[google-drive]
+name = "Google Drive"
+description = "Search, read and create files in your Google Drive"
+homepage = "https://developers.google.com/workspace/drive/api/guides/configure-mcp-server"
+login = true
+setup = """Google needs an OAuth client from your own Google Cloud project:
+  1. In a Google Cloud project, enable the Google Drive API and the Google Drive MCP API.
+  2. Configure the OAuth consent screen (add yourself as a test user if the app is in testing).
+  3. Create an OAuth client ID of type "Desktop app" and copy its client ID and secret.
+Guide: https://developers.google.com/workspace/guides/configure-mcp-servers"""
+
+[google-drive.server]
+type = "http"
+url = "https://drivemcp.googleapis.com/mcp/v1"
+
+[google-drive.server.oauth]
+client_id = "${GOOGLE_OAUTH_CLIENT_ID}"
+client_secret = "${GOOGLE_OAUTH_CLIENT_SECRET}"
+scopes = ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.file"]
+authorize_params = { access_type = "offline", prompt = "consent" }
+
+[[google-drive.inputs]]
+var = "GOOGLE_OAUTH_CLIENT_ID"
+prompt = "OAuth client ID"
+
+[[google-drive.inputs]]
+var = "GOOGLE_OAUTH_CLIENT_SECRET"
+prompt = "OAuth client secret"
+secret = true
+
+[grafana]
+name = "Grafana"
+description = "Dashboards, Prometheus and Loki queries, alerts and incidents"
+homepage = "https://github.com/grafana/mcp-grafana"
+requires = ["uvx"]
+setup = "Create a service account token in Grafana: Administration > Users and access > Service accounts. The server has about 80 tools; list the ones you use under \"tools\" in mcp.json to save context."
+
+[grafana.server]
+command = "uvx"
+args = ["--python", "3.12", "mcp-grafana"]
+env = { GRAFANA_URL = "${GRAFANA_URL}", GRAFANA_SERVICE_ACCOUNT_TOKEN = "${GRAFANA_SERVICE_ACCOUNT_TOKEN}" }
+
+[[grafana.inputs]]
+var = "GRAFANA_URL"
+prompt = "Grafana URL"
+default = "http://localhost:3000"
+
+[[grafana.inputs]]
+var = "GRAFANA_SERVICE_ACCOUNT_TOKEN"
+prompt = "Service account token"
+secret = true
+
+[gcp]
+name = "Google Cloud"
+description = "Run gcloud commands against your Google Cloud projects"
+homepage = "https://github.com/googleapis/gcloud-mcp"
+requires = ["npx", "gcloud"]
+setup = "Uses the gcloud CLI and its login: install it and run `gcloud auth login` first."
+server = { command = "npx", args = ["-y", "@google-cloud/gcloud-mcp"] }
+
+[github]
+name = "GitHub"
+description = "Repositories, issues, pull requests and Actions"
+homepage = "https://github.com/github/github-mcp-server"
+setup = "Needs a personal access token: https://github.com/settings/personal-access-tokens/new (or the GitHub CLI's, from `gh auth token`). Only the repos, issues, pull_requests and actions toolsets are on; change X-MCP-Toolsets in mcp.json for more."
+
+[github.server]
+type = "http"
+url = "https://api.githubcopilot.com/mcp/"
+headers = { Authorization = "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}", X-MCP-Toolsets = "repos,issues,pull_requests,actions" }
+
+[[github.inputs]]
+var = "GITHUB_PERSONAL_ACCESS_TOKEN"
+prompt = "GitHub token"
+secret = true
+from_command = ["gh", "auth", "token"]
+
+[playwright]
+name = "Playwright"
+description = "Drive a real browser: open pages, click, fill forms, take snapshots (for testing web apps)"
+homepage = "https://github.com/microsoft/playwright-mcp"
+requires = ["npx"]
+setup = "Runs a headless browser; the first use may download it."
+server = { command = "npx", args = ["-y", "@playwright/mcp@latest", "--headless"] }
+
+[context7]
+name = "Context7"
+description = "Current documentation and code examples for thousands of libraries"
+homepage = "https://github.com/upstash/context7"
+setup = "Works without an API key; a free key from https://context7.com/dashboard raises the rate limits."
+
+[context7.server]
+type = "http"
+url = "https://mcp.context7.com/mcp"
+headers = { CONTEXT7_API_KEY = "${CONTEXT7_API_KEY}" }
+
+[[context7.inputs]]
+var = "CONTEXT7_API_KEY"
+prompt = "API key (optional, press Enter to skip)"
+secret = true
+optional = true
+
+[sentry]
+name = "Sentry"
+description = "Errors, issues, traces and releases from your Sentry organization"
+homepage = "https://docs.sentry.io/product/sentry-mcp/"
+login = true
+setup = "Sign in with your Sentry account in the browser."
+server = { type = "http", url = "https://mcp.sentry.dev/mcp" }
+
+[postgres]
+name = "PostgreSQL"
+description = "Explore schemas, run read-only queries and analyze query performance"
+homepage = "https://github.com/crystaldba/postgres-mcp"
+requires = ["uvx"]
+setup = "Read-only (restricted mode): change --access-mode to unrestricted in mcp.json to allow writes."
+
+[postgres.server]
+command = "uvx"
+# postgres-mcp breaks with version 2 of the MCP Python SDK (September 2026), hence --with "mcp<2".
+args = ["--python", "3.12", "--with", "mcp<2", "postgres-mcp", "--access-mode=restricted"]
+env = { DATABASE_URI = "${DATABASE_URI}" }
+
+[[postgres.inputs]]
+var = "DATABASE_URI"
+prompt = "Connection URL (postgresql://user:password@host:5432/database)"
+secret = true
+
+[kubernetes]
+name = "Kubernetes"
+description = "Inspect pods, deployments, logs and events in your clusters (read-only)"
+homepage = "https://github.com/containers/kubernetes-mcp-server"
+requires = ["npx"]
+setup = "Uses your kubeconfig and its current context. Read-only: remove --read-only in mcp.json to allow changes."
+server = { command = "npx", args = ["-y", "kubernetes-mcp-server@latest", "--read-only"] }
+
+[linear]
+name = "Linear"
+description = "Issues, projects and cycles in Linear"
+homepage = "https://linear.app/docs/mcp"
+login = true
+setup = "Sign in with your Linear account in the browser."
+server = { type = "http", url = "https://mcp.linear.app/mcp" }
+
+[notion]
+name = "Notion"
+description = "Search, read and edit Notion pages and databases"
+homepage = "https://developers.notion.com/docs/mcp"
+login = true
+setup = "Sign in with your Notion account in the browser."
+server = { type = "http", url = "https://mcp.notion.com/mcp" }

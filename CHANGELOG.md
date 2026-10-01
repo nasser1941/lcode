@@ -6,6 +6,23 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- MCP (Model Context Protocol) servers: the model can use tools from Jira, GitHub, AWS, databases and
+  more, with your approval for every call.
+  - `lcode mcp add <name>` sets up a ready-made server and tests it: `atlassian`, `aws`,
+    `aws-knowledge`, `google-drive`, `grafana`, `gcp`, `github`, `playwright`, `context7`, `sentry`,
+    `postgres`, `kubernetes`, `linear` and `notion` (`lcode mcp catalog` lists them).
+  - Any other server works too, local (stdio) or remote (Streamable HTTP), configured in
+    `~/.config/lcode/mcp.json` in the standard `mcpServers` format, or per project in `.mcp.json`
+    (used only after you approve it).
+  - Browser sign-in (OAuth 2.1 with PKCE and dynamic client registration) with automatic token
+    refresh; `lcode mcp login/logout`.
+  - Speaks both the current MCP protocol (2026-07-28) and the earlier `initialize`-based versions.
+  - When the tool definitions would take more than 15% of the context window, the model finds tools
+    on demand instead (`mcp_tools` setting). `/mcp` shows servers, tools and their context cost;
+    `lcode --no-mcp` starts without them.
+
 ### Fixed
 
 - `lcode bench`: stopping a run with Ctrl+C no longer leaves the running task's temporary folder

@@ -15,12 +15,14 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
 from lcode import catalog, limits, sessions, web
 from lcode.checkpoints import Checkpoints
 from lcode.config import format_tokens
+from lcode.mcp import McpManager
 from lcode.ollama import Ollama, OllamaError
 from lcode.permissions import Permissions
 from lcode.render import MarkdownStreamer
@@ -150,6 +152,8 @@ class Agent:
         self.tools = Toolbox(self)
         self.session_id = self.new_session_id()
         self.checkpoints = Checkpoints(self.console, settings.checkpoints)
+        self.mcp: McpManager | None = None  # set by the CLI when MCP servers are configured
+        self._mcp_prompt = ""  # the MCP part at the end of the system prompt
         self.session_name = ""
         self.session_title = ""
         self.ctx_used = 0
@@ -188,9 +192,32 @@ class Agent:
         return web.resolve_backend(self.settings.search_backend, self.settings.searxng_url)
 
     def tool_schemas(self) -> list[dict]:
-        if self.settings.web == "off":
-            return SCHEMAS
-        return [*SCHEMAS, *([WEB_SEARCH_SCHEMA] if self.search_backend() else []), WEB_FETCH_SCHEMA]
+        schemas = list(SCHEMAS)
+        if self.settings.web != "off":
+            schemas += [*([WEB_SEARCH_SCHEMA] if self.search_backend() else []), WEB_FETCH_SCHEMA]
+        if self.mcp:
+            schemas += self.mcp.schemas(self.settings.context)
+        return schemas
+
+    def prepare_mcp(self) -> None:
+        """Before a request: wait for MCP servers still starting and describe them in the system prompt."""
+        if not self.mcp:
+            return
+        if self.mcp.pending:
+            with self.console.status(f"Starting MCP servers: {', '.join(self.mcp.pending)}", spinner="dots"):
+                self.mcp.wait()
+            for state in self.mcp.servers.values():
+                if state.status in ("failed", "login") and not state.reported:
+                    state.reported = True
+                    self.console.print(f"[yellow]MCP server {state.name}: {escape(state.error)}[/] [dim](/mcp)[/]")
+        self.mcp.refresh_changed()
+        section = self.mcp.prompt_section(self.settings.context)
+        if section != self._mcp_prompt:
+            content = self.messages[0]["content"]
+            if self._mcp_prompt and content.endswith(self._mcp_prompt):
+                content = content[: -len(self._mcp_prompt)]
+            self.messages[0]["content"] = content + section
+            self._mcp_prompt = section
 
     def web_prompt(self) -> str:
         if self.settings.web == "off":
@@ -203,6 +230,7 @@ class Agent:
 
     def reset(self) -> None:
         self.messages = [{"role": "system", "content": self.system_prompt()}]
+        self._mcp_prompt = ""
         self.tools.read_mtimes.clear()
         self.ctx_used = len(self.messages[0]["content"]) // 3
 
@@ -254,6 +282,7 @@ class Agent:
             else:
                 note = f"The session's directory {saved_cwd} no longer exists; staying in {self.cwd}"
         self.messages = [{"role": "system", "content": self.system_prompt()}, *data.get("messages", [])[1:]]
+        self._mcp_prompt = ""
         self.session_id = info.id
         self.checkpoints.load(info.id, data.get("checkpoints") or [])
         self.session_name = data.get("name", "")
@@ -415,6 +444,15 @@ class Agent:
             return f"glob({args.get('pattern', '')})"
         if name == "list_dir":
             return f"list_dir({args.get('path', '.')})"
+        if self.mcp and self.mcp.owns(name):
+            if name == "mcp_find_tools":
+                return f"mcp_find_tools({args.get('query', '')!r})"
+            try:
+                state, tool, arguments = self.mcp.resolve(name, args)
+            except Exception:
+                return name
+            preview = json.dumps(arguments, ensure_ascii=False)
+            return f"{state.name} › {tool['name']}({preview if len(preview) <= 80 else preview[:79] + '…'})"
         return name
 
     def run_turn(self, user_text: str) -> None:
@@ -429,6 +467,7 @@ class Agent:
         self.checkpoints.before_change(self.cwd)
 
     def _run_turn(self, user_text: str) -> None:
+        self.prepare_mcp()
         self.messages.append({"role": "user", "content": self.expand_mentions(user_text)})
         malformed = 0
         for _ in range(MAX_STEPS_PER_TURN):

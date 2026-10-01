@@ -39,6 +39,7 @@ COMMANDS = {
     "/undo": "Undo the file changes of the last request (lcode saves a checkpoint before changing files)",
     "/rewind": "Go back to before an earlier request: its files, and optionally the conversation",
     "/checkpoints": "List the requests that changed files, and which files",
+    "/mcp": "MCP servers and their tools: /mcp, /mcp tools NAME, /mcp login NAME, /mcp restart NAME",
     "/compact": "Summarize the conversation to free context (optional: what to focus on)",
     "/context": "Show context usage and change the window size: pick from a list, or /context 128k",
     "/ctx": "Shortcut for /context",
@@ -140,7 +141,9 @@ def banner(agent: Agent) -> None:
                     f"[dim]context[/]  {format_tokens(s.context)} tokens\n"
                     f"[dim]cwd[/]      {agent.cwd}\n"
                     f"[dim]mode[/]     {agent.perms.mode} [dim](Shift+Tab to cycle)[/]\n"
-                    f"[dim]web[/]      {web_status(agent)}\n\n"
+                    f"[dim]web[/]      {web_status(agent)}\n"
+                    + (f"[dim]mcp[/]      {escape(', '.join(agent.mcp.servers))} [dim](/mcp)[/]\n" if agent.mcp else "")
+                    + "\n"
                     "[dim]/help for commands · @file to attach · Esc+Enter for a newline[/]"
                 ),
             ),
@@ -195,6 +198,9 @@ def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
         f"({100 * agent.ctx_used / s.context:.0f}%) in {len(agent.messages)} message"
         f"{'' if len(agent.messages) == 1 else 's'}; auto-compacts at 85%."
     )
+    if agent.mcp and agent.mcp.ready():
+        how = "found on demand" if agent.mcp.searching(s.context) else "sent with every request"
+        c.print(f"MCP tools: ~{format_tokens(agent.mcp.cost())} tokens of definitions, {how}.")
     if arg:
         try:
             apply_context(agent, parse_context(arg), hardware)
@@ -232,6 +238,49 @@ def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
             c.print(f"[red]{e}[/]")
             return
     apply_context(agent, size, hardware)
+
+
+def mcp_command(agent: Agent, arg: str) -> None:
+    from lcode.mcp.commands import status_table
+    from lcode.mcp.protocol import McpError
+
+    c, mcp = agent.console, agent.mcp
+    if mcp is None:
+        c.print(
+            "No MCP servers in this session. Add one with [bold]lcode mcp add[/] (see [bold]lcode mcp catalog[/]) "
+            "and start a new session."
+        )
+        return
+    action, _, name = arg.partition(" ")
+    name = name.strip()
+    if action in ("tools", "login", "restart") and name not in mcp.servers:
+        c.print(f"[yellow]Which server? One of: {escape(', '.join(mcp.servers))}[/]")
+        return
+    if mcp.pending:
+        with c.status("Waiting for MCP servers to start…"):
+            mcp.wait()
+    if action == "tools":
+        state = mcp.servers[name]
+        if state.status != "ready":
+            c.print(f"{escape(name)}: {escape(state.error or state.status)}")
+        for tool in state.tools:
+            first = (tool.get("description") or "").strip().split("\n")[0]
+            c.print(f"  [cyan]{escape(tool['name'])}[/] [dim]{escape(first[:100])}[/]")
+        return
+    try:
+        if action == "login":
+            mcp.login(name, notify=lambda text: c.print(escape(text)))
+        elif action == "restart":
+            with c.status(f"Restarting {name}…"):
+                mcp.restart(name)
+        elif action:
+            c.print("[yellow]Use /mcp, /mcp tools NAME, /mcp login NAME or /mcp restart NAME.[/]")
+            return
+    except McpError as e:
+        c.print(f"[red]{escape(str(e))}[/]")
+    c.print(status_table(mcp, agent.settings.context))
+    if action in ("login", "restart"):
+        agent.prepare_mcp()  # the model sees the server's tools from the next request
 
 
 def ask_yes(question: str) -> bool:
@@ -464,6 +513,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         rewind_command(agent, arg)
     elif cmd == "/checkpoints":
         print_checkpoints(agent)
+    elif cmd == "/mcp":
+        mcp_command(agent, arg)
     elif cmd == "/compact":
         agent.compact(arg)
     elif cmd in ("/context", "/ctx"):

@@ -67,11 +67,13 @@ class Permissions:
         self.mode = PERMISSION_MODES[(PERMISSION_MODES.index(self.mode) + 1) % len(PERMISSION_MODES)]
 
     def request(self, key: str, kind: str, title: str, body: RenderableType) -> tuple[bool, str]:
-        """Ask the user. kind is 'edit', 'bash' or 'web'. Returns (allowed, message for the model)."""
+        """Ask the user. kind is 'edit', 'bash', 'web' or 'mcp'. Returns (allowed, message for the model)."""
         if self.mode == "yolo" or key in self.always or (kind == "edit" and self.mode == "auto-edit"):
             return True, ""
         self.console.print(Panel(body, title=title, title_align="left", border_style="yellow"))
         scope = "file edits" if kind == "edit" else key.split(":", 1)[-1]
+        if kind == "mcp":
+            scope = scope.replace(":", " › ", 1)
         try:
             answer = input(f"  Allow? [y]es / [a]lways for '{scope}' this session / [n]o (+ optional reason): ")
         except EOFError:
