@@ -6,6 +6,12 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Tools marked `free_gpu` (such as ComfyUI's `run_workflow`) now always run to completion
+  (`wait: true`): a job left running in the background competed with lcode's reloading model for
+  the GPU.
+
 ## [0.6.0] - 2026-10-01
 
 ### Added
