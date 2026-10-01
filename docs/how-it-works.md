@@ -77,6 +77,7 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `permissions.py` | Approval prompts and the read-only allowlist |
 | `mcp/` | MCP client: stdio and HTTP transports, OAuth sign-in, server settings, the catalog, `lcode mcp` |
 | `bench.py` | `lcode bench`: the benchmark tasks, their checks and the reports |
+| `sandbox.py` | The optional container for shell commands |
 | `checkpoints.py` | Snapshots before the model changes files, for `/undo` and `/rewind` |
 | `catalog.py`, `models.toml` | Model catalog and memory estimates |
 | `hardware.py` | NVIDIA / Apple Silicon detection |

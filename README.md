@@ -44,6 +44,8 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   real coding tasks on your machine.
 - **Safe by default.** Every edit is shown as a diff and every command that isn't read-only needs
   your approval. `auto-edit` and `yolo` modes when you want speed.
+- **Sandbox (optional).** `lcode --sandbox` runs the model's shell commands in a container (Docker or
+  Podman) that only sees your project, without network access unless you allow it.
 - **Undo.** lcode saves a checkpoint before the model changes files; `/undo` takes back the last
   request's edits, new files and shell-command changes, without touching your git history.
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
@@ -150,7 +152,6 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
 
-- An [optional sandbox for shell commands](https://github.com/nasser1941/lcode/issues/9)
 - More models in the catalog, and test reports from your hardware ([report one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml))
 
 ## Contributing

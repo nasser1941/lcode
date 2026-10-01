@@ -9,11 +9,10 @@ import json
 import os
 import queue
 import re
-import shlex
+import secrets
 import shutil
 import signal
 import subprocess
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -25,10 +24,15 @@ from rich.text import Text
 
 from lcode import web
 from lcode.permissions import bash_key, is_read_only
+from lcode.sandbox import SandboxError
 
 if TYPE_CHECKING:
     from lcode.agent import Agent
 
+NO_NETWORK = re.compile(
+    r"Network is unreachable|Temporary failure in name resolution|Could not resolve host|getaddrinfo|ENOTFOUND|"
+    r"EAI_AGAIN|Name or service not known|network is unreachable|No route to host"
+)
 MAX_TOOL_OUTPUT = 30_000  # characters returned to the model per tool call
 IGNORE_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env", ".mypy_cache", ".pytest_cache",
@@ -277,6 +281,14 @@ class Toolbox:
         p = Path(os.path.expanduser(path or "."))
         return (p if p.is_absolute() else self.agent.cwd / p).resolve()
 
+    def path(self, path: str | None) -> Path:
+        """Resolve a path from the model; with the sandbox on, it must be inside the project."""
+        p = self.resolve(path)
+        root = self.agent.sandbox_root()
+        if root is not None and p != root and root not in p.parents:
+            raise ToolError(f"{path} is outside the project ({root}); with the sandbox on, that's all you can use")
+        return p
+
     def rel(self, p: Path) -> str:
         try:
             return str(p.relative_to(self.agent.cwd)) or "."
@@ -344,7 +356,7 @@ class Toolbox:
 
     # -- read-only
     def t_read_file(self, path: str, offset: int = 1, limit: int = 2000) -> str:
-        p = self.resolve(path)
+        p = self.path(path)
         if not p.exists():
             raise ToolError(f"{path} does not exist")
         if p.is_dir():
@@ -364,13 +376,13 @@ class Toolbox:
         return truncate(out, 120_000)
 
     def t_list_dir(self, path: str = ".", depth: int = 2) -> str:
-        p = self.resolve(path)
+        p = self.path(path)
         if not p.is_dir():
             raise ToolError(f"{path} is not a directory")
         return tree(p, depth=max(1, min(int(depth or 2), 6)))
 
     def t_glob(self, pattern: str, path: str = ".") -> str:
-        base = self.resolve(path)
+        base = self.path(path)
         pattern = pattern.removeprefix("./")
         patterns = [pattern] + ([pattern[3:]] if pattern.startswith("**/") else [])
         hits = [
@@ -385,7 +397,7 @@ class Toolbox:
     def t_grep(
         self, pattern: str, path: str = ".", glob: str | None = None, ignore_case: bool = False, context: int = 0
     ) -> str:
-        p = self.resolve(path)
+        p = self.path(path)
         if shutil.which("rg"):
             cmd = ["rg", "--line-number", "--no-heading", "--with-filename", "--hidden", "--color", "never"]
             cmd += ["--max-columns", "400"]
@@ -450,7 +462,7 @@ class Toolbox:
         self.read_mtimes[str(p)] = p.stat().st_mtime
 
     def t_write_file(self, path: str, content: str) -> str:
-        p = self.resolve(path)
+        p = self.path(path)
         exists = p.exists()
         if exists:
             if p.is_dir():
@@ -472,7 +484,7 @@ class Toolbox:
         return f"{'Overwrote' if exists else 'Created'} {self.rel(p)} ({n} lines)."
 
     def t_edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
-        p = self.resolve(path)
+        p = self.path(path)
         if not p.exists():
             raise ToolError(f"{path} does not exist (use write_file to create it)")
         self._check_fresh(p)
@@ -515,20 +527,30 @@ class Toolbox:
 
     # -- shell
     def t_bash(self, command: str, timeout: int = 180) -> str:
-        if not is_read_only(command):
+        sandbox = self.agent.sandbox
+        if not is_read_only(command) and not (sandbox and self.agent.perms.mode == "auto-edit"):
             body = Syntax(command, "bash", theme="monokai", word_wrap=True)
-            ok, feedback = self.agent.perms.request(
-                bash_key(command), "bash", f"Run command (in {self.agent.cwd})", body
-            )
+            where = "in the sandbox" if sandbox else f"in {self.agent.cwd}"
+            ok, feedback = self.agent.perms.request(bash_key(command), "bash", f"Run command ({where})", body)
             if not ok:
                 return feedback
+        if not is_read_only(command):
             self.agent.checkpoint()
         self.console.print(Text(f"  $ {command}", style="bold cyan"))
-        fd, cwd_file = tempfile.mkstemp(prefix="lcode_cwd_")
-        os.close(fd)
-        script = f"{command}\n__lcode_ec=$?\npwd -P > {shlex.quote(cwd_file)}\nexit $__lcode_ec\n"
+        marker = f"__lcode_cwd_{secrets.token_hex(8)}__"
+        script = f"{command}\n__lcode_ec=$?\nprintf '\\n{marker}%s\\n' \"$(pwd -P)\"\nexit $__lcode_ec\n"
+        token = ""
+        if sandbox:
+            try:
+                with self.console.status("Starting the sandbox…"):
+                    sandbox.ensure(self.agent.cwd)
+            except SandboxError as e:
+                return f"Error: the sandbox can't start, so the command didn't run: {e}"
+            argv, token = sandbox.exec_argv(self.agent.cwd, script)
+        else:
+            argv = ["bash", "-c", script]
         proc = subprocess.Popen(
-            ["bash", "-c", script],
+            argv,
             cwd=self.agent.cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -546,9 +568,14 @@ class Toolbox:
                 lines.put(line)
             lines.put(None)
 
+        def stop() -> None:
+            if sandbox and token:
+                sandbox.kill(token)  # the command runs in the container, not under our process
+            os.killpg(proc.pid, signal.SIGKILL)
+
         threading.Thread(target=pump, daemon=True).start()
         out: list[str] = []
-        shown, status = 0, ""
+        shown, status, recorded = 0, "", ""
         deadline = time.time() + int(timeout or 180)
         try:
             while True:
@@ -556,30 +583,37 @@ class Toolbox:
                     line = lines.get(timeout=0.2)
                 except queue.Empty:
                     if time.time() > deadline:
-                        os.killpg(proc.pid, signal.SIGKILL)
+                        stop()
                         status = f"\n[Command timed out after {timeout}s and was killed]"
                         break
                     continue
                 if line is None:
                     break
+                if line.startswith(marker):
+                    recorded = line[len(marker) :].strip()
+                    continue
                 out.append(line)
                 if shown <= 40:
                     msg = "    ... (more output hidden)" if shown == 40 else "    " + line.rstrip("\n")[:300]
                     self.console.print(Text(msg, style="dim"))
                     shown += 1
         except KeyboardInterrupt:
-            os.killpg(proc.pid, signal.SIGKILL)
+            stop()
             raise
         code = proc.wait()
-        try:
-            recorded = Path(cwd_file).read_text().strip()
-            if recorded and Path(recorded).is_dir() and Path(recorded).resolve() != self.agent.cwd:
+        if out and out[-1] == "\n":
+            out.pop()  # the blank line printed before the marker
+        if recorded and Path(recorded).is_dir() and Path(recorded).resolve() != self.agent.cwd:
+            if sandbox and not sandbox.contains(Path(recorded).resolve()):
+                status += "\n[That directory is outside the project; the working directory stays the same]"
+            else:
                 self.agent.cwd = Path(recorded).resolve()
                 status += f"\n[Working directory is now {self.agent.cwd}]"
-        except OSError:
-            pass
-        finally:
-            Path(cwd_file).unlink(missing_ok=True)
+        if sandbox and code != 0 and not sandbox.network and NO_NETWORK.search("".join(out[-40:])):
+            status += (
+                "\n[The sandbox has no network access. If this needs the network, ask the user to allow it "
+                "with /sandbox network on]"
+            )
         self.console.print(Text(f"  exit code {code}", style="green" if code == 0 else "red"))
         return truncate("".join(out)) + status + f"\n[exit code: {code}]"
 

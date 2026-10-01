@@ -25,6 +25,9 @@ lcode config path                      # print the file location
 | `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |
 | `search_backend` | `auto` | `auto`, `ollama`, `brave`, `tavily` or `searxng`; `auto` uses the first one configured |
 | `searxng_url` | | Your SearXNG instance, e.g. `http://localhost:8888` |
+| `sandbox` | `off` | Run shell commands in a container: `docker` or `podman` ([Sandbox](sandbox.md)) |
+| `sandbox_image` | lcode's image | Container image for the sandbox; any image with bash and setsid |
+| `sandbox_network` | `false` | Let commands in the sandbox use the network |
 | `mcp_tools` | `auto` | How [MCP](mcp.md#context) tool definitions reach the model: `auto`, `direct` or `search` (on demand) |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
 
@@ -50,6 +53,7 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `LCODE_KEEP_ALIVE` | `keep_alive` |
 | `OLLAMA_HOST` | `ollama_host` (same variable the Ollama CLI uses) |
 | `LCODE_WEB` | `web` |
+| `LCODE_SANDBOX` | `sandbox` |
 | `OLLAMA_API_KEY`, `BRAVE_API_KEY`, `TAVILY_API_KEY` | API key for that [search provider](usage.md#web-search) (never stored in the config file) |
 | `LCODE_HOME` | where sessions and prompt history are stored |
 

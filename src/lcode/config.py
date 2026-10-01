@@ -25,6 +25,7 @@ PERMISSION_MODES = ("ask", "auto-edit", "yolo")
 WEB_MODES = ("on", "ask", "off")
 SEARCH_BACKENDS = ("auto", "ollama", "brave", "tavily", "searxng")
 MCP_TOOL_MODES = ("auto", "direct", "search")
+SANDBOX_ENGINES = ("off", "docker", "podman")
 
 # key -> (default, type, help)
 SETTINGS: dict[str, tuple[object, type, str]] = {
@@ -39,6 +40,9 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "search_backend": ("auto", str, "auto | ollama | brave | tavily | searxng (keys come from environment variables)"),
     "searxng_url": (None, str, "your SearXNG instance, e.g. http://localhost:8888"),
     "checkpoints": (True, bool, "snapshot files before the model changes them, so /undo can restore them"),
+    "sandbox": ("off", str, "run the model's shell commands in a container: off | docker | podman"),
+    "sandbox_image": (None, str, "container image for the sandbox (default: lcode's, built on first use)"),
+    "sandbox_network": (False, bool, "let commands in the sandbox use the network"),
     "mcp_tools": ("auto", str, "how MCP tools reach the model: auto | direct | search (on demand, saves context)"),
 }
 ENV_OVERRIDES = {
@@ -48,6 +52,7 @@ ENV_OVERRIDES = {
     "LCODE_KEEP_ALIVE": "keep_alive",
     "OLLAMA_HOST": "ollama_host",
     "LCODE_WEB": "web",
+    "LCODE_SANDBOX": "sandbox",
 }
 
 
@@ -98,6 +103,11 @@ def coerce(key: str, value: object) -> object:
         value = {"true": "on", "false": "off", "yes": "on", "no": "off"}.get(str(value).lower(), str(value).lower())
         if value not in WEB_MODES:
             raise ConfigError(f"web must be one of {', '.join(WEB_MODES)}")
+        return value
+    if key == "sandbox":
+        value = {"none": "off", "false": "off", "no": "off"}.get(str(value).lower(), str(value).lower())
+        if value not in SANDBOX_ENGINES:
+            raise ConfigError(f"sandbox must be one of {', '.join(SANDBOX_ENGINES)}")
         return value
     if key == "mcp_tools" and value not in MCP_TOOL_MODES:
         raise ConfigError(f"mcp_tools must be one of {', '.join(MCP_TOOL_MODES)}")
