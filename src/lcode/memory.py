@@ -186,8 +186,9 @@ def project_dir(cwd: Path) -> Path:
     return memory_dir() / "projects" / f"{slugify(name, 40) or 'folder'}-{key}"
 
 
-def parse(text: str, scope: str, path: Path | None = None) -> Note | None:
-    m = re.match(r"---\n(.*?)\n---\n?(.*)", text, re.S)
+def frontmatter(text: str) -> tuple[dict[str, str], str] | None:
+    """The `key: value` header between --- lines, and the body after it (None without a header)."""
+    m = re.match(r"---\r?\n(.*?)\r?\n---\r?\n?(.*)", text, re.S)
     if not m:
         return None
     fields = {}
@@ -195,6 +196,14 @@ def parse(text: str, scope: str, path: Path | None = None) -> Note | None:
         key, sep, value = line.partition(":")
         if sep:
             fields[key.strip()] = value.strip()
+    return fields, m.group(2)
+
+
+def parse(text: str, scope: str, path: Path | None = None) -> Note | None:
+    split = frontmatter(text)
+    if not split:
+        return None
+    fields, body = split
     name = path.stem if path else fields.get("name", "")  # the file name, in case an edit changed the header
     if not name or not fields.get("description"):
         return None
@@ -203,7 +212,7 @@ def parse(text: str, scope: str, path: Path | None = None) -> Note | None:
         name=name,
         type=kind if kind in TYPES else "project",
         description=fields["description"],
-        details=m.group(2).strip(),
+        details=body.strip(),
         modified=fields.get("modified", ""),
         scope=scope,
         path=path,

@@ -6,6 +6,20 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Subagents: the model can hand a task to a subagent with its own fresh context through the new
+  `agent` tool, and only the subagent's report comes back, so exploring a large codebase or reading
+  long output doesn't fill the main context. Built-in types: `explore` and `plan` (read-only) and
+  `worker` (all tools). Custom agents are markdown files in `.lcode/agents/` or
+  `~/.config/lcode/agents/`; `@name` asks for one. Subagents use the session's model and context
+  window (no reload), permissions (prompts are labelled with the agent), sandbox and checkpoints
+  (`/undo` covers their changes). With `max_parallel_agents` above 1 and Ollama's
+  `OLLAMA_NUM_PARALLEL`, several run at the same time; workers that do get their own git worktree
+  and their changes come back as a diff to approve. `/agents` shows the types and what each
+  subagent did; `lcode doctor` estimates how many could run at once. See
+  [Subagents](https://nasser1941.github.io/lcode/agents/).
+
 ## [0.7.0] - 2026-10-05
 
 ### Added

@@ -32,7 +32,7 @@ class FakeOllama:
         content = self.chat_replies.pop(0) if self.chat_replies else self.description
         return {"message": {"role": "assistant", "content": content}}
 
-    def chat_stream(self, payload: dict):
+    def chat_stream(self, payload: dict, on_open=None):
         self.payloads.append(payload)
         yield from self.scripts.pop(0)
 

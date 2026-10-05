@@ -48,6 +48,9 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   Podman) that only sees your project, without network access unless you allow it.
 - **Undo.** lcode saves a checkpoint before the model changes files; `/undo` takes back the last
   request's edits, new files and shell-command changes, without touching your git history.
+- **Subagents.** The model hands broad searches, planning and self-contained changes to subagents
+  with their own fresh context, so the main conversation keeps only their reports. Define your own
+  agent types in `.lcode/agents/`.
 - **Remembers what matters.** Corrections, decisions and where things live carry over to the next
   session as short notes, saved by the model, by you (`/remember`) or by a quick check at the end
   of a session. Not whole conversations, and never secrets.

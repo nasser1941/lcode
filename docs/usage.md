@@ -41,6 +41,7 @@ lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases
 | ++shift+tab++ | Cycle permission mode: ask → auto-edit → yolo |
 | ++tab++ | Complete slash commands and `@` paths |
 | `@path` | Attach a file (or a directory listing) to your message |
+| `@name` | Ask for a [subagent](agents.md) of that type, e.g. `@plan` |
 
 The status bar shows the model, how full the context window is, the permission mode and whether
 reasoning is on.
@@ -57,6 +58,7 @@ reasoning is on.
 | `/undo` | Undo the file changes of the last request ([details](#undo-and-checkpoints)) |
 | `/rewind [N]` | Go back to before request N: its files, and optionally the conversation |
 | `/checkpoints` | List the requests that changed files, and which files |
+| `/agents [N]` | [Subagent](agents.md) types, and what this session's subagents did |
 | `/remember [-g] TEXT` | Save a [note](memory.md) for later sessions (`-g`: for every repository) |
 | `/memory [show\|edit\|delete N]` | The [notes](memory.md) lcode remembers |
 | `/sandbox [network on\|off]` | The [sandbox](sandbox.md) for shell commands |
@@ -85,6 +87,9 @@ reasoning is on.
 | `todo_write` | Keep a visible task list for multi-step work |
 | `web_search` | Search the web for current information (needs a [search provider](#web-search)) |
 | `web_fetch` | Read a web page or text file by URL as clean text |
+| `view_image` | Look at an image: a model that can see describes it ([Images](#images)) |
+| `agent` | Hand a task to a [subagent](agents.md) with its own context; only its report comes back |
+| `memory` | Save, update or delete [notes](memory.md) that later sessions load |
 
 lcode refuses to edit a file the model hasn't read in the session, or one that changed on disk since
 it was read, so the model always edits the current version.
