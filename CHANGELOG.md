@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-05
+
 ### Added
 
 - `/context` shows what uses the context window, by category: the system prompt and its parts
@@ -331,7 +333,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/nasser1941/lcode/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/nasser1941/lcode/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/nasser1941/lcode/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/nasser1941/lcode/compare/v0.9.0...v0.10.0
