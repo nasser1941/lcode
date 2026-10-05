@@ -165,7 +165,6 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
 
-- [Smarter context for small windows](https://github.com/nasser1941/lcode/issues/46)
 - [Code intelligence with language servers](https://github.com/nasser1941/lcode/issues/44)
 - [A repository map and semantic search with local embeddings](https://github.com/nasser1941/lcode/issues/45)
 - [Hooks and permission rules](https://github.com/nasser1941/lcode/issues/43)
