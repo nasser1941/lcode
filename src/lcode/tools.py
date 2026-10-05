@@ -25,6 +25,7 @@ from rich.text import Text
 
 from lcode import web
 from lcode.context import shorten
+from lcode.jobs import JobError, describe, stop_leftovers
 from lcode.permissions import bash_key, is_read_only
 from lcode.planning import BLOCKED, PLAN_MODE_TOOLS
 from lcode.sandbox import SandboxError
@@ -38,6 +39,7 @@ NO_NETWORK = re.compile(
     r"EAI_AGAIN|Name or service not known|network is unreachable|No route to host"
 )
 MAX_TOOL_OUTPUT = 30_000  # characters returned to the model per tool call
+LEFTOVER_GRACE = 0.5  # seconds to wait for output after a command ends, before stopping what it left running
 IGNORE_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env", ".mypy_cache", ".pytest_cache",
     ".ruff_cache", ".tox", ".idea", ".vscode", "dist", "build", ".next", "target", ".cache", ".gradle",
@@ -119,13 +121,28 @@ SCHEMAS = [
         "bash",
         "Run a shell command with bash in the working directory and return its output and exit code. The "
         "working directory persists between calls (cd works). Use it to run scripts and tests, use git, install "
-        "packages, etc. Avoid interactive commands.",
+        "packages, etc. Avoid interactive commands. For a process that keeps running (a dev server, a watcher), "
+        "set background=true and give the plain command, without & or redirecting its output: lcode keeps it "
+        "running and keeps its output, you get a job id back and can carry on.",
         {
             "command": {"type": "string"},
             "timeout": {"type": "integer", "description": "Seconds before the command is killed (default 180)"},
+            "background": {
+                "type": "boolean",
+                "description": "Keep it running in the background; read its output with bash_output and stop it "
+                "with bash_stop (not with kill)",
+            },
         },
         ["command"],
     ),
+    _fn(
+        "bash_output",
+        "Read what a background command (bash with background=true) printed since you last read it, and whether "
+        "it's still running.",
+        {"id": {"type": "string", "description": "The job id bash returned"}},
+        ["id"],
+    ),
+    _fn("bash_stop", "Stop a background command.", {"id": {"type": "string"}}, ["id"]),
     _fn(
         "todo_write",
         "Create or update your task list for multi-step work. Pass the full list every time. Keep exactly one "
@@ -792,7 +809,7 @@ class Toolbox:
         return f"Edited {self.rel(p)} ({count} replacement(s)). Result:\n{snippet}" + problems
 
     # -- shell
-    def t_bash(self, command: str, timeout: int = 180) -> str:
+    def t_bash(self, command: str, timeout: int = 180, background: bool = False) -> str:
         sandbox = self.agent.sandbox
         if self.agent.planning() and not is_read_only(command):
             raise ToolError(f"{BLOCKED} Until then, only read-only commands run (ls, cat, grep, git log, …).")
@@ -814,7 +831,9 @@ class Toolbox:
                 return feedback
         if not is_read_only(command):
             self.agent.checkpoint()
-        self.console.print(Text(f"  $ {command}", style="bold cyan"))
+        self.console.print(Text(f"  $ {command}" + ("  (in the background)" if background else ""), style="bold cyan"))
+        if background is True or str(background).lower() == "true":
+            return self._background(command)
         marker = f"__lcode_cwd_{secrets.token_hex(8)}__"
         script = f"{command}\n__lcode_ec=$?\nprintf '\\n{marker}%s\\n' \"$(pwd -P)\"\nexit $__lcode_ec\n"
         token = ""
@@ -855,6 +874,8 @@ class Toolbox:
         out: list[str] = []
         shown, status, recorded = 0, "", ""
         deadline = time.time() + int(timeout or 180)
+        finished = 0.0  # when the command itself ended (its marker arrived)
+        held_open = False  # something it started still holds the output open
         try:
             while True:
                 if self.agent.cancel is not None and self.agent.cancel.is_set():
@@ -862,6 +883,9 @@ class Toolbox:
                 try:
                     line = lines.get(timeout=0.2)
                 except queue.Empty:
+                    if finished and time.time() - finished > LEFTOVER_GRACE:
+                        held_open = True
+                        break
                     if time.time() > deadline:
                         stop()
                         status = f"\n[Command timed out after {timeout}s and was killed]"
@@ -871,6 +895,7 @@ class Toolbox:
                     break
                 if line.startswith(marker):
                     recorded = line[len(marker) :].strip()
+                    finished = time.time()
                     continue
                 out.append(line)
                 if shown <= 40:
@@ -881,6 +906,13 @@ class Toolbox:
             stop()
             raise
         code = proc.wait()
+        if held_open and sandbox and token:
+            sandbox.kill(token)  # what it left running in the container
+        if (not sandbox and stop_leftovers(proc.pid)) or held_open:
+            status += (
+                "\n[lcode stopped what this command left running (started with &). To keep a process running, "
+                "start it with background=true: then bash_output reads its output and bash_stop stops it]"
+            )
         if out and out[-1] == "\n":
             out.pop()  # the blank line printed before the marker
         if recorded and Path(recorded).is_dir() and Path(recorded).resolve() != self.agent.cwd:
@@ -932,6 +964,51 @@ class Toolbox:
         except web.WebError as e:
             raise ToolError(str(e)) from e
         return web.format_page(url, title, text, max(1000, min(int(max_chars or 20000), MAX_TOOL_OUTPUT)))
+
+    def _background(self, command: str) -> str:
+        sandbox, kill = self.agent.sandbox, None
+        if sandbox:
+            try:
+                with self.console.status("Starting the sandbox…"):
+                    sandbox.ensure(self.agent.cwd)
+            except SandboxError as e:
+                return f"Error: the sandbox can't start, so the command didn't run: {e}"
+            argv, token = sandbox.exec_argv(self.agent.cwd, command)
+            kill = lambda: sandbox.kill(token)  # noqa: E731
+        else:
+            argv = ["bash", "-c", command]
+        job = self.agent.jobs.start(argv, self.agent.cwd, command, kill)
+        first = job.new_output(MAX_TOOL_OUTPUT // 3).rstrip()
+        for line in first.splitlines()[:10]:
+            self.console.print(Text("    " + line[:300], style="dim"))
+        if not job.running:
+            return (
+                f"The command ended right away ({job.status()}), so it isn't running in the background:\n"
+                f"{first or '(no output)'}"
+            )
+        self.console.print(Text(f"  ⎿ background job {job.id}, /jobs to see it", style="dim"))
+        return (
+            f"Started background job {job.id}: it keeps running while you work. Read its new output with "
+            f'bash_output(id="{job.id}") and stop it with bash_stop(id="{job.id}") when it\'s no longer needed.\n'
+            f"Output so far:\n{first or '(none yet)'}"
+        )
+
+    def t_bash_output(self, id: str) -> str:
+        try:
+            job = self.agent.jobs.get(id)
+        except JobError as e:
+            raise ToolError(str(e)) from e
+        text = job.new_output(MAX_TOOL_OUTPUT).rstrip()
+        return f"[{describe(job)}]\n{text or '(no new output)'}"
+
+    def t_bash_stop(self, id: str) -> str:
+        try:
+            job = self.agent.jobs.stop(id)
+        except JobError as e:
+            raise ToolError(str(e)) from e
+        self.console.print(Text(f"  ⎿ {describe(job)}", style="dim"))
+        last = job.new_output(4000).rstrip()
+        return f"[{describe(job)}]" + (f"\nIts last output:\n{last}" if last else "")
 
     # -- planning
     def t_todo_write(self, todos: list | str) -> str:

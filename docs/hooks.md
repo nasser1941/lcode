@@ -46,7 +46,7 @@ command = "ruff format {path} && ruff check --fix {path}"
 | `after_tool` | After a tool call | Its output goes to the model when it exits with an error, or always with `feedback = true` |
 | `after_request` | When a request is done | Its output is shown to you |
 | `session_start` | When a session starts | Its output is shown, and with `feedback = true` given to the model |
-| `notification` | When lcode waits for your answer, and when a request that took over 30 seconds is done | Show a desktop notification, ring a bell |
+| `notification` | When lcode waits for your answer, and when a request that ran longer than `notify_after` seconds (30) is done | Send a message, play a sound (lcode shows [desktop notifications](usage.md#notifications) itself) |
 
 | Key | |
 |---|---|

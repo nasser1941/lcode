@@ -192,6 +192,8 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         prune=cfg["prune"],
         repo_map=cfg["repo_map"],
         embed_model=cfg["embed_model"],
+        notify=cfg["notify"],
+        notify_after=cfg["notify_after"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.interactive = options.interactive
@@ -206,8 +208,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
     agent.hooks, agent.perms.rules = hooks.load(cwd, trust_project)
     for problem in agent.hooks.problems:
         console.print(f"[yellow]Settings: {problem}[/]")
-    if agent.hooks.for_event("notification"):
-        agent.perms.on_prompt = lambda title: agent.hooks.notify(f"lcode needs you: {title}", agent.cwd)
+    agent.perms.on_prompt = agent.waiting  # notification hooks and desktop notifications
     if cfg["lsp"] == "auto":
         from lcode import lsp
         from lcode.checkpoints import work_tree_for
@@ -233,6 +234,9 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
 
 
 def close_agent(agent: Agent) -> None:
+    stopped = agent.jobs.stop_all()
+    if stopped:
+        agent.console.print(f"[dim]Stopped {stopped} background job(s).[/]")
     if agent.lsp is not None:
         agent.lsp.close()
     if agent.mcp:

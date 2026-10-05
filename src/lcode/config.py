@@ -57,6 +57,8 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "lsp": ("auto", str, "language servers for code navigation and errors after edits: auto | off"),
     "prune": (True, bool, "before summarizing a full conversation, first remove old tool output from it"),
     "subagents": (True, bool, "let the model hand tasks to subagents that have their own context"),
+    "notify": (True, bool, "desktop notification when a long request is done or waits for you"),
+    "notify_after": (30, int, "seconds a request runs before it notifies (with notify on)"),
     "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),
 }
 ENV_OVERRIDES = {

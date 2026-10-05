@@ -79,6 +79,7 @@ reasoning is on.
 | `/mode [ask\|plan\|auto-edit\|yolo]` | Set the permission mode |
 | `/cd DIR` | Change the working directory |
 | `/todos` | Show the model's task list |
+| `/jobs [stop ID]` | The [background commands](#background-commands) the model started; stop one |
 | `/commit [notes]` | [Commit](git.md#commit) the changes with a message in the repository's style, once you approve it |
 | `/review [base]` | [Review](git.md#review) the uncommitted changes, or the branch against a base |
 | `/pr [base] [notes]` | Push the branch and open a GitHub [pull request](git.md#pr), once you approve it |
@@ -94,7 +95,8 @@ reasoning is on.
 | `list_dir` | Directory tree, skipping `.git`, `node_modules`, virtualenvs and caches |
 | `glob` | Find files by pattern, newest first |
 | `grep` | Regex search with ripgrep (falls back to Python if ripgrep is missing) |
-| `bash` | Run a shell command with live output, a timeout and a persistent working directory |
+| `bash` | Run a shell command with live output, a timeout and a persistent working directory; with `background`, keep it running ([details](#background-commands)) |
+| `bash_output`, `bash_stop` | Read what a background command printed since last time; stop it |
 | `todo_write` | Keep a visible task list for multi-step work |
 | `web_search` | Search the web for current information (needs a [search provider](#web-search)) |
 | `web_fetch` | Read a web page or text file by URL as clean text |
@@ -109,6 +111,38 @@ reasoning is on.
 
 lcode refuses to edit a file the model hasn't read in the session, or one that changed on disk since
 it was read, so the model always edits the current version.
+
+## Background commands
+
+Some commands keep running: a dev server, a test watcher, a build in watch mode. The model starts
+one with `bash` and `background: true` and carries on working. It reads what the command printed
+since last time with `bash_output`, and stops it with `bash_stop`.
+
+```text
+  $ npm run dev  (in the background)
+    > vite
+    VITE v6.0.0  ready in 312 ms
+  ⎿ background job 1, /jobs to see it
+```
+
+- `/jobs` lists the background commands; `/jobs stop 1` stops one.
+- They all stop when the session ends.
+- Anything else a command starts with `&` is stopped when that command ends. Only background
+  commands keep running, so no process outlives the session unnoticed.
+- Background commands ask for permission like any other command, and run in the
+  [sandbox](sandbox.md) when it's on.
+
+## Notifications
+
+Local models take a while, so you'll often switch to something else during a request. lcode shows
+a desktop notification:
+- when a request that ran longer than 30 seconds is done;
+- when, during such a request, lcode waits for your answer (a permission question or a plan).
+
+It uses `notify-send` on Linux and `osascript` on macOS, and rings the terminal bell where neither
+works. Change the time with `lcode config set notify_after 60`, or turn notifications off with
+`lcode config set notify false`. For something else, such as a sound or a phone message, use a
+[notification hook](hooks.md#hooks).
 
 ## Images
 
