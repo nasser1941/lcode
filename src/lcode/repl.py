@@ -411,6 +411,8 @@ def help_extensions(agent: Agent) -> None:
             table.add_column(column)
         for skill in ext.skills.values():
             description = skill.description if len(skill.description) <= 140 else skill.description[:139] + "…"
+            if f"/{skill.name}" in COMMANDS or skill.name in ext.commands:
+                description += f" [yellow](/{skill.name} runs the command; the model can still load the skill)[/]"
             table.add_row(f"/{escape(skill.name)}", escape(description), escape(agent.tools.rel(skill.folder)))
         c.print(table)
     for problem in ext.problems:

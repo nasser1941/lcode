@@ -620,6 +620,8 @@ class Agent:
             return f"list_dir({args.get('path', '.')})"
         if name == "memory":
             return f"memory({' '.join(str(args.get(k) or '') for k in ('action', 'name')).strip()})"
+        if name == "skill":
+            return f"skill({args.get('name', '')})"
         if name == "agent":
             return f"agent({args.get('type', '')}: {args.get('description') or str(args.get('task', ''))[:50]})"
         if name == "bash":

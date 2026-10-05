@@ -234,12 +234,15 @@ def test_help_lists_commands_and_skills_with_their_source(make_agent, repo):
     write(repo / ".lcode/commands/help.md", "---\ndescription: my help\n---\nx")
     write(repo / ".lcode/commands/review.md", "---\ndescription: review a file\nargument-hint: FILE\n---\nx")
     add_skill(repo / ".lcode/skills")
+    add_skill(repo / ".lcode/skills", "review", "---\nname: review\ndescription: a review skill\n---\n")
     agent = make_agent()
+    agent.console = Console(file=io.StringIO(), width=250)  # no wrapping inside the table cells
     handle_command(agent, "/help", HW)
     text = output(agent)
     assert "/review FILE" in text and ".lcode/commands/review.md" in text
     assert "hidden by the built-in command" in text
     assert "/commit-message" in text and ".lcode/skills/commit-message" in text
+    assert "/review runs the command; the model can still load the skill" in text
 
 
 def test_the_examples_in_the_repository_are_valid():
