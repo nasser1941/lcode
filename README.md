@@ -161,7 +161,6 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
 
-- [Parallel subagents](https://github.com/nasser1941/lcode/issues/40) with their own context
 - [Plan mode](https://github.com/nasser1941/lcode/issues/41) and [custom commands and skills](https://github.com/nasser1941/lcode/issues/42)
 - [Ready-made MCP for Metabase, Encord and Valohai](https://github.com/nasser1941/lcode/issues/53)
 - Then: [smarter context for small windows](https://github.com/nasser1941/lcode/issues/46), [language servers](https://github.com/nasser1941/lcode/issues/44), [a repository map with local embeddings](https://github.com/nasser1941/lcode/issues/45), [hooks](https://github.com/nasser1941/lcode/issues/43)
