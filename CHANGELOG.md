@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A repository map: the important files with their classes and functions, signatures and line
+  numbers, ranked by how much of the code uses them and cut to a token budget. Small repositories
+  (up to 300 source files) get it in the model's instructions; larger ones get a `repo_map` tool,
+  which can zoom into a folder. Python is read with its own parser; TypeScript, JavaScript, Go,
+  Rust, Java and Kotlin by their declarations. Measured with qwen3.6-35b, it halved the steps the
+  model took to find code and cut the tokens it read by 39%. The `repo_map` setting turns it off.
+- Semantic code search: with an embedding model in Ollama (qwen3-embedding, nomic-embed-text, …),
+  `lcode index` indexes the repository, and the model gets a `search_code` tool that finds code by
+  what it does. Changed files are embedded again before each search. During a session the
+  embedding model runs on the CPU, so it never pushes lcode's model off the GPU. The
+  `embed_model` setting picks the model or turns it off.
+- `lcode bench --tasks find-concept` (a task in a larger repository), `--repo-map` and
+  `--code-search`. See [Repository map and code search](https://nasser1941.github.io/lcode/search/).
+
 ## [0.13.0] - 2026-10-05
 
 ### Added

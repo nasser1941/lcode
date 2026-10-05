@@ -106,6 +106,7 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `bench.py` | `lcode bench`: the benchmark tasks, their checks and the reports |
 | `vision.py` | Looking at images with a model that can see |
 | `subagents.py` | Subagents: agent types, running them (also in parallel), worktrees for workers |
+| `repomap.py`, `codesearch.py` | The repository map, and semantic code search with an embedding model |
 | `lsp.py` | Language servers: the `lsp` tool and errors after edits |
 | `extensions.py` | Custom commands and skills, and approving a repository's own |
 | `frontmatter.py` | The `---` headers of notes, agents, commands and skills |

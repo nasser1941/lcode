@@ -7,6 +7,7 @@ import platform
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import requests
@@ -367,7 +368,21 @@ def cmd_doctor(args) -> None:
             line("", f"{n} × {slots[1]} context may not fit in memory here; {slots[0]} would", None)
         for problem in problems:
             line("", problem, None)
-    from lcode import extensions, lsp
+    from lcode import codesearch, extensions, lsp
+    from lcode.checkpoints import work_tree_for
+
+    if cfg["embed_model"] == "off":
+        line("Search", "semantic code search off (lcode config set embed_model auto)", True)
+    else:
+        embedder = codesearch.pick_model(ollama, cfg["embed_model"])
+        if embedder is None:
+            line("Search", "no embedding model for semantic code search: ollama pull qwen3-embedding:0.6b", None)
+        else:
+            index = codesearch.Index(work_tree_for(Path.cwd()), embedder)
+            state = (
+                f"{len(index.rows())} chunks indexed here" if index.exists() else "not indexed here yet: lcode index"
+            )
+            line("Search", f"{embedder} · {state}", True if index.exists() else None)
 
     if cfg["lsp"] == "off":
         line("Code intel", "off (lcode config set lsp auto)", True)
@@ -494,6 +509,8 @@ def cmd_bench(args) -> None:
             web="off",
             checkpoints=False,
             prune=not args.no_prune,
+            repo_map=args.repo_map,
+            embed_model=cfg["embed_model"] if args.code_search else "off",
         )
         run = bench.run_model(
             ollama, name, settings, tasks, console, args.timeout, args.keep, args.verbose, args.session
@@ -580,6 +597,8 @@ def cmd_chat(args) -> None:
         trust_project=trust_project,
         skills=cfg["skills"],
         prune=cfg["prune"],
+        repo_map=cfg["repo_map"],
+        embed_model=cfg["embed_model"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.interactive = not args.prompt
@@ -618,7 +637,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lcode",
         description="A local-first terminal coding agent powered by open-weight models via Ollama.",
-        epilog="Subcommands: lcode setup | models | doctor | config | bench | mcp  (lcode <subcommand> --help). "
+        epilog="Subcommands: lcode setup | models | doctor | config | bench | mcp | index "
+        "(lcode <subcommand> --help). "
         "Docs: https://nasser1941.github.io/lcode/",
     )
     parser.add_argument("-p", "--prompt", help="run one request non-interactively and exit")
@@ -682,12 +702,69 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument(
         "--rounds", type=int, default=1, help="run the tasks this many times (with --session: a longer session)"
     )
+    p.add_argument("--repo-map", action="store_true", help="give the model the repository map (off by default)")
+    p.add_argument("--code-search", action="store_true", help="index each task's folder and offer semantic code search")
     p.add_argument("--no-prune", action="store_true", help="don't remove old tool output (to compare, with --session)")
     subs["bench"] = p
+    p = argparse.ArgumentParser(
+        prog="lcode index",
+        description="Build or refresh the semantic code search index of the repository (an Ollama embedding model).",
+    )
+    p.add_argument("-r", "--repo", default=".", help="a folder in the repository (default: the current folder)")
+    p.add_argument("--cpu", action="store_true", help="embed on the CPU (slower, but keeps the GPU for lcode's model)")
+    p.add_argument("--model", help="embedding model to use (default: the embed_model setting)")
+    p.add_argument("--status", action="store_true", help="only show the state of the index")
+    subs["index"] = p
     from lcode.mcp.commands import build_parser as mcp_parser
 
     subs["mcp"] = mcp_parser()
     return subs
+
+
+def cmd_index(args) -> None:
+    """Build or refresh the semantic search index of the repository around the current folder."""
+    from lcode import codesearch
+    from lcode.checkpoints import work_tree_for
+
+    cfg = config.load()
+    root = work_tree_for(Path(args.repo).expanduser().resolve())
+    ollama = Ollama(cfg["ollama_host"])
+    setting = args.model or cfg["embed_model"]
+    if setting == "off":
+        fail("semantic code search is off (lcode config set embed_model auto)")
+    model = codesearch.pick_model(ollama, "auto" if setting == "off" else setting)
+    if model is None:
+        fail(
+            "no embedding model is installed. Install one, for example:\n  ollama pull qwen3-embedding:0.6b\n"
+            "(or nomic-embed-text, smaller), then run lcode index again"
+        )
+    index = codesearch.Index(root, model)
+    changed, removed = index.stale()
+    if args.status:
+        state = "no index yet" if not index.exists() else f"{len(index.rows())} chunks from {len(index.files)} files"
+        console.print(f"{root} · {model} · {state} · {len(changed)} file(s) to (re)index, {len(removed)} removed")
+        return
+    if not changed and not removed:
+        console.print(f"The index of {root} is up to date ({len(index.rows())} chunks, {model}).")
+        return
+    where = "the CPU" if args.cpu else "the GPU (lcode's model is reloaded at the next request)"
+    console.print(f"Indexing {len(changed)} file(s) in {root} with {model} on {where}…")
+    started = time.monotonic()
+    from rich.progress import BarColumn, MofNCompleteColumn, Progress, TimeRemainingColumn
+
+    with Progress("  [progress.description]{task.description}", BarColumn(), MofNCompleteColumn(),
+                  TimeRemainingColumn(), console=console, transient=True) as bar:  # fmt: skip
+        task = bar.add_task("chunks", total=None)
+        try:
+            files, chunks = index.update(
+                ollama, on_gpu=not args.cpu, progress=lambda done, total: bar.update(task, completed=done, total=total)
+            )
+        except codesearch.SearchError as e:
+            fail(str(e))
+    console.print(
+        f"[green]✓[/] Indexed {chunks} chunks from {files} file(s) in {time.monotonic() - started:.0f}s; "
+        f"{len(index.rows())} chunks in all. The model can now search the code by meaning (search_code)."
+    )
 
 
 def cmd_mcp(args) -> None:
@@ -703,6 +780,7 @@ COMMANDS = {
     "config": cmd_config,
     "bench": cmd_bench,
     "mcp": cmd_mcp,
+    "index": cmd_index,
 }
 
 

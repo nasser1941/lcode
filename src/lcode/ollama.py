@@ -72,6 +72,19 @@ class Ollama:
         """One chat request without streaming."""
         return self._post("/api/chat", {**payload, "stream": False}, timeout=timeout)
 
+    def embed(
+        self, model: str, inputs: list[str], options: dict | None = None, keep_alive: str = "5m"
+    ) -> list[list[float]]:
+        """Embedding vectors for the inputs (cut to the model's context if too long)."""
+        payload = {
+            "model": model,
+            "input": inputs,
+            "truncate": True,
+            "keep_alive": keep_alive,
+            "options": options or {},
+        }
+        return self._post("/api/embed", payload, timeout=600).get("embeddings") or []
+
     def show(self, model: str) -> dict:
         return self._post("/api/show", {"model": model})
 
