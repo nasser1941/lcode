@@ -6,6 +6,11 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- With another model server, `/ctx` no longer says the model reloads: it changes how much of the
+  server's context window lcode uses.
+
 ## [0.16.0] - 2026-10-05
 
 ### Added

@@ -931,4 +931,6 @@ class Agent:
         else:
             note = ""
         self.settings.context = tokens
+        if getattr(self.ollama, "kind", "ollama") != "ollama":  # the server keeps its own window
+            return f"lcode now uses {format_tokens(tokens)} tokens of the context window{note}, and summarizes sooner."
         return f"Context window set to {format_tokens(tokens)} tokens{note}. The model reloads on the next request."

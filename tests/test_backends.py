@@ -255,7 +255,7 @@ def test_choosing_a_served_model(server):
     assert backends.pick_model(client, "mlx-community/Qwen3-8B-4bit") == "mlx-community/Qwen3-8B-4bit"
 
 
-def test_the_context_window_comes_from_the_server(server):
+def test_the_context_window_comes_from_the_server(server, make_agent):
     client = OpenAICompatible(server, name="LM Studio")
     model = "qwen/qwen3.6-35b-a3b"
     ctx, note = backends.context_for(client, model, None)
@@ -265,6 +265,11 @@ def test_the_context_window_comes_from_the_server(server):
     assert backends.context_for(client, model, 16384) == (16384, "")  # less is fine: lcode summarizes sooner
     ctx, note = backends.context_for(client, model, 131072)
     assert ctx == 40960 and "capped at the server's context window of 40,960" in note
+    agent = make_agent(model=model)
+    agent.ollama = client
+    assert agent.set_context(131072) == (
+        "lcode now uses 40K tokens of the context window (capped at the model's maximum, 40K), and summarizes sooner."
+    )
     FakeServer.lmstudio, FakeServer.props = {}, {"default_generation_settings": {"n_ctx": 65536}}
     assert client.max_context(model) == 65536  # llama-server
     FakeServer.models = [(model, {"max_model_len": 32768})]
