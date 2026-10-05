@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-05
+
 ### Added
 
 - Memory across sessions: lcode keeps short notes that later sessions load, only key knowledge and
@@ -223,7 +225,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/nasser1941/lcode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/nasser1941/lcode/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/nasser1941/lcode/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/nasser1941/lcode/compare/v0.4.1...v0.5.0

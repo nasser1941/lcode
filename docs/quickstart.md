@@ -12,12 +12,13 @@ lcode
 
 ```text
 ╭──────────────────────────────────────────────╮
-│ lcode v0.6.1 — local coding agent            │
+│ lcode v0.7.0 — local coding agent            │
 │                                              │
 │ model    lcode-qwen3.6-35b                   │
 │ context  256K tokens                         │
 │ cwd      /home/you/code/my-project           │
 │ mode     ask (Shift+Tab to cycle)            │
+│ memory   ask · no notes yet (/remember)      │
 ╰──────────────────────────────────────────────╯
 ❯
 ```
