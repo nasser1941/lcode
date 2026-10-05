@@ -6,6 +6,13 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `lcode mcp add encord` failed with "needs the Encord SDK" when lcode itself was installed with
+  `uv tool install`: `uvx` reused that installation, which doesn't have the SDK. The Encord and
+  Valohai presets now run `uvx --isolated`. If you added either server with 0.11.0, add it again
+  (`lcode mcp add encord`) or put `--isolated` first in its `args` in `mcp.json`.
+
 ## [0.11.0] - 2026-10-05
 
 ### Added

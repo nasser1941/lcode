@@ -266,8 +266,11 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     try:
         from encord import EncordUserClient
-    except ImportError:
-        parser.error('needs the Encord SDK: run it with uvx --from "lcode-cli[encord]" lcode-mcp-encord')
+    except ImportError as e:
+        parser.error(
+            f'needs the Encord SDK ({e}): run it with uvx --isolated --from "lcode-cli[encord]" lcode-mcp-encord '
+            "(--isolated, or uvx may reuse an installed lcode without it)"
+        )
     if os.environ.get("ENCORD_SSH_KEY_FILE"):
         key_file = os.path.expanduser(os.environ["ENCORD_SSH_KEY_FILE"])
         if not os.path.isfile(key_file):
