@@ -70,7 +70,7 @@ def test_other_model_gets_its_own_context(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "Ollama", lambda host: FakeOllama())
     monkeypatch.setattr(cli, "detect", lambda: HW)
-    monkeypatch.setattr(cli, "check_ollama", lambda *args: "0.32.0")
+    monkeypatch.setattr("lcode.api.check_server", lambda *args: "0.32.0")
     monkeypatch.setattr(cli, "resolve_model", lambda ollama, name: (name, catalog.find(name)))
     monkeypatch.setattr(cli, "choose_context", fake_choose_context)
     monkeypatch.setattr("lcode.repl.repl", lambda *args, **kwargs: None)

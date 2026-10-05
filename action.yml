@@ -1,0 +1,79 @@
+name: lcode
+description: Answer @lcode in issues and pull requests, propose changes and review pull requests, with an open-weight model on your own self-hosted runner.
+author: nasser1941
+branding:
+  icon: terminal
+  color: gray-dark
+
+inputs:
+  model:
+    description: The model to use (default, the runner's lcode configuration)
+    required: false
+    default: ""
+  trigger:
+    description: The word that calls lcode in a comment
+    required: false
+    default: "@lcode"
+  review:
+    description: Review pull requests when they're opened or updated ("true" or "false")
+    required: false
+    default: "false"
+  review-forks:
+    description: Also review pull requests from forks; their code runs through lcode's tools on your runner
+    required: false
+    default: "false"
+  author-associations:
+    description: Who can call lcode, by their association with the repository
+    required: false
+    default: "OWNER,MEMBER,COLLABORATOR"
+  permission-mode:
+    description: auto-edit (file changes, no shell commands except allow-commands) or yolo (anything; only on an isolated runner)
+    required: false
+    default: "auto-edit"
+  allow-commands:
+    description: Shell commands the model may run, one per line or comma-separated, with * wildcards (e.g. "pytest*, npm test")
+    required: false
+    default: ""
+  max-steps:
+    description: Model steps per request before lcode stops
+    required: false
+    default: "60"
+  lcode-version:
+    description: The lcode version to run (default, the one matching this action's tag)
+    required: false
+    default: ""
+  github-token:
+    description: Token for comments, pull requests and pushes
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run lcode
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        LCODE_MODEL: ${{ inputs.model }}
+        LCODE_TRIGGER: ${{ inputs.trigger }}
+        LCODE_REVIEW: ${{ inputs.review }}
+        LCODE_REVIEW_FORKS: ${{ inputs.review-forks }}
+        LCODE_ASSOCIATIONS: ${{ inputs.author-associations }}
+        LCODE_PERMISSION_MODE: ${{ inputs.permission-mode }}
+        LCODE_ALLOW_COMMANDS: ${{ inputs.allow-commands }}
+        LCODE_MAX_STEPS: ${{ inputs.max-steps }}
+        LCODE_VERSION: ${{ inputs.lcode-version }}
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        version="${LCODE_VERSION:-${ACTION_REF#v}}"
+        spec="lcode-cli"
+        if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then spec="lcode-cli==$version"; fi
+        if command -v uvx > /dev/null; then
+          uvx --from "$spec" lcode action
+        elif command -v lcode > /dev/null; then
+          lcode action
+        else
+          python3 -m venv "$RUNNER_TEMP/lcode-venv"
+          "$RUNNER_TEMP/lcode-venv/bin/pip" install --quiet "$spec"
+          "$RUNNER_TEMP/lcode-venv/bin/lcode" action
+        fi

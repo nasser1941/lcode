@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shlex
+from collections.abc import Callable
 
 from rich.console import Console, RenderableType
 from rich.panel import Panel
@@ -38,6 +39,10 @@ def bash_key(command: str) -> str:
 
 
 # `cd <plain path> &&` in front of a command: harmless, and models write it all the time.
+NOT_ASKED = (
+    "This needs the user's permission, and nobody can be asked in this run, so it was not allowed. Do without it "
+    "if you can; otherwise finish and say what permission you need."
+)
 LEADING_CD = re.compile(r"""^\s*(?:cd\s+(?:[\w./~@+,=:-]+|'[^']*'|"[^"$`\\]*")\s*&&\s*)+""")
 
 
@@ -71,6 +76,7 @@ class Permissions:
         self.always: set[str] = set()
         self.rules = Rules()  # allow and deny lists from the settings (lcode.hooks)
         self.on_prompt = None  # called with the title before lcode asks the user (notification hooks)
+        self.approve: Callable[[dict], bool] | None = None  # decides instead of asking (see lcode.api)
 
     def rule(self, kind: str, target: str) -> tuple[bool, str] | None:
         """A rule's verdict on an action: (allowed, message for the model), or None when no rule matches."""
@@ -99,6 +105,13 @@ class Permissions:
             return verdict
         if not self.needs_prompt(key, kind):
             return True, ""
+        if self.approve is not None:  # a program or a non-interactive run decides
+            target = target or key.split(":", 1)[-1]
+            if kind == "bash":
+                target = LEADING_CD.sub("", target)  # the command itself, without `cd <folder> &&`
+            if self.approve({"kind": kind, "title": title, "target": target}):
+                return True, ""
+            return False, NOT_ASKED
         if self.on_prompt:
             self.on_prompt(title)
         self.console.print(Panel(body, title=title, title_align="left", border_style="yellow"))

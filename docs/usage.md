@@ -15,6 +15,9 @@ lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases
 | Option | Meaning |
 |---|---|
 | `-p, --prompt TEXT` | Run one request non-interactively, print the result and exit |
+| `--output json\|stream-json` | With `-p`: print a JSON result, or a JSON event per line ([Automation](automation.md)) |
+| `--max-steps N` | Stop a request after N model steps |
+| `--allowed-tools LIST` | Only these tools, e.g. `"read_file,grep,glob,bash"` |
 | `-m, --model NAME` | Catalog key (see `lcode models`) or any installed Ollama model |
 | `--context SIZE` | Context window, e.g. `65536`, `128k`, `1m` |
 | `-r, --repo DIR` | Work in another directory |

@@ -12,6 +12,7 @@ import subprocess
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -52,6 +53,9 @@ from lcode.tools import (
 GPU_MEMORY_ERRORS = ("out of memory", "illegal memory access", "cudamalloc failed")
 SAFE_NUM_BATCH = 512  # Ollama's default prompt batch
 MAX_STEPS_PER_TURN = 150
+EVENT_OUTPUT = 4000  # characters of a tool's output in an event
+# How a tool result starts when the call failed or wasn't allowed (an "error" in events and results).
+REFUSED = ("Error:", "A deny rule", "The user denied", "This needs the user's permission")
 MAX_MALFORMED_CALL_RETRIES = 2  # Ollama rejects tool calls whose arguments aren't valid JSON  # safety cap on tool-call iterations for one request
 AUTO_COMPACT_RATIO = 0.85  # summarize the history when the context is this full
 PRUNED_ENOUGH = 0.6  # after pruning old tool output, summarize only if the context is still this full
@@ -252,6 +256,9 @@ class Agent:
         self.no_changes = ""  # set during a review: why nothing may change (read-only tools only)
         self.cancel: threading.Event | None = None  # set from another thread to stop
         self.on_tool = None  # called with (name, arguments) before each tool runs
+        self.on_event: Callable[[dict], None] | None = None  # each step and tool result, for --output stream-json
+        self.max_steps = MAX_STEPS_PER_TURN
+        self.turn_status = ""  # how the last request ended: success, max_steps
         self.response = None  # the streaming response, so another thread can abort it
         self.ctx_used = 0
         self.last_speed = 0.0
@@ -756,17 +763,39 @@ class Agent:
         """Called before the model changes files: snapshot them once per request, for /undo."""
         self.checkpoints.before_change(self.cwd)
 
-    def _run_turn(self, user_text: str, max_steps: int = MAX_STEPS_PER_TURN) -> None:
+    def emit(self, event: dict) -> None:
+        if self.on_event is not None:
+            self.on_event(event)
+
+    def _run_turn(self, user_text: str) -> None:
         self.prepare_mcp()
+        self.turn_status = "running"
         note = planning.NOTE if self.planning() and self.allowed_tools is None else ""
         self.messages.append({"role": "user", "content": self.expand_mentions(user_text) + note})
         malformed = 0
-        for _ in range(max_steps):
+        for step in range(self.max_steps):
             if self.cancel is not None and self.cancel.is_set():
                 raise KeyboardInterrupt
             self.maybe_compact()
             try:
-                calls = self.assistant_step().get("tool_calls") or []
+                reply = self.assistant_step()
+                calls = reply.get("tool_calls") or []
+                for i, call in enumerate(calls):
+                    call.setdefault("id", f"call_{step}_{i}")  # so a tool result can name its call
+                self.emit(
+                    {
+                        "type": "assistant",
+                        "text": reply.get("content") or "",
+                        "tool_calls": [
+                            {
+                                "id": c["id"],
+                                "name": c.get("function", {}).get("name", ""),
+                                "arguments": call_arguments(c),
+                            }
+                            for c in calls
+                        ],
+                    }
+                )
             except OllamaError as e:
                 if "error parsing tool call" not in str(e) or malformed >= MAX_MALFORMED_CALL_RETRIES:
                     raise
@@ -829,8 +858,20 @@ class Agent:
                 if call.get("id"):
                     tool_msg["tool_call_id"] = call["id"]
                 self.messages.append(tool_msg)
+                self.emit(
+                    {
+                        "type": "tool_result",
+                        "id": call.get("id", ""),
+                        "name": name,
+                        "error": result.startswith(REFUSED),
+                        "output": result[:EVENT_OUTPUT] + ("…" if len(result) > EVENT_OUTPUT else ""),
+                    }
+                )
         else:
-            self.console.print(f"[yellow]Stopped after {MAX_STEPS_PER_TURN} steps.[/]")
+            self.turn_status = "max_steps"
+            self.console.print(f"[yellow]Stopped after {self.max_steps} steps.[/]")
+            return
+        self.turn_status = "success"
         self.print_stats()
 
     def print_stats(self) -> None:

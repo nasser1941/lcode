@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import platform
+import re
 import shutil
 import sys
 import tempfile
@@ -18,7 +19,7 @@ from rich.prompt import Confirm
 from rich.table import Table
 
 from lcode import __version__, backends, catalog, config, limits, web
-from lcode.agent import Agent, Settings
+from lcode.agent import Settings
 from lcode.catalog import ModelSpec
 from lcode.config import ConfigError, format_tokens, parse_context
 from lcode.hardware import Hardware, detect
@@ -52,22 +53,12 @@ def connect(cfg: dict) -> Ollama:
 
 
 def check_ollama(ollama: Ollama, hw: Hardware | None = None) -> str:
-    if backends.is_openai(ollama):
-        try:
-            return ollama.version()
-        except OllamaError as e:
-            fail(
-                f"{e}\n\nIs {ollama.name} running, with its server started? lcode expects its OpenAI-compatible "
-                "API there; change the address with: lcode config set base_url http://host:port/v1"
-            )
+    from lcode import api
+
     try:
-        version = ollama.version()
-    except OllamaError as e:
-        hint = OLLAMA_INSTALL.get((hw or detect()).os, OLLAMA_INSTALL["linux"])
-        fail(f"{e}\n\nIs Ollama installed and running? Install it with:\n  {hint}")
-    if version_tuple(version) < MIN_VERSION:
-        fail(f"Ollama {version} is too old; lcode needs {'.'.join(map(str, MIN_VERSION))} or newer. Update Ollama.")
-    return version
+        return api.check_server(ollama, hw)
+    except api.SetupError as e:
+        fail(str(e))
 
 
 def resolve_model(ollama: Ollama, name: str) -> tuple[str, ModelSpec | None]:
@@ -613,16 +604,18 @@ def cmd_bench(args) -> None:
 
 
 def cmd_chat(args) -> None:
+    import json
+
+    from lcode import api
     from lcode.repl import repl
 
-    try:
-        cfg = config.load()
-        requested_ctx = parse_context(args.context) if args.context else cfg["context"]
-        same_model = (catalog.find(args.model) or args.model) == (catalog.find(cfg["model"]) or cfg["model"])
-        if not args.context and args.model and not same_model:
-            requested_ctx = None  # the saved context was sized for the saved model; fit this one instead
-    except ConfigError as e:
-        fail(str(e))
+    output = args.output or "text"
+    if output != "text" and not args.prompt:
+        fail("--output json and stream-json need a request: lcode -p '…' --output json")
+    if args.max_steps is not None and args.max_steps < 1:
+        fail("--max-steps must be at least 1")
+    quiet = output != "text"
+    out = Console(stderr=True, highlight=False) if quiet else console  # stdout is for the JSON
     cwd = Path(args.repo).expanduser().resolve()
     if not cwd.is_dir():
         fail(f"not a directory: {cwd}")
@@ -636,97 +629,49 @@ def cmd_chat(args) -> None:
             fail(f"--worktree: {e}")
         cwd = worktree.cwd
         state = "a new worktree" if worktree.created_branch else "the worktree"
-        console.print(f"[dim]Working in {state} {worktree.path}, on branch {escape(worktree.branch)}.[/]")
-    ollama = connect(cfg)
-    hw = detect()
-    check_ollama(ollama, hw)
-    try:
-        model, spec = resolve_model(ollama, args.model or cfg["model"])
-    except NotInstalled as e:
-        first_run = not args.model and cfg["model"] == config.DEFAULT_MODEL and not config.CONFIG_PATH.exists()
-        if first_run and not backends.is_openai(ollama):
-            fail("lcode isn't set up yet. Run:  lcode setup")
-        fail(str(e))
-    context, note = choose_context(ollama, model, spec, requested_ctx, hw)
-    if note:
-        console.print(f"[yellow]Context {format_tokens(context)}: {note}[/]")
-    mode = (
-        "yolo" if args.yolo else ("auto-edit" if args.auto_edit else ("plan" if args.plan else cfg["permission_mode"]))
-    )
-    num_batch = cfg["num_batch"]
-    if num_batch is None and spec and spec.num_batch:
-        if model == spec.local_name:
-            num_batch = spec.num_batch
-        else:  # the tuned batch size assumes the text-only variant; the vision projector needs that VRAM
-            console.print(f"[dim]Tip: run `lcode setup {spec.key}` once to create the faster text-only variant.[/]")
-    from lcode import extensions
-
-    trust_project = extensions.trust_project(cwd, console, interactive=not args.prompt)
-    settings = Settings(
-        model=model,
-        context=context,
-        num_batch=num_batch,
-        keep_alive=cfg["keep_alive"],
-        think=cfg["think"] and not args.no_think,
-        show_thinking=args.show_thinking,
+        out.print(f"[dim]Working in {state} {worktree.path}, on branch {escape(worktree.branch)}.[/]")
+    mode = "yolo" if args.yolo else ("auto-edit" if args.auto_edit else ("plan" if args.plan else None))
+    tools = [t for t in re.split(r"[,\s]+", args.allowed_tools or "") if t] if args.allowed_tools is not None else None
+    options = api.Options(
+        model=args.model,
+        context=args.context,
         permission_mode=mode,
-        web="off" if args.no_web else cfg["web"],
-        search_backend=cfg["search_backend"],
-        searxng_url=cfg["searxng_url"],
-        checkpoints=cfg["checkpoints"],
-        sandbox=(cfg["sandbox"] if cfg["sandbox"] != "off" else "docker") if args.sandbox else cfg["sandbox"],
-        sandbox_image=cfg["sandbox_image"],
-        sandbox_network=cfg["sandbox_network"],
-        vision_model=cfg["vision_model"],
-        memory="off" if args.no_memory else cfg["memory"],
-        subagents=cfg["subagents"],
-        max_parallel_agents=cfg["max_parallel_agents"],
-        trust_project=trust_project,
-        skills=cfg["skills"],
-        prune=cfg["prune"],
-        repo_map=cfg["repo_map"],
-        embed_model=cfg["embed_model"],
+        allowed_tools=tools,
+        max_steps=args.max_steps,
+        think=False if args.no_think else None,
+        web=False if args.no_web else None,
+        memory=False if args.no_memory else None,
+        mcp=not args.no_mcp,
+        sandbox=args.sandbox,
+        show_thinking=args.show_thinking,
+        interactive=not args.prompt,
     )
-    agent = Agent(ollama, settings, cwd, console=console)
-    agent.interactive = not args.prompt
-    from lcode import hooks
-
-    agent.hooks, agent.perms.rules = hooks.load(cwd, trust_project)
-    for problem in agent.hooks.problems:
-        console.print(f"[yellow]Settings: {problem}[/]")
-    if agent.hooks.for_event("notification"):
-        agent.perms.on_prompt = lambda title: agent.hooks.notify(f"lcode needs you: {title}", agent.cwd)
-    if cfg["lsp"] == "auto":
-        from lcode import lsp
-        from lcode.checkpoints import work_tree_for
-
-        if lsp.available():
-            agent.lsp = lsp.Manager(work_tree_for(cwd))
-            agent.messages[0]["content"] = agent.system_prompt()  # now it mentions the language servers
-    if agent.sandbox:
-        # Never run commands unsandboxed when the user asked for a sandbox: stop here instead.
-        from lcode.sandbox import SandboxError
-
-        try:
-            with console.status("Starting the sandbox…"):
-                agent.sandbox.ensure(cwd)
-        except SandboxError as e:
-            fail(f"the sandbox can't start: {e}\nTurn it off with: lcode config set sandbox off")
-    if not args.no_mcp:
-        from lcode.mcp.commands import start_session
-
-        agent.mcp = start_session(cwd, cfg["mcp_tools"], console, interactive=not args.prompt)
+    hw = detect()
     try:
-        repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)
+        agent = api.open_agent(cwd, options, out, hw)
+    except api.SetupError as e:
+        if quiet:
+            print(json.dumps({"type": "result", "status": "error", "error": str(e)}), flush=True)
+            sys.exit(1)
+        fail(str(e))
+    exit_code = 0
+    try:
+        if quiet:
+            agent.perms.approve = lambda request: False  # nobody to ask: refuse what needs permission
+            if output == "stream-json":
+                agent.on_event = lambda event: print(json.dumps(event, ensure_ascii=False), flush=True)
+                print(json.dumps(api.start_event(agent)), flush=True)
+            result = api.run_request(agent, args.prompt)
+            print(json.dumps(result.to_json(), ensure_ascii=False, indent=None if output == "stream-json" else 2))
+            exit_code = result.exit_code
+        else:
+            repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)
     finally:
-        if agent.lsp is not None:
-            agent.lsp.close()
-        if agent.mcp:
-            agent.mcp.close()
-        if agent.sandbox:
-            agent.sandbox.stop()
+        api.close_agent(agent)
         if worktree is not None:
-            console.print(f"[dim]{escape(worktree.finish())}[/]")
+            out.print(f"[dim]{escape(worktree.finish())}[/]")
+    if exit_code:
+        sys.exit(exit_code)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -738,6 +683,13 @@ def build_parser() -> argparse.ArgumentParser:
         "Docs: https://nasser1941.github.io/lcode/",
     )
     parser.add_argument("-p", "--prompt", help="run one request non-interactively and exit")
+    parser.add_argument(
+        "--output",
+        choices=["text", "json", "stream-json"],
+        help="with -p: text (default), json (one result object) or stream-json (an event per line)",
+    )
+    parser.add_argument("--max-steps", type=int, metavar="N", help="stop a request after N model steps")
+    parser.add_argument("--allowed-tools", metavar="TOOLS", help='only these tools, e.g. "read_file,grep,glob,bash"')
     parser.add_argument("-m", "--model", help="catalog key (see `lcode models`) or any installed Ollama model")
     parser.add_argument("--context", "--ctx", dest="context", help="context window, e.g. 65536, 128k or 1m")
     parser.add_argument("-r", "--repo", default=".", help="working directory (default: current directory)")
@@ -822,7 +774,18 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     from lcode.mcp.commands import build_parser as mcp_parser
 
     subs["mcp"] = mcp_parser()
+    subs["action"] = argparse.ArgumentParser(
+        prog="lcode action",
+        description="Run as a GitHub Action on a self-hosted runner: answer @lcode in issues and pull requests, "
+        "and review pull requests. Configured through the action's inputs (see the docs).",
+    )
     return subs
+
+
+def cmd_action(args) -> None:
+    from lcode import action
+
+    sys.exit(action.main())
 
 
 def cmd_index(args) -> None:
@@ -887,6 +850,7 @@ COMMANDS = {
     "bench": cmd_bench,
     "mcp": cmd_mcp,
     "index": cmd_index,
+    "action": cmd_action,
 }
 
 

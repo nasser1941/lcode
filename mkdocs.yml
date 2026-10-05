@@ -96,6 +96,7 @@ nav:
       - Subagents: agents.md
       - Commands and skills: commands.md
       - Git workflow: git.md
+      - Automation: automation.md
       - Code intelligence: lsp.md
       - Repository map and code search: search.md
       - Models & context windows: models.md
