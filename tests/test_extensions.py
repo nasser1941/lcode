@@ -220,14 +220,14 @@ def test_a_repositorys_extensions_need_approval(repo, monkeypatch):
 
 
 def test_unapproved_repositories_lend_nothing(make_agent, repo):
-    write(repo / ".lcode/commands/review.md", "Review $ARGUMENTS")
+    write(repo / ".lcode/commands/audit.md", "Audit $ARGUMENTS")
     add_skill(repo / ".lcode/skills")
     write(repo / ".lcode/agents/reviewer.md", "---\ndescription: reviews\n---\n")
     agent = make_agent(trust_project=False, subagents=True)
     assert agent.extensions().commands == {} and agent.extensions().skills == {}
     assert "reviewer" not in agent.agent_types()
-    handle_command(agent, "/review x", HW)
-    assert "Unknown command /review" in output(agent)
+    handle_command(agent, "/audit x", HW)
+    assert "Unknown command /audit" in output(agent)
 
 
 def test_help_lists_commands_and_skills_with_their_source(make_agent, repo):

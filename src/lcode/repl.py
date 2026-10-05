@@ -26,7 +26,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, backends, catalog, extensions, limits, sessions, web
+from lcode import __version__, backends, catalog, extensions, gitflow, limits, sessions, web
 from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
@@ -62,8 +62,12 @@ COMMANDS = {
     "/mode": "Permission mode: ask | plan | auto-edit | yolo (Shift+Tab cycles)",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
+    "/commit": "Commit the changes with a message in the repository's style, after you approve it",
+    "/review": "Review the uncommitted changes, or the branch against a base: /review [base]",
+    "/pr": "Push the branch and open a GitHub pull request, after you approve it: /pr [base] [notes]",
     "/exit": "Quit",
 }
+REPLACEABLE = {"/commit", "/review", "/pr"}  # a command of your own with the same name runs instead
 
 
 class InputCompleter(Completer):
@@ -420,7 +424,11 @@ def custom_commands(agent: Agent) -> dict[str, str]:
     ext = agent.extensions()
     found = {f"/{name}": skill.description for name, skill in ext.skills.items()}
     found.update({f"/{name}": command.description for name, command in ext.commands.items()})
-    return {name: description for name, description in found.items() if name not in COMMANDS}
+    return {
+        name: description
+        for name, description in found.items()
+        if name not in COMMANDS or (name in REPLACEABLE and name[1:] in ext.commands)
+    }
 
 
 def help_extensions(agent: Agent) -> None:
@@ -430,7 +438,11 @@ def help_extensions(agent: Agent) -> None:
         for column in ("Command", "Does", "From"):
             table.add_column(column)
         for command in ext.commands.values():
-            hidden = " [yellow](hidden by the built-in command)[/]" if f"/{command.name}" in COMMANDS else ""
+            hidden = ""
+            if f"/{command.name}" in REPLACEABLE:
+                hidden = " [dim](replaces the built-in command)[/]"
+            elif f"/{command.name}" in COMMANDS:
+                hidden = " [yellow](hidden by the built-in command)[/]"
             usage = f"/{command.name}" + (f" {command.argument_hint}" if command.argument_hint else "")
             table.add_row(escape(usage), escape(command.description) + hidden, escape(agent.tools.rel(command.path)))
         c.print(table)
@@ -767,6 +779,27 @@ def web_status(agent: Agent) -> str:
 LONG_REQUEST = 30  # seconds: a request this long sends a notification when it's done (notification hooks)
 
 
+def git_command(agent: Agent, cmd: str, arg: str) -> None:
+    """/commit, /review and /pr (a command of your own with the same name replaces them)."""
+    c = agent.console
+    if cmd == "/commit":
+        gitflow.commit_command(agent, arg)
+    elif cmd == "/pr":
+        gitflow.pr_command(agent, arg)
+    else:
+        try:
+            with c.status("Collecting the changes…", spinner="dots"):
+                prompt = gitflow.review_prompt(agent, arg)
+        except gitflow.GitError as e:
+            c.print(f"[yellow]{escape(str(e))}[/]")
+            return
+        agent.no_changes = "This is a review, so nothing can be changed: report what should change instead."
+        try:
+            run_safely(agent, prompt)
+        finally:
+            agent.no_changes = ""
+
+
 def run_safely(agent: Agent, text: str) -> None:
     started = time.monotonic()
     try:
@@ -900,6 +933,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         agent.tools.show_todos()
     elif cmd == "/init":
         run_safely(agent, INIT_PROMPT)
+    elif cmd in REPLACEABLE and cmd[1:] not in agent.extensions().commands:
+        git_command(agent, cmd, arg)
     elif cmd[1:] in agent.extensions().commands:
         command = agent.extensions().commands[cmd[1:]]
         c.print(f"[dim]/{escape(command.name)} from {escape(agent.tools.rel(command.path))}[/]")
