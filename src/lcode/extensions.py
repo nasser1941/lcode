@@ -286,7 +286,7 @@ def approvals_path() -> Path:
 def project_files(cwd: Path) -> tuple[Path, list[Path]]:
     """The repository's root and the files of its commands, skills and agents."""
     root = work_tree_for(cwd)
-    files: list[Path] = []
+    files: list[Path] = [root / ".lcode" / "settings.toml"] if (root / ".lcode" / "settings.toml").is_file() else []
     for folder in PROJECT_FOLDERS:
         base = root / folder
         if not base.is_dir():
@@ -359,6 +359,21 @@ def describe(cwd: Path) -> list[str]:
         lines.append(f"skills: {', '.join(project_skills)}")
     if agents:
         lines.append(f"agents: {', '.join(agents)}")
+    settings = root / ".lcode" / "settings.toml"
+    if settings.is_file():
+        from lcode.hooks import HookError, HookSet, Rules, read_toml
+
+        try:
+            data = read_toml(settings)
+            hook_set, rules = HookSet(), Rules()
+            hook_set.add(data, "")
+            rules.add(data, "")
+            commands = sorted({h.command.split()[0] for h in hook_set.hooks if h.command.split()})
+            parts = [f"{len(hook_set.hooks)} hook(s) running {', '.join(commands)}" if hook_set.hooks else ""]
+            parts.append(f"{len(rules.allow)} allow and {len(rules.deny)} deny rule(s)" if rules else "")
+            lines.append("settings: " + "; ".join(p for p in parts if p) if any(parts) else "settings: (empty)")
+        except HookError as e:
+            lines.append(f"settings: {e}")
     return lines
 
 
@@ -378,8 +393,8 @@ def trust_project(cwd: Path, console: Console, interactive: bool) -> bool:
     for line in describe(cwd) or ["(files in " + ", ".join(PROJECT_FOLDERS) + ")"]:
         console.print(f"  {escape(line)}")
     console.print(
-        "[dim]They can steer the model and include scripts it may run (commands still ask first, unless "
-        "you allow them).[/]"
+        "[dim]They can steer the model and include scripts it may run, and its settings can run hooks "
+        "(shell commands) on lcode's events.[/]"
     )
     try:
         answer = input("  Use them? [y/N] ").strip().lower()

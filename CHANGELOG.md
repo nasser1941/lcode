@@ -6,6 +6,25 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Hooks: shell commands that run on lcode's events (`before_tool`, `after_tool`, `after_request`,
+  `session_start`, `notification`), filtered by tool and file, with the event as JSON on stdin. A
+  `before_tool` hook that exits with code 2 blocks the call and tells the model why; an
+  `after_tool` hook's output reaches the model when it fails (a linter) or with `feedback = true`.
+  Notification hooks run when lcode waits for you and when a long request is done.
+- Permission rules: `[permissions]` allow and deny lists for shell commands, file edits, web
+  domains and MCP tools, checked before lcode asks. Deny always wins, even in `yolo` mode and for
+  read-only commands, and is enforced for subagents too.
+- Both go in `config.toml` or a repository's `.lcode/settings.toml`, which is used only once
+  approved (and approved again after any change). `lcode doctor` lists them. See
+  [Hooks and permission rules](https://nasser1941.github.io/lcode/hooks/), with recipes for ruff,
+  prettier, blocking force-pushes, running tests and desktop notifications.
+
+### Fixed
+
+- `lcode config set` no longer drops tables you added to `config.toml` by hand.
+
 ## [0.14.0] - 2026-10-05
 
 ### Added

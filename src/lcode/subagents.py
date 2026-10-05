@@ -368,14 +368,24 @@ class Relay:
     def mode(self) -> str:
         return self.perms.mode
 
-    def request(self, key: str, kind: str, title: str, body) -> tuple[bool, str]:
+    @property
+    def rules(self):
+        return self.perms.rules
+
+    def rule(self, kind: str, target: str):
+        return self.perms.rule(kind, target)
+
+    def request(self, key: str, kind: str, title: str, body, target: str = "") -> tuple[bool, str]:
+        verdict = self.perms.rule(kind, target)
+        if verdict is not None:
+            return verdict
         if not self.perms.needs_prompt(key, kind):
             return True, ""
         title = f"{self.label} › {title}"
         if self.broker and threading.current_thread() is not threading.main_thread():
-            return self.broker.ask(key, kind, title, body)
+            return self.broker.ask(key, kind, title, body, target)
         with self.pause():
-            return self.perms.request(key, kind, title, body)
+            return self.perms.request(key, kind, title, body, target)
 
 
 # ----------------------------------------------------------------------------- one subagent
@@ -543,7 +553,8 @@ class Run:
         shown = patch if len(patch) <= 12_000 else patch[:12_000] + "\n... (diff truncated for display)\n"
         body = Syntax(shown, "diff", theme="monokai", word_wrap=True)
         title = f"Apply the {self.kind.name} agent's changes to {len(files)} file{'' if len(files) == 1 else 's'}"
-        ok, feedback = parent.perms.request("edit", "edit", title, body)
+        targets = " ".join(files)
+        ok, feedback = parent.perms.request("edit", "edit", title, body, targets)
         if not ok:
             return f"[Its changes were NOT applied. {feedback}]"
         parent.checkpoint()
