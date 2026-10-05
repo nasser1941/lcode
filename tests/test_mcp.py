@@ -556,3 +556,18 @@ def test_gpu_tools_run_to_completion(make_agent, tmp_path, monkeypatch):
     agent.run_turn("make an image")
     assert sent == [{"a": 1, "b": 2, "wait": True}]
     agent.mcp.close()
+
+
+def test_input_prompts_show_their_default(monkeypatch):
+    import io
+
+    from rich.console import Console
+
+    from lcode.mcp.catalog import Input
+    from lcode.mcp.commands import _ask
+
+    console = Console(file=io.StringIO(), force_terminal=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+    monkeypatch.setattr("builtins.input", lambda *args: "")
+    assert _ask(Input("AWS_REGION", "AWS region", default="us-east-1"), console) == "us-east-1"
+    assert "AWS region [us-east-1]: " in console.file.getvalue()  # not swallowed as rich markup

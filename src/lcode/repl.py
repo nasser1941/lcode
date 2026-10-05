@@ -18,6 +18,7 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Group
+from rich.markdown import Markdown
 from rich.markup import escape
 from rich.panel import Panel
 from rich.rule import Rule
@@ -55,7 +56,8 @@ COMMANDS = {
     "/models": "List models and how they fit this machine",
     "/think": "Toggle model reasoning on/off",
     "/verbose": "Toggle showing the model's reasoning text",
-    "/mode": "Permission mode: ask | auto-edit | yolo (Shift+Tab cycles)",
+    "/plan": "Plan before changing anything: /plan <request>, or /plan to show the approved plan",
+    "/mode": "Permission mode: ask | plan | auto-edit | yolo (Shift+Tab cycles)",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
     "/exit": "Quit",
@@ -118,7 +120,7 @@ def build_session(agent: Agent) -> PromptSession:
     def toolbar():
         s = agent.settings
         pct = 100 * agent.ctx_used / s.context
-        color = {"ask": "ansigreen", "auto-edit": "ansiyellow", "yolo": "ansired"}[agent.perms.mode]
+        color = {"ask": "ansigreen", "plan": "ansicyan", "auto-edit": "ansiyellow", "yolo": "ansired"}[agent.perms.mode]
         return HTML(
             f" <b>{html.escape(s.model)}</b> · ctx {format_tokens(agent.ctx_used)}/{format_tokens(s.context)} "
             f"({pct:.0f}%) · mode <{color}>{agent.perms.mode}</{color}> (shift+tab) · "
@@ -772,6 +774,20 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
     elif cmd == "/verbose":
         s.show_thinking = not s.show_thinking
         c.print(f"Showing reasoning text: {'on' if s.show_thinking else 'off'}.")
+    elif cmd == "/plan":
+        if not arg:
+            if agent.plan:
+                c.print(Panel(Markdown(agent.plan), title="Approved plan", title_align="left", border_style="cyan"))
+            else:
+                c.print(
+                    "No approved plan in this session. [bold]/plan <request>[/] works out a plan first, without "
+                    "changing anything (or Shift+Tab to plan mode)."
+                )
+            return True
+        agent.perms.mode = "plan"
+        c.print("[cyan]Plan mode:[/] the model can look around but not change anything until you approve its plan.")
+        c.print(Rule(style="dim"))
+        run_safely(agent, arg)
     elif cmd == "/mode":
         if arg in PERMISSION_MODES:
             agent.perms.mode = arg

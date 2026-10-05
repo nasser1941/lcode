@@ -21,7 +21,7 @@ else:
     STATE_DIR = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "lcode"
 
 DEFAULT_MODEL = "qwen3.6-35b"
-PERMISSION_MODES = ("ask", "auto-edit", "yolo")
+PERMISSION_MODES = ("ask", "plan", "auto-edit", "yolo")  # Shift+Tab cycles in this order
 WEB_MODES = ("on", "ask", "off")
 SEARCH_BACKENDS = ("auto", "ollama", "brave", "tavily", "searxng")
 MCP_TOOL_MODES = ("auto", "direct", "search")
@@ -35,7 +35,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "num_batch": (None, int, "prompt batch size; larger reads prompts faster but needs more VRAM"),
     "keep_alive": ("30m", str, "how long Ollama keeps the model loaded after the last request"),
     "ollama_host": ("http://localhost:11434", str, "Ollama server URL"),
-    "permission_mode": ("ask", str, "ask | auto-edit | yolo"),
+    "permission_mode": ("ask", str, "ask | plan | auto-edit | yolo"),
     "think": (True, bool, "let the model reason before answering (slower, better)"),
     "web": ("on", str, "web search and page fetching for the model: on | ask | off"),
     "search_backend": ("auto", str, "auto | ollama | brave | tavily | searxng (keys come from environment variables)"),

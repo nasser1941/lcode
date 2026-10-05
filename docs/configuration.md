@@ -20,7 +20,7 @@ lcode config path                      # print the file location
 | `num_batch` | 512 | Prompt batch size. Larger reads prompts faster but needs more GPU memory |
 | `keep_alive` | `30m` | How long Ollama keeps the model in memory after the last request |
 | `ollama_host` | `http://localhost:11434` | Ollama server URL |
-| `permission_mode` | `ask` | `ask`, `auto-edit` or `yolo` |
+| `permission_mode` | `ask` | `ask`, `plan`, `auto-edit` or `yolo` |
 | `think` | `true` | Let the model reason before answering |
 | `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |
 | `search_backend` | `auto` | `auto`, `ollama`, `brave`, `tavily` or `searxng`; `auto` uses the first one configured |

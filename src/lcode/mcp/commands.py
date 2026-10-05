@@ -216,9 +216,9 @@ def _ask(spec: catalog.Input, console: Console) -> str | None:
         source = " ".join(spec.from_command)
         if Confirm.ask(f"  Use the token from `{source}`?", default=True, console=console):
             return suggestion
-    default = f" [{spec.default}]" if spec.default else ""
+    default = f" \\[{escape(spec.default)}]" if spec.default else ""  # escaped, or rich takes it for markup
     while True:
-        value = console.input(f"  {spec.prompt}{default}: ", password=spec.secret).strip()
+        value = console.input(f"  {escape(spec.prompt)}{default}: ", password=spec.secret).strip()
         value = value or spec.default or ""
         if value or spec.optional:
             return value or None
