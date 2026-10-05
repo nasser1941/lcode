@@ -463,6 +463,7 @@ class Run:
         child = Agent(parent.ollama, settings, cwd, console=Console(file=io.StringIO(), width=120))
         child.perms = self.relay  # type: ignore[assignment]
         child.sandbox = parent.sandbox
+        child.jobs = parent.jobs  # its background commands belong to the session
         if not self.worktree:
             child.checkpoints = parent.checkpoints  # changes in the shared tree are part of the running request
         child.mcp = None

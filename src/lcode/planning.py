@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 PLAN_MODE_TOOLS = frozenset(
     {
         "read_file", "list_dir", "glob", "grep", "bash", "web_search", "web_fetch", "view_image", "todo_write",
-        "agent", "memory", "present_plan", "mcp_find_tools", "skill", "lsp", "repo_map", "search_code",
+        "agent", "memory", "present_plan", "mcp_find_tools", "skill", "lsp", "repo_map", "search_code", "bash_output",
     }
 )  # fmt: skip
 
@@ -103,6 +103,8 @@ def present(agent: Agent, title: str, plan: str) -> str:
         if not agent.interactive:
             return "The plan was shown to the user, who will review it later. Stop here and don't change anything."
         c.print(CHOICES)
+        if agent.perms.on_prompt:
+            agent.perms.on_prompt(f"Plan: {title}")
         try:
             answer = input("  > ").strip()
         except EOFError:

@@ -62,6 +62,7 @@ COMMANDS = {
     "/mode": "Permission mode: ask | plan | auto-edit | yolo (Shift+Tab cycles)",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
+    "/jobs": "Background commands the model started: /jobs, /jobs stop <id>",
     "/commit": "Commit the changes with a message in the repository's style, after you approve it",
     "/review": "Review the uncommitted changes, or the branch against a base: /review [base]",
     "/pr": "Push the branch and open a GitHub pull request, after you approve it: /pr [base] [notes]",
@@ -776,7 +777,28 @@ def web_status(agent: Agent) -> str:
     return f"{agent.settings.web} · {search}"
 
 
-LONG_REQUEST = 30  # seconds: a request this long sends a notification when it's done (notification hooks)
+def jobs_command(agent: Agent, arg: str) -> None:
+    """List the background commands, or stop one: /jobs stop <id>."""
+    from lcode.jobs import JobError, describe
+
+    c = agent.console
+    word, _, job_id = arg.partition(" ")
+    if word == "stop":
+        try:
+            job = agent.jobs.stop(job_id or "?")
+        except JobError as e:
+            c.print(f"[red]{escape(str(e))}[/]")
+            return
+        c.print(f"Stopped {escape(describe(job))}")
+        return
+    if not agent.jobs.items:
+        c.print("No background commands. The model starts them with bash(background=true), e.g. a dev server.")
+        return
+    for job in agent.jobs.items.values():
+        style = "green" if job.running else "dim"
+        c.print(f"[{style}]{escape(describe(job))}[/]")
+    if agent.jobs.running():
+        c.print("[dim]/jobs stop <id> stops one; they all stop when the session ends.[/]")
 
 
 def git_command(agent: Agent, cmd: str, arg: str) -> None:
@@ -810,8 +832,7 @@ def run_safely(agent: Agent, text: str) -> None:
         agent.console.print(f"[red]{e}[/]")
     finally:
         agent.save()
-        if time.monotonic() - started > LONG_REQUEST:
-            agent.hooks.notify(f"lcode finished: {sessions.title_from([{'role': 'user', 'content': text}])}", agent.cwd)
+        agent.finished(text, time.monotonic() - started)
 
 
 def session_start(agent: Agent) -> None:
@@ -931,6 +952,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
             c.print(f"[red]Not a directory: {p}[/]")
     elif cmd == "/todos":
         agent.tools.show_todos()
+    elif cmd == "/jobs":
+        jobs_command(agent, arg)
     elif cmd == "/init":
         run_safely(agent, INIT_PROMPT)
     elif cmd in REPLACEABLE and cmd[1:] not in agent.extensions().commands:

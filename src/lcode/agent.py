@@ -22,11 +22,12 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
-from lcode import catalog, codesearch, extensions, limits, planning, repomap, sessions, subagents, vision, web
+from lcode import catalog, codesearch, extensions, limits, notify, planning, repomap, sessions, subagents, vision, web
 from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.checkpoints import Checkpoints
 from lcode.config import format_tokens
+from lcode.jobs import Jobs
 from lcode.mcp import McpManager
 from lcode.ollama import Ollama, OllamaError
 from lcode.permissions import Permissions
@@ -212,6 +213,8 @@ class Settings:
     lsp: str = "off"  # auto: use the installed language servers (lcode.lsp)
     repo_map: bool = False  # the repository map (lcode.repomap)
     embed_model: str = "off"  # semantic code search (lcode.codesearch): auto, off or a model
+    notify: bool = False  # desktop notifications after long requests (lcode.notify)
+    notify_after: int = 30  # seconds: a request this long notifies when it's done or waits for an answer
     max_parallel_agents: int = 1
 
 
@@ -256,6 +259,8 @@ class Agent:
         self.no_changes = ""  # set during a review: why nothing may change (read-only tools only)
         self.cancel: threading.Event | None = None  # set from another thread to stop
         self.on_tool = None  # called with (name, arguments) before each tool runs
+        self.jobs = Jobs()  # background commands (shared with subagents)
+        self.turn_started = 0.0  # when the running request started (time.monotonic)
         self.on_event: Callable[[dict], None] | None = None  # each step and tool result, for --output stream-json
         self.on_delta: Callable[[str, str], None] | None = None  # ("text" or "thinking", piece) as it streams
         self.current_call = ""  # id of the tool call that's running, so a permission request can name it
@@ -746,6 +751,7 @@ class Agent:
         return name
 
     def run_turn(self, user_text: str) -> None:
+        self.turn_started = time.monotonic()
         self.checkpoints.begin_turn(self.session_id, user_text, len(self.messages))
         try:
             self._run_turn(user_text)
@@ -759,6 +765,27 @@ class Agent:
                         self.console.print(
                             Text(f"  ⎿ after_request hook ({outcome.code}): {outcome.output[:500]}", style=style)
                         )
+
+    def waiting(self, title: str) -> None:
+        """lcode waits for the user's answer: tell them, if they've likely walked away (lcode.notify)."""
+        if self.hooks.for_event("notification"):
+            self.hooks.notify(f"lcode needs you: {title}", self.cwd)
+        if (
+            self.settings.notify
+            and self.interactive
+            and time.monotonic() - self.turn_started >= self.settings.notify_after
+        ):
+            notify.desktop("lcode needs you", title)
+
+    def finished(self, request: str, seconds: float) -> None:
+        """A request is done: after a long one, tell the user."""
+        if seconds < self.settings.notify_after:
+            return
+        title = sessions.title_from([{"role": "user", "content": request}])
+        if self.hooks.for_event("notification"):
+            self.hooks.notify(f"lcode finished: {title}", self.cwd)
+        if self.settings.notify and self.interactive:
+            notify.desktop("lcode is done", f"{title} ({seconds:.0f}s)")
 
     def sandbox_root(self) -> Path | None:
         """The folder the model is limited to while the sandbox is on (None when it's off)."""

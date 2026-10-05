@@ -40,6 +40,8 @@ lcode config path                      # print the file location
 | `prune` | `true` | When the context is 85% full, first remove old tool output, and summarize the conversation only if that's not enough ([how](how-it-works.md#context-management)) |
 | `subagents` | `true` | Let the model hand tasks to [subagents](agents.md) with their own context |
 | `max_parallel_agents` | `1` | Subagents that run at the same time; more needs `OLLAMA_NUM_PARALLEL` on the Ollama server ([details](agents.md#several-at-once)) |
+| `notify` | `true` | A desktop [notification](usage.md#notifications) when a long request is done or waits for your answer |
+| `notify_after` | `30` | Seconds a request runs before it notifies |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
 
 Besides these settings, `config.toml` can hold [hooks](hooks.md) (`[[hooks]]`) and
