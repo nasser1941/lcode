@@ -92,6 +92,7 @@ nav:
       - Quickstart: quickstart.md
   - Guide:
       - Using lcode: usage.md
+      - Memory: memory.md
       - Models & context windows: models.md
       - Benchmarking models: bench.md
       - MCP servers: mcp.md

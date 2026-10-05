@@ -67,11 +67,16 @@ class Permissions:
         self.mode = PERMISSION_MODES[(PERMISSION_MODES.index(self.mode) + 1) % len(PERMISSION_MODES)]
 
     def request(self, key: str, kind: str, title: str, body: RenderableType) -> tuple[bool, str]:
-        """Ask the user. kind is 'edit', 'bash', 'web' or 'mcp'. Returns (allowed, message for the model)."""
-        if self.mode == "yolo" or key in self.always or (kind == "edit" and self.mode == "auto-edit"):
+        """Ask the user. kind is 'edit', 'bash', 'web', 'mcp' or 'memory'. Returns (allowed, message for the model).
+
+        Memory notes follow the memory setting rather than the mode: with `memory = ask`, even yolo asks.
+        """
+        if key in self.always or (self.mode == "yolo" and kind != "memory"):
+            return True, ""
+        if kind == "edit" and self.mode == "auto-edit":
             return True, ""
         self.console.print(Panel(body, title=title, title_align="left", border_style="yellow"))
-        scope = "file edits" if kind == "edit" else key.split(":", 1)[-1]
+        scope = {"edit": "file edits", "memory": "memory notes"}.get(kind) or key.split(":", 1)[-1]
         if kind == "mcp":
             scope = scope.replace(":", " › ", 1)
         try:

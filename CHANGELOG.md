@@ -6,6 +6,18 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Memory across sessions: lcode keeps short notes that later sessions load, only key knowledge and
+  not whole conversations. The model saves them with its new `memory` tool (and updates or deletes
+  them), you add them with `/remember`, and when a session ends (on quit, `/clear` or before
+  compaction) one quick question asks the model what from it is worth remembering. Notes are
+  per repository, shared by its git worktrees, plus a few for every repository; they're plain
+  markdown files, managed with `/memory`. The index in the system prompt is capped at about 2,000
+  tokens. Notes that look like they contain secrets are never saved. The `memory` setting is `ask`
+  (confirm each note, the default), `auto` or `off`; `--no-memory` turns it off for a session.
+  See [Memory](https://nasser1941.github.io/lcode/memory/).
+
 ## [0.6.1] - 2026-10-01
 
 ### Fixed
