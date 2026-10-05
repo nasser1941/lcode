@@ -6,6 +6,21 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-06
+
+### Added
+
+- `lcode -p "…" --output json` prints one result object (status, answer, tool calls, files
+  changed, token usage); `--output stream-json` prints an event per model step and tool result,
+  then the result. `--max-steps` and `--allowed-tools` limit a run, and the exit code says how it
+  ended. Without a person to ask, anything that needs permission is refused.
+- A Python API: `from lcode import Session`, with `run()`, `stream()` and an `approve` callback
+  for permission requests. See `examples/api/fix_tests.py`.
+- A GitHub Action for self-hosted runners (`uses: nasser1941/lcode@v0.18.0`). It answers `@lcode`
+  in issues and pull requests from the repository's owners, members and collaborators, proposes
+  changes as a pull request (or pushes them to the pull request's branch), and can review pull
+  requests. See [Automation](https://nasser1941.github.io/lcode/automation/).
+
 ## [0.17.0] - 2026-10-06
 
 ### Added
@@ -419,7 +434,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/nasser1941/lcode/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/nasser1941/lcode/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/nasser1941/lcode/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/nasser1941/lcode/compare/v0.14.0...v0.15.0
