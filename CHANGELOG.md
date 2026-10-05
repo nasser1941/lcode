@@ -6,6 +6,19 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Ready-made MCP servers for data and ML platforms:
+  - `lcode mcp add metabase` connects to the MCP server built into Metabase 60 and later, with browser
+    sign-in, so the model sees your data with your Metabase permissions.
+  - `lcode mcp add encord` and `lcode mcp add valohai`: those platforms have no MCP server of their own,
+    so lcode now ships `lcode-mcp-encord` (projects, datasets, ontologies, labeling progress, tasks and
+    labels, built on the Encord SDK) and `lcode-mcp-valohai` (executions with their logs, metrics and
+    outputs, pipelines). Both are read-only unless started with `--allow-writes`, which adds
+    assigning tasks and setting priorities (Encord) or starting and stopping executions (Valohai), and
+    both work with other MCP clients too. See [MCP servers](https://nasser1941.github.io/lcode/mcp/#encord).
+- Catalog questions that ask for an address now accept it without `https://`.
+
 ## [0.10.0] - 2026-10-05
 
 ### Added

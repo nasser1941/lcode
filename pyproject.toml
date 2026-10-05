@@ -35,6 +35,9 @@ dependencies = [
     "tomli>=2.0; python_version < '3.11'",
 ]
 
+[project.optional-dependencies]
+encord = ["encord>=0.1.200"]  # for lcode-mcp-encord
+
 [project.urls]
 Homepage = "https://nasser1941.github.io/lcode/"
 Documentation = "https://nasser1941.github.io/lcode/"
@@ -44,6 +47,8 @@ Changelog = "https://github.com/nasser1941/lcode/blob/main/CHANGELOG.md"
 
 [project.scripts]
 lcode = "lcode.cli:main"
+lcode-mcp-valohai = "lcode.servers.valohai:main"
+lcode-mcp-encord = "lcode.servers.encord:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
