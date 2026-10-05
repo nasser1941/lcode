@@ -53,6 +53,8 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   and sees the errors an edit introduced right away.
 - **Commands and skills.** Your own `/commands` as prompt templates, and skills in the
   [Agent Skills](https://agentskills.io) format that the model loads only when a task needs them.
+- **Hooks and rules.** Format every edited file, block force-pushes, run the tests after each
+  request: shell hooks on lcode's events, and allow and deny lists that hold even in `yolo` mode.
 - **Plan mode.** `/plan <request>` or Shift+Tab: the model explores read-only and presents a plan;
   you approve, edit or send it back before anything changes.
 - **Undo.** lcode saves a checkpoint before the model changes files; `/undo` takes back the last

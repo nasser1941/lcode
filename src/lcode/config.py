@@ -187,5 +187,10 @@ def save(updates: dict, path: Path | None = None, remove: tuple[str, ...] = ()) 
         if data.get(k) is not None:
             v = data[k]
             lines.append(f"{k} = {str(v).lower() if isinstance(v, bool) else json.dumps(v)}")
+    tables = ""  # [[hooks]], [permissions] and anything else after the settings stay as they were
+    if path.is_file():
+        text = path.read_text()
+        m = re.search(r"^\s*\[", text, re.M)
+        tables = text[m.start() :] if m else ""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n" + ("\n" + tables.rstrip() + "\n" if tables.strip() else ""))

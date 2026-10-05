@@ -368,7 +368,16 @@ def cmd_doctor(args) -> None:
             line("", f"{n} × {slots[1]} context may not fit in memory here; {slots[0]} would", None)
         for problem in problems:
             line("", problem, None)
-    from lcode import codesearch, extensions, lsp
+    from lcode import codesearch, extensions, hooks, lsp
+
+    hook_set, rules = hooks.load(Path.cwd(), extensions.status(Path.cwd()) == "approved")
+    if hook_set.hooks or rules or hook_set.problems:
+        events = sorted({h.event for h in hook_set.hooks})
+        summary = f"{len(hook_set.hooks)} hook(s) ({', '.join(events)})" if hook_set.hooks else "no hooks"
+        summary += f", {len(rules.allow)} allow and {len(rules.deny)} deny rule(s)"
+        line("Hooks", summary, not hook_set.problems or None)
+        for problem in hook_set.problems:
+            line("", problem, None)
     from lcode.checkpoints import work_tree_for
 
     if cfg["embed_model"] == "off":
@@ -602,6 +611,13 @@ def cmd_chat(args) -> None:
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.interactive = not args.prompt
+    from lcode import hooks
+
+    agent.hooks, agent.perms.rules = hooks.load(cwd, trust_project)
+    for problem in agent.hooks.problems:
+        console.print(f"[yellow]Settings: {problem}[/]")
+    if agent.hooks.for_event("notification"):
+        agent.perms.on_prompt = lambda title: agent.hooks.notify(f"lcode needs you: {title}", agent.cwd)
     if cfg["lsp"] == "auto":
         from lcode import lsp
         from lcode.checkpoints import work_tree_for

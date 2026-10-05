@@ -101,6 +101,7 @@ nav:
       - Benchmarking models: bench.md
       - MCP servers: mcp.md
       - Sandbox: sandbox.md
+      - Hooks and permission rules: hooks.md
       - Configuration: configuration.md
   - Reference:
       - How it works: how-it-works.md

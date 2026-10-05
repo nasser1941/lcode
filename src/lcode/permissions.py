@@ -64,9 +64,22 @@ def is_read_only(command: str) -> bool:
 
 class Permissions:
     def __init__(self, console: Console, mode: str = "ask"):
+        from lcode.hooks import Rules
+
         self.console = console
         self.mode = mode
         self.always: set[str] = set()
+        self.rules = Rules()  # allow and deny lists from the settings (lcode.hooks)
+        self.on_prompt = None  # called with the title before lcode asks the user (notification hooks)
+
+    def rule(self, kind: str, target: str) -> tuple[bool, str] | None:
+        """A rule's verdict on an action: (allowed, message for the model), or None when no rule matches."""
+        verdict, which = self.rules.check(kind, target) if target else (None, "")
+        if verdict == "deny":
+            return False, f"A deny rule blocks this: {which}. Don't try it another way; tell the user if it's needed."
+        if verdict == "allow":
+            return True, ""
+        return None
 
     def cycle(self) -> None:
         self.mode = PERMISSION_MODES[(PERMISSION_MODES.index(self.mode) + 1) % len(PERMISSION_MODES)]
@@ -76,13 +89,18 @@ class Permissions:
             return False
         return not (kind == "edit" and self.mode == "auto-edit")
 
-    def request(self, key: str, kind: str, title: str, body: RenderableType) -> tuple[bool, str]:
+    def request(self, key: str, kind: str, title: str, body: RenderableType, target: str = "") -> tuple[bool, str]:
         """Ask the user. kind is 'edit', 'bash', 'web', 'mcp' or 'memory'. Returns (allowed, message for the model).
 
         Memory notes follow the memory setting rather than the mode: with `memory = ask`, even yolo asks.
         """
+        verdict = self.rule(kind, target)
+        if verdict is not None:
+            return verdict
         if not self.needs_prompt(key, kind):
             return True, ""
+        if self.on_prompt:
+            self.on_prompt(title)
         self.console.print(Panel(body, title=title, title_align="left", border_style="yellow"))
         scope = {"edit": "file edits", "memory": "memory notes"}.get(kind) or key.split(":", 1)[-1]
         if kind == "mcp":

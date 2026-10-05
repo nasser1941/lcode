@@ -216,6 +216,9 @@ class Agent:
         self.checkpoints = Checkpoints(self.console, settings.checkpoints)
         self.mcp: McpManager | None = None  # set by the CLI when MCP servers are configured
         self.lsp = None  # an lcode.lsp.Manager, set by the CLI when language servers are installed
+        from lcode.hooks import HookSet
+
+        self.hooks = HookSet()  # set by the CLI from the settings (lcode.hooks)
         self._repo_map: tuple[Path, repomap.RepoMap, str] | None = None
         self._code_index: tuple[Path, codesearch.Index | None] | None = None
         self.sandbox = (
@@ -722,6 +725,14 @@ class Agent:
             self._run_turn(user_text)
         finally:
             self.checkpoints.end_turn()
+            if self.hooks.hooks and self.allowed_tools is None:
+                payload = {"request": user_text[:2000], "cwd": str(self.cwd), "session": self.session_id}
+                for outcome in self.hooks.run("after_request", payload, self.cwd):
+                    style = "dim" if outcome.code == 0 else "yellow"
+                    if outcome.output or outcome.code:
+                        self.console.print(
+                            Text(f"  ⎿ after_request hook ({outcome.code}): {outcome.output[:500]}", style=style)
+                        )
 
     def sandbox_root(self) -> Path | None:
         """The folder the model is limited to while the sandbox is on (None when it's off)."""

@@ -147,7 +147,8 @@ Read-only commands run without asking: `ls`, `cat`, `head`, `tail`, `grep`, `rg`
 output, chain commands or run subshells. A `cd <folder> &&` in front is fine.
 
 When asked, answer ++y++ (once), ++a++ (always, for this command or for all edits, until you quit)
-or ++n++. Text after ++n++ goes to the model as instructions: `n run the tests with -x first`.
+or ++n++. For lasting answers, write [permission rules](hooks.md#permission-rules): allow lists and
+deny lists, per user or per repository; deny always wins, even in `yolo`. Text after ++n++ goes to the model as instructions: `n run the tests with -x first`.
 
 !!! warning "yolo mode"
 

@@ -393,6 +393,15 @@ class Toolbox:
             raise ToolError(f"{path} is outside the project ({root}); with the sandbox on, that's all you can use")
         return p
 
+    def project_rel(self, p: Path) -> str:
+        """A path relative to the repository's root, as permission rules and hooks see it."""
+        from lcode.checkpoints import work_tree_for
+
+        try:
+            return p.resolve().relative_to(work_tree_for(self.agent.cwd)).as_posix()
+        except ValueError:
+            return str(p)
+
     def rel(self, p: Path) -> str:
         try:
             return str(p.relative_to(self.agent.cwd)) or "."
@@ -400,6 +409,32 @@ class Toolbox:
             return str(p)
 
     def run(self, name: str, args: dict) -> str:
+        hooks = self.agent.hooks
+        if not hooks.hooks:
+            return self._run(name, args)
+        path = str(self.resolve(args["path"])) if isinstance(args.get("path"), str) and args.get("path") else ""
+        payload = {"tool": name, "arguments": args, "path": path, "cwd": str(self.agent.cwd)}
+        for outcome in hooks.run("before_tool", payload, self.agent.cwd, name, path):
+            if outcome.code == 2:  # the hook blocks the call
+                self.console.print(Text(f"  ⎿ blocked by a hook: {outcome.output[:200]}", style="yellow"))
+                return f"Error: a hook blocked this {name} call: {outcome.output or 'no reason given'}"
+            if outcome.code != 0:
+                self.console.print(
+                    Text(f"  ⎿ a before_tool hook failed ({outcome.code}): {outcome.output[:200]}", style="yellow")
+                )
+        result = self._run(name, args)
+        notes = []
+        for outcome in hooks.run("after_tool", {**payload, "result": result[:4000]}, self.agent.cwd, name, path):
+            if outcome.code != 0 or outcome.hook.feedback:
+                status = "" if outcome.code == 0 else f", exit code {outcome.code}"
+                notes.append(
+                    f"[A hook ran after this ({outcome.hook.command[:60]}{status}):\n{outcome.output or '(no output)'}]"
+                )
+            if outcome.code != 0:
+                self.console.print(Text(f"  ⎿ hook exit code {outcome.code}: {outcome.output[:200]}", style="yellow"))
+        return result + "".join("\n" + n for n in notes)
+
+    def _run(self, name: str, args: dict) -> str:
         allowed = self.agent.allowed_tools
         if allowed is not None and name not in allowed:
             return f"Error: {name} isn't available to you. Available: {', '.join(sorted(allowed))}"
@@ -540,7 +575,8 @@ class Toolbox:
         if not mcp.allowed(state, tool):
             body = Syntax(json.dumps(arguments, indent=2, ensure_ascii=False), "json", theme="monokai", word_wrap=True)
             title = f"Use {state.name} › {tool['name']}"
-            ok, feedback = self.agent.perms.request(f"mcp:{state.name}:{tool['name']}", "mcp", title, body)
+            key = f"mcp:{state.name}:{tool['name']}"
+            ok, feedback = self.agent.perms.request(key, "mcp", title, body, f"{state.name}:{tool['name']}")
             if not ok:
                 return feedback
         if mcp.needs_gpu(state, tool):
@@ -682,7 +718,7 @@ class Toolbox:
             preview = "\n".join(lines[:60]) + (f"\n... ({len(lines) - 60} more lines)" if len(lines) > 60 else "")
             body = Syntax(preview, Syntax.guess_lexer(str(p), content), theme="monokai", line_numbers=True)
         verb = "Overwrite" if exists else "Create"
-        ok, feedback = self.agent.perms.request("edit", "edit", f"{verb} {self.rel(p)}", body)
+        ok, feedback = self.agent.perms.request("edit", "edit", f"{verb} {self.rel(p)}", body, self.project_rel(p))
         if not ok:
             return feedback
         before = p.read_text(errors="replace") if exists else None
@@ -718,7 +754,8 @@ class Toolbox:
             )
         else:
             new_text = text.replace(old_string, new_string) if replace_all else text.replace(old_string, new_string, 1)
-        ok, feedback = self.agent.perms.request("edit", "edit", f"Edit {self.rel(p)}", self._diff(p, text, new_text))
+        diff = self._diff(p, text, new_text)
+        ok, feedback = self.agent.perms.request("edit", "edit", f"Edit {self.rel(p)}", diff, self.project_rel(p))
         if not ok:
             return feedback
         self.agent.checkpoint()
@@ -745,10 +782,13 @@ class Toolbox:
                 "you can only run read-only commands (such as ls, cat, grep, find, git log, git diff), one at a "
                 "time without pipes into other programs, redirection or chaining"
             )
-        if not is_read_only(command) and not (sandbox and self.agent.perms.mode == "auto-edit"):
+        verdict = self.agent.perms.rule("bash", command)
+        if verdict is not None and not verdict[0]:  # deny rules apply to read-only commands too
+            return verdict[1]
+        if not is_read_only(command) and not (sandbox and self.agent.perms.mode == "auto-edit") and verdict is None:
             body = Syntax(command, "bash", theme="monokai", word_wrap=True)
             where = "in the sandbox" if sandbox else f"in {self.agent.cwd}"
-            ok, feedback = self.agent.perms.request(bash_key(command), "bash", f"Run command ({where})", body)
+            ok, feedback = self.agent.perms.request(bash_key(command), "bash", f"Run command ({where})", body, command)
             if not ok:
                 return feedback
         if not is_read_only(command):
@@ -842,7 +882,7 @@ class Toolbox:
         if settings.web == "off":
             return False, "Web access is turned off (web = off)."
         if settings.web == "ask":
-            return self.agent.perms.request(key, "web", title, Text(detail))
+            return self.agent.perms.request(key, "web", title, Text(detail), key.removeprefix("web:"))
         return True, ""
 
     def t_web_search(self, query: str, max_results: int = 5) -> str:

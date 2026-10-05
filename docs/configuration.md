@@ -40,6 +40,10 @@ lcode config path                      # print the file location
 | `max_parallel_agents` | `1` | Subagents that run at the same time; more needs `OLLAMA_NUM_PARALLEL` on the Ollama server ([details](agents.md#several-at-once)) |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
 
+Besides these settings, `config.toml` can hold [hooks](hooks.md) (`[[hooks]]`) and
+[permission rules](hooks.md#permission-rules) (`[permissions]`); a repository can have its own in
+`.lcode/settings.toml`. `lcode config set` keeps them when it rewrites the file.
+
 Example file:
 
 ```toml

@@ -10,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
@@ -755,7 +756,11 @@ def web_status(agent: Agent) -> str:
     return f"{agent.settings.web} · {search}"
 
 
+LONG_REQUEST = 30  # seconds: a request this long sends a notification when it's done (notification hooks)
+
+
 def run_safely(agent: Agent, text: str) -> None:
+    started = time.monotonic()
     try:
         agent.run_turn(text)
     except KeyboardInterrupt:
@@ -764,6 +769,17 @@ def run_safely(agent: Agent, text: str) -> None:
         agent.console.print(f"[red]{e}[/]")
     finally:
         agent.save()
+        if time.monotonic() - started > LONG_REQUEST:
+            agent.hooks.notify(f"lcode finished: {sessions.title_from([{'role': 'user', 'content': text}])}", agent.cwd)
+
+
+def session_start(agent: Agent) -> None:
+    """session_start hooks: their output is shown, and with feedback = true also given to the model."""
+    for outcome in agent.hooks.run("session_start", {"cwd": str(agent.cwd), "session": agent.session_id}, agent.cwd):
+        if outcome.output:
+            agent.console.print(Text(f"session_start hook: {outcome.output[:1000]}", style="dim"))
+        if outcome.hook.feedback and outcome.output:
+            agent.messages[0]["content"] += f"\n# From a session_start hook\n{outcome.output}\n"
 
 
 def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
@@ -1000,6 +1016,7 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
         info = choose_session(agent, resume)
         if info:
             resume_session(agent, info)
+    session_start(agent)
     if prompt:
         run_safely(agent, prompt)
         return
