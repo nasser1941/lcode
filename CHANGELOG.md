@@ -6,6 +6,19 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-05
+
+### Added
+
+- Other model servers: LM Studio, llama.cpp's llama-server, vLLM, MLX's server, or any other
+  server with an OpenAI-compatible API, instead of Ollama. `lcode config set backend lmstudio` (or
+  `llama.cpp`, `vllm`, `mlx`, `openai` with `base_url`); a key can come from `LCODE_API_KEY`. Tool
+  calls, streaming, reasoning (on and off), images and structured answers work as with Ollama.
+  lcode reads the context window from the server, matches the model setting to the models it
+  serves, and moves thinking that a server sends as part of the answer out of it. `lcode doctor`,
+  `lcode models`, `lcode bench` and `lcode index` work with every backend. See
+  [Other model servers](https://nasser1941.github.io/lcode/servers/), with setup for each.
+
 ## [0.15.0] - 2026-10-05
 
 ### Added
@@ -385,7 +398,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/nasser1941/lcode/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/nasser1941/lcode/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/nasser1941/lcode/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/nasser1941/lcode/compare/v0.12.0...v0.13.0

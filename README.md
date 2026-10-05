@@ -172,8 +172,8 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
 
-- [More local backends: LM Studio, llama.cpp, vLLM and MLX](https://github.com/nasser1941/lcode/issues/47)
 - [Git workflow: /commit, /review, /pr and parallel worktrees](https://github.com/nasser1941/lcode/issues/50)
+- [Automation: JSON output, a Python API and a GitHub Action for self-hosted runners](https://github.com/nasser1941/lcode/issues/48)
 - More models in the catalog, and test reports from your hardware ([report one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml))
 
 ## Contributing
