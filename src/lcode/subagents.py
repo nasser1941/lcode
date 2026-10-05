@@ -53,7 +53,19 @@ if TYPE_CHECKING:
     from lcode.permissions import Permissions
 
 READ_ONLY_TOOLS = frozenset(
-    {"read_file", "list_dir", "glob", "grep", "bash", "web_search", "web_fetch", "view_image", "todo_write", "skill"}
+    {
+        "read_file",
+        "list_dir",
+        "glob",
+        "grep",
+        "bash",
+        "web_search",
+        "web_fetch",
+        "view_image",
+        "todo_write",
+        "skill",
+        "lsp",
+    }
 )
 EDIT_TOOLS = frozenset({"write_file", "edit_file"})
 NOT_FOR_SUBAGENTS = frozenset({"agent", "memory"})  # no agents inside agents; only the main session remembers
@@ -442,6 +454,7 @@ class Run:
         if not self.worktree:
             child.checkpoints = parent.checkpoints  # changes in the shared tree are part of the running request
         child.mcp = None
+        child.lsp = parent.lsp
         child._vision = parent._vision
         child.interactive = False
         child.allowed_tools = (kind.tools or parent.tool_names()) - NOT_FOR_SUBAGENTS

@@ -32,6 +32,7 @@ lcode config path                      # print the file location
 | `mcp_tools` | `auto` | How [MCP](mcp.md#context) tool definitions reach the model: `auto`, `direct` or `search` (on demand) |
 | `memory` | `ask` | [Notes that carry over](memory.md) to later sessions: `ask` (confirm each), `auto` or `off` |
 | `skills` | `all` | Which [skills](commands.md#skills) the model is offered: `all` (lcode's folders and the ones other agents share), `lcode` (only `.lcode/skills/` and `~/.config/lcode/skills/`) or `off` |
+| `lsp` | `auto` | Use installed [language servers](lsp.md) for code navigation and errors after edits: `auto` or `off` |
 | `prune` | `true` | When the context is 85% full, first remove old tool output, and summarize the conversation only if that's not enough ([how](how-it-works.md#context-management)) |
 | `subagents` | `true` | Let the model hand tasks to [subagents](agents.md) with their own context |
 | `max_parallel_agents` | `1` | Subagents that run at the same time; more needs `OLLAMA_NUM_PARALLEL` on the Ollama server ([details](agents.md#several-at-once)) |
@@ -79,6 +80,8 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `~/.config/lcode/commands/`, `~/.config/lcode/skills/` | Your [commands and skills](commands.md) (a repository's go in `.lcode/`) |
 | `~/.local/state/lcode/extensions-approved.json` | Repositories whose commands, skills and agents you approved |
 | `~/.config/lcode/agents/` | Your [custom agents](agents.md#custom-agents) (a repository's go in `.lcode/agents/`) |
+| `~/.config/lcode/lsp.json` | Which [language server](lsp.md#settings) to use for a language, or none |
+| `~/.local/state/lcode/lsp-logs/` | Language servers' own output |
 | `~/.local/state/lcode/outputs/` | The full text of long command output that was cut short for the model (kept a week) |
 | `~/.local/state/lcode/limits.json` | Context sizes that ran out of GPU memory on this machine (safe to delete) |
 

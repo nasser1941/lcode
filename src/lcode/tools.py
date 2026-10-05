@@ -200,6 +200,19 @@ MEMORY_SCHEMA = _fn(
     },
     ["action"],
 )
+LSP_SCHEMA = _fn(
+    "lsp",
+    "Ask the language server about code: where a symbol is defined, where it's used, its type or signature, or "
+    "the symbols in a file (or in the whole workspace, by name). More precise than grep, and cheaper on context.",
+    {
+        "action": {"type": "string", "enum": ["definition", "references", "hover", "symbols"]},
+        "path": {"type": "string", "description": "The file (for symbols: leave it out to search the workspace)"},
+        "line": {"type": "integer", "description": "The line (1-based) where the symbol appears"},
+        "symbol": {"type": "string", "description": "The symbol's name on that line"},
+        "query": {"type": "string", "description": "symbols without a path: the name to search for"},
+    },
+    ["action"],
+)
 PRESENT_PLAN_SCHEMA = _fn(
     "present_plan",
     "Plan mode: show the user your plan and ask for approval. Once approved, plan mode ends and you carry it out.",
@@ -215,7 +228,15 @@ PRESENT_PLAN_SCHEMA = _fn(
 )
 TOOL_NAMES = {
     s["function"]["name"]
-    for s in [*SCHEMAS, WEB_SEARCH_SCHEMA, WEB_FETCH_SCHEMA, VIEW_IMAGE_SCHEMA, MEMORY_SCHEMA, PRESENT_PLAN_SCHEMA]
+    for s in [
+        *SCHEMAS,
+        WEB_SEARCH_SCHEMA,
+        WEB_FETCH_SCHEMA,
+        VIEW_IMAGE_SCHEMA,
+        MEMORY_SCHEMA,
+        PRESENT_PLAN_SCHEMA,
+        LSP_SCHEMA,
+    ]
 } | {"agent", "skill"}  # those two have schemas that depend on the session
 
 
@@ -417,6 +438,23 @@ class Toolbox:
 
         return present(self.agent, title, plan)
 
+    # -- language servers
+    def t_lsp(self, action: str, path: str = "", line: int = 0, symbol: str = "", query: str = "") -> str:
+        from lcode.lsp import LspError
+
+        if self.agent.lsp is None:
+            raise ToolError("no language server is available")
+        try:
+            return self.agent.lsp.query(
+                action, self.path(path, read=True) if path else None, int(line or 0), symbol, query
+            )
+        except LspError as e:
+            raise ToolError(str(e)) from e
+
+    def _check(self, p: Path, before: str | None, after: str) -> str:
+        """Errors the language server finds that an edit introduced (lcode.lsp), for the tool result."""
+        return self.agent.lsp.check_edit(p, before, after) if self.agent.lsp is not None else ""
+
     # -- skills
     def t_skill(self, name: str) -> str:
         from lcode.extensions import activate
@@ -602,11 +640,12 @@ class Toolbox:
         ok, feedback = self.agent.perms.request("edit", "edit", f"{verb} {self.rel(p)}", body)
         if not ok:
             return feedback
+        before = p.read_text(errors="replace") if exists else None
         self.agent.checkpoint()
         self._write(p, content)
         n = len(content.splitlines())
         self.console.print(f"  [green]✓[/] {'Updated' if exists else 'Created'} {self.rel(p)} ({n} lines)")
-        return f"{'Overwrote' if exists else 'Created'} {self.rel(p)} ({n} lines)."
+        return f"{'Overwrote' if exists else 'Created'} {self.rel(p)} ({n} lines)." + self._check(p, before, content)
 
     def t_edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
         p = self.path(path)
@@ -640,15 +679,16 @@ class Toolbox:
         self.agent.checkpoint()
         self._write(p, new_text)
         self.console.print(f"  [green]✓[/] Edited {self.rel(p)}")
+        problems = self._check(p, text, new_text)
         idx = new_text.find(new_string) if new_string else -1
         if idx < 0:
-            return f"Edited {self.rel(p)} ({count} replacement(s))."
+            return f"Edited {self.rel(p)} ({count} replacement(s))." + problems
         # Show the model the edited region so it can verify the result.
         start = new_text.count("\n", 0, idx) + 1
         lines = new_text.splitlines()
         lo, hi = max(1, start - 3), min(len(lines), start + new_string.count("\n") + 3)
         snippet = "\n".join(f"{i:6}\t{lines[i - 1]}" for i in range(lo, hi + 1))
-        return f"Edited {self.rel(p)} ({count} replacement(s)). Result:\n{snippet}"
+        return f"Edited {self.rel(p)} ({count} replacement(s)). Result:\n{snippet}" + problems
 
     # -- shell
     def t_bash(self, command: str, timeout: int = 180) -> str:

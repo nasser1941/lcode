@@ -49,6 +49,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "mcp_tools": ("auto", str, "how MCP tools reach the model: auto | direct | search (on demand, saves context)"),
     "memory": ("ask", str, "notes that carry over to later sessions: off | ask (confirm each) | auto"),
     "skills": ("all", str, "skills to offer the model: all (also other agents' folders) | lcode | off"),
+    "lsp": ("auto", str, "language servers for code navigation and errors after edits: auto | off"),
     "prune": (True, bool, "before summarizing a full conversation, first remove old tool output from it"),
     "subagents": (True, bool, "let the model hand tasks to subagents that have their own context"),
     "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),
@@ -123,6 +124,10 @@ def coerce(key: str, value: object) -> object:
         if value not in MEMORY_MODES:
             raise ConfigError(f"memory must be one of {', '.join(MEMORY_MODES)}")
         return value
+    if key == "lsp" and str(value).lower() not in ("auto", "off"):
+        raise ConfigError("lsp must be auto or off")
+    if key == "lsp":
+        return str(value).lower()
     if key == "skills" and str(value).lower() not in SKILL_SOURCES:
         raise ConfigError(f"skills must be one of {', '.join(SKILL_SOURCES)}")
     if key == "skills":

@@ -95,6 +95,7 @@ nav:
       - Memory: memory.md
       - Subagents: agents.md
       - Commands and skills: commands.md
+      - Code intelligence: lsp.md
       - Models & context windows: models.md
       - Benchmarking models: bench.md
       - MCP servers: mcp.md

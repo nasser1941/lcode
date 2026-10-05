@@ -6,6 +6,17 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Code intelligence from language servers. With one installed (basedpyright or pyright for Python,
+  typescript-language-server or TypeScript 7's `tsc --lsp`, gopls, rust-analyzer, clangd), the model
+  gets an `lsp` tool for a symbol's definition, references and type, and a file's or the workspace's
+  symbols; and after every edit to a file in that language, the errors the edit introduced are
+  added to the result, so the model fixes them right away. Servers start on demand, one per
+  language; a project's own `node_modules/.bin` comes first. Without any server installed nothing
+  changes. `lcode doctor` shows what it found; the `lsp` setting and `~/.config/lcode/lsp.json`
+  configure it. See [Code intelligence](https://nasser1941.github.io/lcode/lsp/).
+
 ## [0.12.0] - 2026-10-05
 
 ### Added
