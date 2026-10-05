@@ -507,7 +507,7 @@ def reflect(agent: Agent) -> None:
             where = "every repository" if note.scope == "user" else "this repository"
             update = memory.find(note.name, note.scope)
             rows.append(
-                f"[cyan]{i}[/] [{note.type}] {escape(note.description)} [dim]({where}"
+                f"[cyan]{i}[/] \\[{note.type}] {escape(note.description)} [dim]({where}"
                 f"{', updates ' + escape(update.name) if update else ''})[/]"
                 + (f"\n    [dim]{escape(note.details)}[/]" if note.details else "")
             )

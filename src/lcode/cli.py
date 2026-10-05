@@ -519,7 +519,9 @@ def cmd_chat(args) -> None:
     context, note = choose_context(ollama, model, spec, requested_ctx, hw)
     if note:
         console.print(f"[yellow]Context {format_tokens(context)}: {note}[/]")
-    mode = "yolo" if args.yolo else ("auto-edit" if args.auto_edit else cfg["permission_mode"])
+    mode = (
+        "yolo" if args.yolo else ("auto-edit" if args.auto_edit else ("plan" if args.plan else cfg["permission_mode"]))
+    )
     num_batch = cfg["num_batch"]
     if num_batch is None and spec and spec.num_batch:
         if model == spec.local_name:
@@ -589,6 +591,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SESSION",
         help="resume a saved session: pick from a list, or give its number, name or id",
     )
+    parser.add_argument("--plan", action="store_true", help="start in plan mode: agree on a plan before any change")
     parser.add_argument("--auto-edit", action="store_true", help="apply file edits without asking")
     parser.add_argument("--yolo", action="store_true", help="never ask for permission (edits and commands)")
     parser.add_argument("--no-think", action="store_true", help="disable model reasoning (faster, less accurate)")

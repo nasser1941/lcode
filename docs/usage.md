@@ -20,6 +20,7 @@ lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases
 | `-r, --repo DIR` | Work in another directory |
 | `-c, --continue` | Continue the most recently used session in this directory |
 | `--resume [SESSION]` | Resume a saved session: pick from a list, or give its number, name or id |
+| `--plan` | Start in [plan mode](#plan-mode): agree on a plan before anything changes |
 | `--auto-edit` | Apply file edits without asking (commands still ask) |
 | `--yolo` | Never ask for permission |
 | `--no-think` | Turn off the model's reasoning: faster, less accurate |
@@ -38,7 +39,7 @@ lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases
 | ++esc++ ++enter++ or a trailing `\` | New line |
 | ++ctrl+c++ | Interrupt the model or a running command |
 | ++ctrl+d++ | Quit |
-| ++shift+tab++ | Cycle permission mode: ask → auto-edit → yolo |
+| ++shift+tab++ | Cycle permission mode: ask → plan → auto-edit → yolo |
 | ++tab++ | Complete slash commands and `@` paths |
 | `@path` | Attach a file (or a directory listing) to your message |
 | `@name` | Ask for a [subagent](agents.md) of that type, e.g. `@plan` |
@@ -63,12 +64,13 @@ reasoning is on.
 | `/memory [show\|edit\|delete N]` | The [notes](memory.md) lcode remembers |
 | `/sandbox [network on\|off]` | The [sandbox](sandbox.md) for shell commands |
 | `/mcp [tools\|login\|restart NAME]` | [MCP servers](mcp.md), their status and tools |
+| `/plan [request]` | Work out a [plan](#plan-mode) before changing anything, or show the approved plan |
 | `/compact [focus]` | Summarize the conversation to free context |
 | `/context [size]` | Show how full the context window is and change its size: pick from a list with memory estimates, or give a size like `/context 128k` (`/ctx` is a shortcut) |
 | `/model [name]`, `/models` | Switch model, list models |
 | `/think [on\|off]` | Toggle reasoning |
 | `/verbose` | Toggle showing the reasoning text |
-| `/mode [ask\|auto-edit\|yolo]` | Set the permission mode |
+| `/mode [ask\|plan\|auto-edit\|yolo]` | Set the permission mode |
 | `/cd DIR` | Change the working directory |
 | `/todos` | Show the model's task list |
 | `/exit` | Quit |
@@ -90,6 +92,7 @@ reasoning is on.
 | `view_image` | Look at an image: a model that can see describes it ([Images](#images)) |
 | `agent` | Hand a task to a [subagent](agents.md) with its own context; only its report comes back |
 | `memory` | Save, update or delete [notes](memory.md) that later sessions load |
+| `present_plan` | In [plan mode](#plan-mode): show the plan and ask for approval |
 
 lcode refuses to edit a file the model hasn't read in the session, or one that changed on disk since
 it was read, so the model always edits the current version.
@@ -127,12 +130,16 @@ image support off with `lcode config set vision_model off`.
 | Mode | File edits | Shell commands |
 |---|---|---|
 | `ask` (default) | ask | ask, except read-only commands |
+| `plan` | refused | only read-only commands ([Plan mode](#plan-mode)) |
 | `auto-edit` | automatic | ask, except read-only commands |
 | `yolo` | automatic | automatic |
 
+++shift+tab++ cycles through them in this order, `/mode` sets one, and `--plan`, `--auto-edit` and
+`--yolo` start in one.
+
 Read-only commands run without asking: `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `find`, `tree`,
 `wc`, `diff`, `git status/log/diff/show/branch/blame` and similar, as long as they don't redirect
-output, chain commands or run subshells.
+output, chain commands or run subshells. A `cd <folder> &&` in front is fine.
 
 When asked, answer ++y++ (once), ++a++ (always, for this command or for all edits, until you quit)
 or ++n++. Text after ++n++ goes to the model as instructions: `n run the tests with -x first`.
@@ -145,6 +152,42 @@ or ++n++. Text after ++n++ goes to the model as instructions: `n run the tests w
 
 With the [sandbox](sandbox.md) on, `auto-edit` mode runs shell commands without asking too: they can
 only reach the project, and `/undo` can take their changes back.
+
+## Plan mode
+
+Local models are slower than cloud models and make more mistakes, so on a bigger change it pays to
+agree on the approach before the model starts editing. In **plan mode** the model can read, search,
+run read-only commands, use the web and [explore and plan subagents](agents.md), but it can't
+change anything. It ends by presenting a plan: numbered steps, the files it will change, the risks
+and how it will verify the work.
+
+```text
+❯ /plan add retries to the webhook handlers
+  …
+╭─ Plan: Retries for webhook handlers ───────────────────────────────────────────╮
+│ 1. Wrap the HTTP call in payments/webhooks.py:88 in a retry loop (3 tries, …)  │
+│ 2. Add tests for a timeout and a 500 in tests/test_webhooks.py                 │
+│ Risks: duplicate deliveries if the endpoint isn't idempotent …                 │
+│ Verify: pytest tests/test_webhooks.py                                          │
+╰────────────────────────────────────────────────────────────────────────────────╯
+  [y] run it, asking before changes · [a] run it, edits without asking (auto-edit)
+  [e] edit the plan · [s] save it to .lcode/plans/ · [n] keep planning (+ what to change)
+  >
+```
+
+| Answer | |
+|---|---|
+| ++y++ or ++enter++ | Approve: lcode switches to `ask` mode and the model starts on the plan right away |
+| ++a++ | Approve and switch to `auto-edit`, so file edits don't ask |
+| ++e++ | Edit the plan in your editor first; the model follows your version |
+| ++s++ | Save it as `.lcode/plans/<title>.md`, for example to share it or commit it |
+| ++n++ + text | Send it back: `n keep the old API working` |
+
+After approval, the todo list is filled from the plan's numbered steps, and the plan is kept word
+for word when the conversation is compacted. `/plan` shows the approved plan.
+
+Start planning with `/plan <request>` (switches to plan mode and sends the request), with
+++shift+tab++ (one step from `ask`), or with `lcode --plan`.
 
 ## Undo and checkpoints
 

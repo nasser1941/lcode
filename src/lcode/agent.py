@@ -21,7 +21,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
-from lcode import catalog, limits, sessions, subagents, vision, web
+from lcode import catalog, limits, planning, sessions, subagents, vision, web
 from lcode import memory as memory_notes
 from lcode.checkpoints import Checkpoints
 from lcode.config import format_tokens
@@ -32,6 +32,7 @@ from lcode.render import MarkdownStreamer
 from lcode.sandbox import Sandbox, SandboxError, project_root
 from lcode.tools import (
     MEMORY_SCHEMA,
+    PRESENT_PLAN_SCHEMA,
     SCHEMAS,
     VIEW_IMAGE_SCHEMA,
     WEB_FETCH_SCHEMA,
@@ -198,6 +199,7 @@ class Agent:
         self._memory: memory_notes.Memory | None = None
         self._agent_types: tuple[Path, dict[str, subagents.AgentType], list[str]] | None = None
         self.agent_runs: list[subagents.Record] = []  # subagents run in this session, for /agents
+        self.plan = ""  # the plan the user approved; kept through compaction
         # Set on subagents (see lcode.subagents):
         self.allowed_tools: set[str] | None = None  # None: every tool
         self.read_only = False  # only read-only shell commands
@@ -259,6 +261,9 @@ class Agent:
         assert self._agent_types is not None
         return self._agent_types[2]
 
+    def planning(self) -> bool:
+        return self.perms.mode == "plan"
+
     def tool_names(self) -> set[str]:
         return {s["function"]["name"] for s in self.tool_schemas()}
 
@@ -283,6 +288,8 @@ class Agent:
             schemas.append(MEMORY_SCHEMA)
         if self.settings.subagents:
             schemas.append(subagents.schema(self.agent_types(), self.settings.max_parallel_agents))
+        if self.planning():
+            schemas.append(PRESENT_PLAN_SCHEMA)
         if self.mcp:
             schemas += self.mcp.schemas(self.settings.context)
         if self.allowed_tools is not None:
@@ -638,7 +645,8 @@ class Agent:
 
     def _run_turn(self, user_text: str, max_steps: int = MAX_STEPS_PER_TURN) -> None:
         self.prepare_mcp()
-        self.messages.append({"role": "user", "content": self.expand_mentions(user_text)})
+        note = planning.NOTE if self.planning() and self.allowed_tools is None else ""
+        self.messages.append({"role": "user", "content": self.expand_mentions(user_text) + note})
         malformed = 0
         for _ in range(max_steps):
             if self.cancel is not None and self.cancel.is_set():
@@ -777,6 +785,8 @@ class Agent:
             {"role": "user", "content": f"[Summary of our conversation so far]\n\n{summary}"},
             {"role": "assistant", "content": "Got it — I have the context from the summary and will continue."},
         ]
+        if self.plan:  # the approved plan stays word for word
+            self.messages[1]["content"] += f"\n\n[The plan the user approved; keep following it]\n\n{self.plan}"
         self.ctx_used = sum(len(m["content"]) for m in self.messages) // 3
         self.reflected = len(self.messages)
         self.console.print(Panel(Markdown(summary), title="Compacted summary", border_style="blue"))

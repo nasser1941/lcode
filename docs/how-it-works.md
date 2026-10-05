@@ -89,6 +89,7 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `bench.py` | `lcode bench`: the benchmark tasks, their checks and the reports |
 | `vision.py` | Looking at images with a model that can see |
 | `subagents.py` | Subagents: agent types, running them (also in parallel), worktrees for workers |
+| `planning.py` | Plan mode: what it allows, presenting a plan and approving it |
 | `memory.py` | Notes that carry over between sessions, and the end-of-session check |
 | `sandbox.py` | The optional container for shell commands |
 | `checkpoints.py` | Snapshots before the model changes files, for `/undo` and `/rewind` |

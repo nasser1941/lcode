@@ -246,6 +246,7 @@ def test_reflection_with_memory_ask_saves_only_what_the_user_picks(make_agent, m
     answers(monkeypatch, "2")
     memory_notes.reflect(agent)
     assert [n.name for n in agent.memory().notes()] == ["vpn"]
+    assert "1 [feedback] Use pnpm, not npm (this repository)" in output(agent)
 
 
 def test_reflection_with_memory_ask_saves_nothing_without_approval(make_agent, monkeypatch):

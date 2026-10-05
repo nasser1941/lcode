@@ -71,6 +71,7 @@ ignore = [
 "src/lcode/agent.py" = ["E501"] # the prompts are prose; wrapping them would change what the model sees
 "src/lcode/memory.py" = ["E501"]
 "src/lcode/subagents.py" = ["E501"]
+"src/lcode/planning.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

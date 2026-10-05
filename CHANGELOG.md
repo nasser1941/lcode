@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Plan mode: a `plan` permission mode (Shift+Tab from `ask`, `/mode plan`, `lcode --plan`, or
+  `/plan <request>`) in which the model can read, search, run read-only commands, use the web and
+  read-only subagents, but can't change anything. It presents a plan with the new `present_plan`
+  tool, and you approve it (in `ask` or `auto-edit` mode), edit it, save it to `.lcode/plans/`, or
+  send it back with feedback. An approved plan fills the todo list and is kept through compaction;
+  `/plan` shows it. See [Plan mode](https://nasser1941.github.io/lcode/usage/#plan-mode).
+
+### Fixed
+
+- `lcode mcp add` shows the default value in its questions again, such as `AWS region
+  [us-east-1]`; the terminal formatting swallowed it.
+- The end-of-session "Worth remembering?" list shows each note's type (`[feedback]`, `[project]`, …),
+  which the same problem hid.
+
 ## [0.8.0] - 2026-10-05
 
 ### Added

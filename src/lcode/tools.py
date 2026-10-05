@@ -24,6 +24,7 @@ from rich.text import Text
 
 from lcode import web
 from lcode.permissions import bash_key, is_read_only
+from lcode.planning import BLOCKED, PLAN_MODE_TOOLS
 from lcode.sandbox import SandboxError
 from lcode.vision import is_image
 
@@ -198,8 +199,22 @@ MEMORY_SCHEMA = _fn(
     },
     ["action"],
 )
+PRESENT_PLAN_SCHEMA = _fn(
+    "present_plan",
+    "Plan mode: show the user your plan and ask for approval. Once approved, plan mode ends and you carry it out.",
+    {
+        "title": {"type": "string", "description": "A short name for the plan, e.g. 'Add retries to webhooks'"},
+        "plan": {
+            "type": "string",
+            "description": "Markdown: numbered steps, the files you'll change and how, the risks, and how you'll "
+            "verify the result",
+        },
+    },
+    ["title", "plan"],
+)
 TOOL_NAMES = {
-    s["function"]["name"] for s in [*SCHEMAS, WEB_SEARCH_SCHEMA, WEB_FETCH_SCHEMA, VIEW_IMAGE_SCHEMA, MEMORY_SCHEMA]
+    s["function"]["name"]
+    for s in [*SCHEMAS, WEB_SEARCH_SCHEMA, WEB_FETCH_SCHEMA, VIEW_IMAGE_SCHEMA, MEMORY_SCHEMA, PRESENT_PLAN_SCHEMA]
 }
 
 
@@ -337,6 +352,10 @@ class Toolbox:
         allowed = self.agent.allowed_tools
         if allowed is not None and name not in allowed:
             return f"Error: {name} isn't available to you. Available: {', '.join(sorted(allowed))}"
+        if self.agent.planning() and name not in PLAN_MODE_TOOLS:
+            return f"Error: {BLOCKED}"
+        if name == "present_plan" and not self.agent.planning():
+            return "Error: plan mode is off, so there's nothing to present: carry on with the work."
         if self.agent.mcp and self.agent.mcp.owns(name):
             return self._mcp(name, args)
         fn = getattr(self, f"t_{name}", None)
@@ -376,7 +395,16 @@ class Toolbox:
             raise ToolError("subagents are turned off")
         from lcode import subagents
 
+        kind = self.agent.agent_types().get(type)
+        if self.agent.planning() and kind and not kind.read_only:
+            raise ToolError(f"plan mode is on: only read-only agents can run now ({BLOCKED})")
         return subagents.run_one(self.agent, {"type": type, "task": task, "description": description})
+
+    # -- plan mode
+    def t_present_plan(self, title: str, plan: str) -> str:
+        from lcode.planning import present
+
+        return present(self.agent, title, plan)
 
     # -- memory
     def t_memory(
@@ -605,6 +633,8 @@ class Toolbox:
     # -- shell
     def t_bash(self, command: str, timeout: int = 180) -> str:
         sandbox = self.agent.sandbox
+        if self.agent.planning() and not is_read_only(command):
+            raise ToolError(f"{BLOCKED} Until then, only read-only commands run (ls, cat, grep, git log, …).")
         if self.agent.read_only and not is_read_only(command):
             raise ToolError(
                 "you can only run read-only commands (such as ls, cat, grep, find, git log, git diff), one at a "
