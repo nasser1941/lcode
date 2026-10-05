@@ -43,6 +43,7 @@ COMMANDS = {
     "/undo": "Undo the file changes of the last request (lcode saves a checkpoint before changing files)",
     "/rewind": "Go back to before an earlier request: its files, and optionally the conversation",
     "/checkpoints": "List the requests that changed files, and which files",
+    "/agents": "Subagent types and the subagents this session ran: /agents, /agents <number> for a transcript",
     "/remember": "Save a note for later sessions, e.g. /remember use pnpm, not npm (-g: for every repository)",
     "/memory": "Notes lcode remembers: /memory, /memory show|edit|delete <number or name>, /memory path",
     "/sandbox": "Shell-command sandbox: status, or /sandbox network on|off",
@@ -319,6 +320,64 @@ def mcp_command(agent: Agent, arg: str) -> None:
     c.print(status_table(mcp, agent.settings.context))
     if action in ("login", "restart"):
         agent.prepare_mcp()  # the model sees the server's tools from the next request
+
+
+def agents_command(agent: Agent, arg: str) -> None:
+    c = agent.console
+    if not agent.settings.subagents:
+        c.print("Subagents are off. Turn them on with: lcode config set subagents true")
+        return
+    runs = agent.agent_runs
+    if arg:
+        if not (arg.isdigit() and 1 <= int(arg) <= len(runs)):
+            c.print(f"[yellow]No subagent {escape(arg)}. /agents lists them.[/]")
+            return
+        run = runs[int(arg) - 1]
+        c.print(Rule(f"{run.kind} agent: {run.label}", style="dim"))
+        for message in run.messages:
+            role, content = message.get("role"), str(message.get("content") or "")
+            if role == "user":
+                c.print(Text(f"task: {content}", style="bold"))
+            elif role == "tool":
+                first = content.strip().splitlines()[0] if content.strip() else ""
+                c.print(Text(f"  ⎿ {message.get('tool_name', '')}: {first[:150]}", style="dim"))
+            elif role == "assistant":
+                for call in message.get("tool_calls") or []:
+                    fn = call.get("function", {})
+                    c.print(
+                        Text(f"● {fn.get('name', '')} {json.dumps(fn.get('arguments', {}))[:150]}", style="magenta")
+                    )
+                if content.strip():
+                    c.print(Text(content.strip()))
+        return
+    table = Table(title="Agent types", title_justify="left", header_style="bold")
+    table.add_column("Type", style="cyan")
+    table.add_column("Does")
+    table.add_column("From")
+    for kind in agent.agent_types().values():
+        source = kind.source if kind.source == "built-in" else agent.tools.rel(Path(kind.source))
+        table.add_row(kind.name, escape(kind.description), escape(source))
+    c.print(table)
+    for problem in agent.agent_type_problems():
+        c.print(f"[yellow]Skipped {escape(problem)}[/]")
+    if runs:
+        table = Table(title="Subagents in this session", title_justify="left", header_style="bold")
+        table.add_column("#", justify="right", style="cyan")
+        table.add_column("Agent")
+        table.add_column("Task")
+        table.add_column("Tools", justify="right")
+        table.add_column("Time", justify="right")
+        for i, run in enumerate(runs, 1):
+            mark = {"done": "", "stopped": " [yellow](stopped)[/]"}.get(run.outcome, " [red](failed)[/]")
+            table.add_row(str(i), run.kind, escape(run.label) + mark, str(run.tools), f"{run.seconds:.0f}s")
+        c.print(table)
+        c.print("[dim]/agents <number> shows what a subagent did.[/]")
+    n = agent.settings.max_parallel_agents
+    c.print(
+        f"[dim]Up to {n} subagents run at the same time.[/]"
+        if n > 1
+        else "[dim]Subagents run one at a time (max_parallel_agents = 1).[/]"
+    )
 
 
 def memory_status(agent: Agent) -> str:
@@ -676,6 +735,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         rewind_command(agent, arg)
     elif cmd == "/checkpoints":
         print_checkpoints(agent)
+    elif cmd == "/agents":
+        agents_command(agent, arg)
     elif cmd == "/remember":
         remember_command(agent, arg)
     elif cmd == "/memory":

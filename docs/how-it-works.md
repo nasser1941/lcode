@@ -29,6 +29,15 @@ All tools return text, and failures come back to the model as `Error: …` messa
 crashing the session, so the model can correct itself (for example re-read a file when an edit
 didn't match).
 
+## Subagents
+
+The `agent` tool starts a [subagent](agents.md): another agent loop with its own conversation, the
+same model and context window (so Ollama doesn't reload anything), the session's permissions,
+sandbox and checkpoints, and a filtered set of tools. Only its final report goes back into the main
+conversation. Several subagents run in threads when `max_parallel_agents` allows; their permission
+prompts are queued and asked in the main thread. Workers that edit files at the same time each work
+in a temporary git worktree, and their changes come back as a diff.
+
 ## Context management
 
 Ollama keeps the processed conversation in its KV cache, so each turn only processes the new tokens.
@@ -79,6 +88,7 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `mcp/` | MCP client: stdio and HTTP transports, OAuth sign-in, server settings, the catalog, `lcode mcp` |
 | `bench.py` | `lcode bench`: the benchmark tasks, their checks and the reports |
 | `vision.py` | Looking at images with a model that can see |
+| `subagents.py` | Subagents: agent types, running them (also in parallel), worktrees for workers |
 | `memory.py` | Notes that carry over between sessions, and the end-of-session check |
 | `sandbox.py` | The optional container for shell commands |
 | `checkpoints.py` | Snapshots before the model changes files, for `/undo` and `/rewind` |

@@ -69,6 +69,13 @@ until the task is done, asking before it changes anything.
     Every edit is shown as a diff and every non-read-only command needs your approval, unless you
     choose otherwise. `/undo` takes back a request's file changes.
 
+-   :material-account-multiple-outline:{ .lg .middle } **Subagents**
+
+    ---
+
+    Broad searches, planning and self-contained changes go to [subagents](agents.md) with their own
+    context, so the main conversation stays small.
+
 -   :material-brain:{ .lg .middle } **Remembers what matters**
 
     ---

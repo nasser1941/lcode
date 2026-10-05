@@ -37,7 +37,12 @@ def bash_key(command: str) -> str:
     return f"bash:{words[0]}"
 
 
+# `cd <plain path> &&` in front of a command: harmless, and models write it all the time.
+LEADING_CD = re.compile(r"""^\s*(?:cd\s+(?:[\w./~@+,=:-]+|'[^']*'|"[^"$`\\]*")\s*&&\s*)+""")
+
+
 def is_read_only(command: str) -> bool:
+    command = LEADING_CD.sub("", command)
     if any(tok in command for tok in (";", "&", ">", "`", "$(", "<(")) or "\n" in command:
         return False
     if re.search(r"-exec|-delete|-ok\b|-fprint", command):
@@ -66,14 +71,17 @@ class Permissions:
     def cycle(self) -> None:
         self.mode = PERMISSION_MODES[(PERMISSION_MODES.index(self.mode) + 1) % len(PERMISSION_MODES)]
 
+    def needs_prompt(self, key: str, kind: str) -> bool:
+        if key in self.always or (self.mode == "yolo" and kind != "memory"):
+            return False
+        return not (kind == "edit" and self.mode == "auto-edit")
+
     def request(self, key: str, kind: str, title: str, body: RenderableType) -> tuple[bool, str]:
         """Ask the user. kind is 'edit', 'bash', 'web', 'mcp' or 'memory'. Returns (allowed, message for the model).
 
         Memory notes follow the memory setting rather than the mode: with `memory = ask`, even yolo asks.
         """
-        if key in self.always or (self.mode == "yolo" and kind != "memory"):
-            return True, ""
-        if kind == "edit" and self.mode == "auto-edit":
+        if not self.needs_prompt(key, kind):
             return True, ""
         self.console.print(Panel(body, title=title, title_align="left", border_style="yellow"))
         scope = {"edit": "file edits", "memory": "memory notes"}.get(kind) or key.split(":", 1)[-1]

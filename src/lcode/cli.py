@@ -245,6 +245,7 @@ def cmd_doctor(args) -> None:
     except ConfigError as e:
         fail(str(e))
     hw = detect()
+    slots = None  # how many subagents could run at once with this model and context
     console.print(
         f"lcode {__version__} · Python {platform.python_version()} · {platform.system()} {platform.release()} "
         f"({platform.machine()})\n"
@@ -269,6 +270,10 @@ def cmd_doctor(args) -> None:
         model, spec = resolve_model(ollama, cfg["model"])
         line("Model", f"{cfg['model']} → {model}", True)
         ctx, note = choose_context(ollama, model, spec, cfg["context"], hw)
+        if spec:
+            from lcode.subagents import parallel_slots
+
+            slots = (parallel_slots(spec, ctx, hw), format_tokens(ctx))
         detail = f"{format_tokens(ctx)} tokens"
         if spec:
             detail += f" · ~{spec.memory_gib(ctx):.0f} GB needed, ~{hw.budget_gib:.0f} GB available"
@@ -341,6 +346,27 @@ def cmd_doctor(args) -> None:
         network = "network on" if cfg["sandbox_network"] else "no network"
         line("Sandbox", problem or f"{cfg['sandbox']} · {network}", problem is None)
         ok &= problem is None
+    if not cfg["subagents"]:
+        line("Agents", "subagents off (lcode config set subagents true)", True)
+    else:
+        from lcode import subagents
+
+        types, problems = subagents.load_types(Path.cwd())
+        custom = [t.name for t in types.values() if t.source != "built-in"]
+        n = cfg["max_parallel_agents"]
+        how = f"up to {n} at once (needs OLLAMA_NUM_PARALLEL={n} on the Ollama server)" if n > 1 else "one at a time"
+        line("Agents", f"subagents {how}" + (f" · custom: {', '.join(custom)}" if custom else ""), True)
+        if slots and n == 1 and slots[0] > 1:
+            line(
+                "",
+                f"{slots[0]} could run at once here ({slots[0]} × {slots[1]} context fits): set "
+                f"OLLAMA_NUM_PARALLEL={slots[0]} on the Ollama server and max_parallel_agents {slots[0]}",
+                None,
+            )
+        elif slots and n > slots[0]:
+            line("", f"{n} × {slots[1]} context may not fit in memory here; {slots[0]} would", None)
+        for problem in problems:
+            line("", problem, None)
     if cfg["memory"] == "off":
         line("Memory", "off (lcode config set memory ask)", True)
     else:
@@ -517,6 +543,8 @@ def cmd_chat(args) -> None:
         sandbox_network=cfg["sandbox_network"],
         vision_model=cfg["vision_model"],
         memory="off" if args.no_memory else cfg["memory"],
+        subagents=cfg["subagents"],
+        max_parallel_agents=cfg["max_parallel_agents"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.interactive = not args.prompt

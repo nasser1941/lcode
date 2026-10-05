@@ -47,6 +47,8 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "vision_model": ("auto", str, "model that looks at images: auto | off | an Ollama model with vision"),
     "mcp_tools": ("auto", str, "how MCP tools reach the model: auto | direct | search (on demand, saves context)"),
     "memory": ("ask", str, "notes that carry over to later sessions: off | ask (confirm each) | auto"),
+    "subagents": (True, bool, "let the model hand tasks to subagents that have their own context"),
+    "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),
 }
 ENV_OVERRIDES = {
     "LCODE_MODEL": "model",
@@ -130,9 +132,12 @@ def coerce(key: str, value: object) -> object:
         return value.lower() in ("true", "1", "yes", "on")
     if typ is int:
         try:
-            return int(value)  # type: ignore[call-overload]
+            number = int(value)  # type: ignore[call-overload]
         except (TypeError, ValueError) as e:
             raise ConfigError(f"{key} must be an integer") from e
+        if key == "max_parallel_agents" and not 1 <= number <= 8:
+            raise ConfigError("max_parallel_agents must be between 1 and 8")
+        return number
     return typ(value)
 
 

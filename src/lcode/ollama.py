@@ -136,11 +136,14 @@ class Ollama:
         return True
 
     # -- inference
-    def chat_stream(self, payload: dict) -> Iterator[dict]:
+    def chat_stream(self, payload: dict, on_open: Callable[[requests.Response], None] | None = None) -> Iterator[dict]:
+        """Stream a chat. `on_open` gets the response, so another thread can abort it."""
         try:
             r = requests.post(self._url("/api/chat"), json={**payload, "stream": True}, stream=True, timeout=(10, None))
         except requests.RequestException as e:
             raise OllamaError(f"cannot reach Ollama at {redact(self.host)}: {e}") from e
+        if on_open:
+            on_open(r)
         with r:
             if r.status_code != 200:
                 raise OllamaError(f"Ollama error {r.status_code}: {r.text[:500]}")

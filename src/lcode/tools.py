@@ -334,6 +334,9 @@ class Toolbox:
             return str(p)
 
     def run(self, name: str, args: dict) -> str:
+        allowed = self.agent.allowed_tools
+        if allowed is not None and name not in allowed:
+            return f"Error: {name} isn't available to you. Available: {', '.join(sorted(allowed))}"
         if self.agent.mcp and self.agent.mcp.owns(name):
             return self._mcp(name, args)
         fn = getattr(self, f"t_{name}", None)
@@ -366,6 +369,14 @@ class Toolbox:
             parts.append(f"missing required argument(s) {', '.join(map(repr, missing))}")
         valid = ", ".join(p if params[p].default is inspect.Parameter.empty else f"{p} (optional)" for p in params)
         return f"{'; '.join(parts)}. Valid arguments: {valid}."
+
+    # -- subagents
+    def t_agent(self, type: str, task: str, description: str = "") -> str:
+        if not self.agent.settings.subagents:
+            raise ToolError("subagents are turned off")
+        from lcode import subagents
+
+        return subagents.run_one(self.agent, {"type": type, "task": task, "description": description})
 
     # -- memory
     def t_memory(
@@ -594,6 +605,11 @@ class Toolbox:
     # -- shell
     def t_bash(self, command: str, timeout: int = 180) -> str:
         sandbox = self.agent.sandbox
+        if self.agent.read_only and not is_read_only(command):
+            raise ToolError(
+                "you can only run read-only commands (such as ls, cat, grep, find, git log, git diff), one at a "
+                "time without pipes into other programs, redirection or chaining"
+            )
         if not is_read_only(command) and not (sandbox and self.agent.perms.mode == "auto-edit"):
             body = Syntax(command, "bash", theme="monokai", word_wrap=True)
             where = "in the sandbox" if sandbox else f"in {self.agent.cwd}"
@@ -645,6 +661,8 @@ class Toolbox:
         deadline = time.time() + int(timeout or 180)
         try:
             while True:
+                if self.agent.cancel is not None and self.agent.cancel.is_set():
+                    raise KeyboardInterrupt
                 try:
                     line = lines.get(timeout=0.2)
                 except queue.Empty:
