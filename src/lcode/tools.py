@@ -23,6 +23,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from lcode import web
+from lcode.context import shorten
 from lcode.permissions import bash_key, is_read_only
 from lcode.planning import BLOCKED, PLAN_MODE_TOOLS
 from lcode.sandbox import SandboxError
@@ -343,6 +344,11 @@ class Toolbox:
             skills = self.agent.extensions().skills.values()
             if any(p == s.folder or s.folder in p.parents for s in skills):
                 return p
+        if read and root is not None:
+            from lcode.context import outputs_dir
+
+            if outputs_dir().resolve() in p.parents:  # full output that was cut short
+                return p
         if root is not None and p != root and root not in p.parents:
             raise ToolError(f"{path} is outside the project ({root}); with the sandbox on, that's all you can use")
         return p
@@ -469,7 +475,7 @@ class Toolbox:
         if result.startswith("Error:"):
             return result
         self.console.print(Text(f"  ⎿ {result.count(chr(10)) + 1} line(s) from {state.name}", style="dim"))
-        return truncate(result)
+        return shorten(result, MAX_TOOL_OUTPUT, f"{state.name} result")
 
     # -- read-only
     def t_read_file(self, path: str, offset: int = 1, limit: int = 2000) -> str:
@@ -743,7 +749,7 @@ class Toolbox:
                 "with /sandbox network on]"
             )
         self.console.print(Text(f"  exit code {code}", style="green" if code == 0 else "red"))
-        return truncate("".join(out)) + status + f"\n[exit code: {code}]"
+        return shorten("".join(out), MAX_TOOL_OUTPUT, "output") + status + f"\n[exit code: {code}]"
 
     # -- web
     def _web_allowed(self, key: str, title: str, detail: str) -> tuple[bool, str]:

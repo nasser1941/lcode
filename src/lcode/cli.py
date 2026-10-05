@@ -436,7 +436,7 @@ def cmd_bench(args) -> None:
     try:
         cfg = config.load()
         context = parse_context(args.context) if args.context else bench.DEFAULT_CONTEXT
-        tasks = bench.select_tasks(args.tasks)
+        tasks = bench.select_tasks(args.tasks) * max(1, args.rounds)
     except (ConfigError, ValueError) as e:
         fail(str(e))
     if args.timeout <= 0:
@@ -483,8 +483,11 @@ def cmd_bench(args) -> None:
             permission_mode="yolo",
             web="off",
             checkpoints=False,
+            prune=not args.no_prune,
         )
-        run = bench.run_model(ollama, name, settings, tasks, console, args.timeout, args.keep, args.verbose)
+        run = bench.run_model(
+            ollama, name, settings, tasks, console, args.timeout, args.keep, args.verbose, args.session
+        )
         runs.append(run)
         if run.interrupted:
             break
@@ -566,6 +569,7 @@ def cmd_chat(args) -> None:
         max_parallel_agents=cfg["max_parallel_agents"],
         trust_project=trust_project,
         skills=cfg["skills"],
+        prune=cfg["prune"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.interactive = not args.prompt
@@ -651,6 +655,15 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument("--keep", action="store_true", help="keep each task's folder and transcript for inspection")
     p.add_argument("-v", "--verbose", action="store_true", help="show the model working, like a normal session")
     p.add_argument("--list", action="store_true", help="list the tasks and exit")
+    p.add_argument(
+        "--session",
+        action="store_true",
+        help="run all tasks in one conversation, to test a long session and its context management",
+    )
+    p.add_argument(
+        "--rounds", type=int, default=1, help="run the tasks this many times (with --session: a longer session)"
+    )
+    p.add_argument("--no-prune", action="store_true", help="don't remove old tool output (to compare, with --session)")
     subs["bench"] = p
     from lcode.mcp.commands import build_parser as mcp_parser
 

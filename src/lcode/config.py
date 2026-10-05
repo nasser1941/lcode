@@ -49,6 +49,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "mcp_tools": ("auto", str, "how MCP tools reach the model: auto | direct | search (on demand, saves context)"),
     "memory": ("ask", str, "notes that carry over to later sessions: off | ask (confirm each) | auto"),
     "skills": ("all", str, "skills to offer the model: all (also other agents' folders) | lcode | off"),
+    "prune": (True, bool, "before summarizing a full conversation, first remove old tool output from it"),
     "subagents": (True, bool, "let the model hand tasks to subagents that have their own context"),
     "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),
 }

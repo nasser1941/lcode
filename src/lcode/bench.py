@@ -784,6 +784,9 @@ class ModelRun:
     tasks: list[TaskResult] = field(default_factory=list)
     error: str | None = None  # the model couldn't run at all
     interrupted: bool = False
+    session: bool = False  # all tasks in one conversation (--session)
+    pruned: int = 0  # times old tool output was removed to make room
+    compacted: int = 0  # times the conversation was summarized
 
     @property
     def passed(self) -> int:
@@ -847,14 +850,28 @@ def count_tool_errors(messages: list[dict]) -> int:
 
 
 def run_task(
-    ollama: Ollama, settings: Settings, task: Task, timeout: float, log: Console, keep: bool, usage: dict
+    ollama: Ollama,
+    settings: Settings,
+    task: Task,
+    timeout: float,
+    log: Console,
+    keep: bool,
+    usage: dict,
+    agent: Agent | None = None,
 ) -> TaskResult:
+    """Run one task in a new folder: in a new conversation, or continuing `agent`'s (--session)."""
     folder = Path(tempfile.mkdtemp(prefix=f"lcode-bench-{task.id}-"))
     try:
         for rel, content in task.files.items():
             (folder / rel).parent.mkdir(parents=True, exist_ok=True)
             (folder / rel).write_text(content)
-        agent = Agent(ollama, settings, folder, console=log)
+        if agent is None:
+            agent = Agent(ollama, settings, folder, console=log)
+        else:  # the same conversation moves on to this task's folder, as with /cd
+            agent.cwd = folder.resolve()
+            agent.messages[0]["content"] = agent.system_prompt()
+        before = dict(agent.usage)
+        first = len(agent.messages)
         error = None
         started = time.monotonic()
         try:
@@ -866,7 +883,7 @@ def run_task(
             error = str(e).splitlines()[0][:200]
         seconds = time.monotonic() - started
         for key, value in agent.usage.items():
-            usage[key] = usage.get(key, 0) + value
+            usage[key] = usage.get(key, 0) + value - before.get(key, 0)
         answer = next((m.get("content", "") for m in reversed(agent.messages) if m.get("role") == "assistant"), "")
         try:
             check = task.check(folder, answer)
@@ -882,8 +899,8 @@ def run_task(
         passed=check.passed and error is None,
         seconds=round(seconds, 1),
         detail=error or check.detail,
-        steps=sum(1 for m in agent.messages if m.get("role") == "assistant"),
-        tool_errors=count_tool_errors(agent.messages),
+        steps=agent.usage["requests"] - before.get("requests", 0),
+        tool_errors=count_tool_errors(agent.messages[first:] if len(agent.messages) > first else agent.messages),
         error=error,
     )
 
@@ -940,8 +957,10 @@ def run_model(
     timeout: float = DEFAULT_TIMEOUT,
     keep: bool = False,
     verbose: bool = False,
+    session: bool = False,
 ) -> ModelRun:
-    run = ModelRun(name, settings.model, settings.context, settings.num_batch, settings.think)
+    run = ModelRun(name, settings.model, settings.context, settings.num_batch, settings.think, session=session)
+    shared: Agent | None = None  # with --session, one conversation for all tasks
     console.print(
         f"\n[bold]{escape(settings.model)}[/] · {format_tokens(settings.context)} context · "
         f"reasoning {'on' if settings.think else 'off'} · {len(tasks)} task{'' if len(tasks) == 1 else 's'}"
@@ -969,13 +988,17 @@ def run_model(
     console.print(f"  [dim]Loaded in {run.load_seconds:.0f}s{where}{reads}[/]")
     for task in tasks:
         log = console if verbose else Console(file=io.StringIO(), width=120, force_terminal=False)
+        if session and shared is None:
+            shared = Agent(ollama, settings, Path(tempfile.gettempdir()), console=log)
+        if shared is not None:
+            shared.console = log
         try:
             if verbose:
                 console.rule(f"{task.id}: {task.title}")
-                result = run_task(ollama, settings, task, timeout, log, keep, run.usage)
+                result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared)
             else:
                 with console.status(Elapsed(f"  {task.id:<13} {task.title}")):
-                    result = run_task(ollama, settings, task, timeout, log, keep, run.usage)
+                    result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared)
         except KeyboardInterrupt:
             console.print("  [yellow]Stopped.[/]")
             run.interrupted = True
@@ -985,6 +1008,8 @@ def run_model(
         console.print(
             f"  {mark} {task.id:<13} {task.title:<32} {result.seconds:>5.0f}s  [dim]{escape(result.detail)}[/]"
         )
+        if shared is not None:
+            run.pruned, run.compacted = shared.pruned, shared.compacted
     if run.memory_gb is None:
         run.memory_gb, run.gpu_percent = memory_use(ollama, settings.model)
     # lcode lowers the batch size or context if the GPU runs out of memory; report what was used.
@@ -1001,11 +1026,12 @@ def duration(seconds: float) -> str:
 
 def summary_rows(runs: list[ModelRun], tasks: list[Task]) -> list[tuple[str, list[str]]]:
     rows = []
-    for task in tasks:
+    for task in {t.id: t for t in tasks}.values():  # with --rounds a task runs several times: one row, a mark each
         cells = []
         for run in runs:
-            result = next((t for t in run.tasks if t.id == task.id), None)
-            cells.append("" if result is None else f"{'✓' if result.passed else '✗'} {duration(result.seconds)}")
+            results = [t for t in run.tasks if t.id == task.id]
+            marks = "".join("✓" if r.passed else "✗" for r in results)
+            cells.append(f"{marks} {duration(sum(r.seconds for r in results))}" if results else "")
         rows.append((f"{task.id}: {task.title}", cells))
 
     def cell(run: ModelRun, value: str) -> str:
@@ -1023,6 +1049,13 @@ def summary_rows(runs: list[ModelRun], tasks: list[Task]) -> list[tuple[str, lis
         ),
         ("Context", [cell(r, format_tokens(r.context)) for r in runs]),
     ]
+    if any(r.session for r in runs):
+        rows.append(
+            (
+                "One conversation",
+                [cell(r, f"pruned {r.pruned}×, summarized {r.compacted}×" if r.session else "no") for r in runs],
+            )
+        )
     return rows
 
 
