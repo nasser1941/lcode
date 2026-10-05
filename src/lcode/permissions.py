@@ -37,7 +37,12 @@ def bash_key(command: str) -> str:
     return f"bash:{words[0]}"
 
 
+# `cd <plain path> &&` in front of a command: harmless, and models write it all the time.
+LEADING_CD = re.compile(r"""^\s*(?:cd\s+(?:[\w./~@+,=:-]+|'[^']*'|"[^"$`\\]*")\s*&&\s*)+""")
+
+
 def is_read_only(command: str) -> bool:
+    command = LEADING_CD.sub("", command)
     if any(tok in command for tok in (";", "&", ">", "`", "$(", "<(")) or "\n" in command:
         return False
     if re.search(r"-exec|-delete|-ok\b|-fprint", command):

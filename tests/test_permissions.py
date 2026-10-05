@@ -19,6 +19,14 @@ from lcode.permissions import Permissions, bash_key, is_read_only
         ("find . -delete", False),
         ("echo $(whoami)", False),
         ("python3 script.py", False),
+        ("cd /repo/src && grep -n def x.py", True),
+        ("cd 'my dir' && cd sub && git log -3", True),
+        ("cd /repo && ./check.sh", False),
+        ("cd /repo && ls && rm x", False),
+        ("cd $(rm -rf ~) && ls", False),
+        ("cd `whoami` && ls", False),
+        ('cd "$HOME" && ls', False),
+        ("cd /repo; rm x", False),
     ],
 )
 def test_is_read_only(command, safe):

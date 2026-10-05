@@ -20,6 +20,11 @@ All notable changes to lcode are documented here. The format follows
   subagent did; `lcode doctor` estimates how many could run at once. See
   [Subagents](https://nasser1941.github.io/lcode/agents/).
 
+### Changed
+
+- A shell command that starts with `cd <folder> &&` counts as read-only when the rest of it does,
+  so `cd src && grep -n foo *.py` runs without asking. A `cd` with `$(…)` or backticks still asks.
+
 ## [0.7.0] - 2026-10-05
 
 ### Added
