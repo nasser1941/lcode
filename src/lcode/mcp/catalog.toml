@@ -249,7 +249,8 @@ model assign tasks and set priorities; lcode still asks before every call."""
 
 [encord.server]
 command = "uvx"
-args = ["--python", "3.12", "--from", "lcode-cli[encord]", "lcode-mcp-encord"]
+# --isolated: otherwise uvx reuses an installed lcode-cli tool, which lacks the encord extra.
+args = ["--isolated", "--python", "3.12", "--from", "lcode-cli[encord]", "lcode-mcp-encord"]
 env = { ENCORD_SSH_KEY_FILE = "${ENCORD_SSH_KEY_FILE}" }
 
 [[encord.inputs]]
@@ -268,7 +269,7 @@ executions; lcode still asks before every call."""
 
 [valohai.server]
 command = "uvx"
-args = ["--python", "3.12", "--from", "lcode-cli", "lcode-mcp-valohai"]
+args = ["--isolated", "--python", "3.12", "--from", "lcode-cli", "lcode-mcp-valohai"]
 env = { VALOHAI_TOKEN = "${VALOHAI_TOKEN}", VALOHAI_HOST = "${VALOHAI_HOST}" }
 
 [[valohai.inputs]]

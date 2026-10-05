@@ -152,7 +152,7 @@ permissions allow. See [Metabase's MCP docs](https://www.metabase.com/docs/lates
 ### Encord
 
 Encord has no MCP server of its own, so lcode ships one: `lcode-mcp-encord`, built on the Encord SDK
-and run with `uvx --from "lcode-cli[encord]"`. It signs in with an SSH key that you register in
+and run with `uvx --isolated --from "lcode-cli[encord]"`. It signs in with an SSH key that you register in
 Encord under **Settings > Public keys**; `lcode mcp add encord` asks for the key file's path.
 
 | Tool | |
@@ -180,7 +180,8 @@ address of a self-hosted installation if you use one; `lcode mcp add valohai` as
 | `start_execution`, `stop_execution` | Only with `--allow-writes` in the server's `args` in `mcp.json` |
 
 Both servers are ordinary MCP servers: other MCP clients can use them too, for example
-`uvx --from lcode-cli lcode-mcp-valohai` with `VALOHAI_TOKEN` set.
+`uvx --isolated --from lcode-cli lcode-mcp-valohai` with `VALOHAI_TOKEN` set. Keep `--isolated`: without it,
+`uvx` reuses an lcode you installed with `uv tool install`, which may be older or lack the Encord SDK.
 
 ## Adding your own servers
 
