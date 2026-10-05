@@ -7,6 +7,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -36,6 +37,8 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "num_batch": (None, int, "prompt batch size; larger reads prompts faster but needs more VRAM"),
     "keep_alive": ("30m", str, "how long Ollama keeps the model loaded after the last request"),
     "ollama_host": ("http://localhost:11434", str, "Ollama server URL"),
+    "backend": ("ollama", str, "model server: ollama | lmstudio | llama.cpp | vllm | mlx | openai (any OpenAI API)"),
+    "base_url": (None, str, "OpenAI-compatible server address, e.g. http://localhost:1234/v1 (default: the backend's)"),
     "permission_mode": ("ask", str, "ask | plan | auto-edit | yolo"),
     "think": (True, bool, "let the model reason before answering (slower, better)"),
     "web": ("on", str, "web search and page fetching for the model: on | ask | off"),
@@ -62,6 +65,8 @@ ENV_OVERRIDES = {
     "LCODE_NUM_BATCH": "num_batch",
     "LCODE_KEEP_ALIVE": "keep_alive",
     "OLLAMA_HOST": "ollama_host",
+    "LCODE_BACKEND": "backend",
+    "LCODE_BASE_URL": "base_url",
     "LCODE_WEB": "web",
     "LCODE_SANDBOX": "sandbox",
     "LCODE_MEMORY": "memory",
@@ -111,6 +116,18 @@ def coerce(key: str, value: object) -> object:
         return parse_context(value)  # type: ignore[arg-type]
     if key in ("ollama_host", "searxng_url"):
         return normalize_host(str(value))
+    if key == "base_url":
+        url = normalize_host(str(value))
+        return url if urlsplit(url).path.strip("/") else url + "/v1"  # the OpenAI API lives under /v1
+    if key == "backend":
+        from lcode.backends import BACKENDS
+
+        value = {"lm-studio": "lmstudio", "llamacpp": "llama.cpp", "llama-server": "llama.cpp"}.get(
+            str(value).lower(), str(value).lower()
+        )
+        if value not in BACKENDS:
+            raise ConfigError(f"backend must be one of {', '.join(BACKENDS)}")
+        return value
     if key == "web":
         value = {"true": "on", "false": "off", "yes": "on", "no": "off"}.get(str(value).lower(), str(value).lower())
         if value not in WEB_MODES:

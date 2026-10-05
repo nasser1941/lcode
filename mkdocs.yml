@@ -98,6 +98,7 @@ nav:
       - Code intelligence: lsp.md
       - Repository map and code search: search.md
       - Models & context windows: models.md
+      - Other model servers: servers.md
       - Benchmarking models: bench.md
       - MCP servers: mcp.md
       - Sandbox: sandbox.md

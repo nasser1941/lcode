@@ -32,8 +32,14 @@ def version_tuple(version: str) -> tuple[int, ...]:
 
 
 class Ollama:
+    kind = "ollama"
+    name = "Ollama"
+
     def __init__(self, host: str):
         self.host = host.rstrip("/")
+
+    def describe(self) -> str:
+        return f"Ollama at {redact(self.host)}"
 
     def _url(self, path: str) -> str:
         return f"{self.host}{path}"

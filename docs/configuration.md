@@ -15,11 +15,13 @@ lcode config path                      # print the file location
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `model` | `qwen3.6-35b` | Catalog key (see `lcode models`) or any installed Ollama model tag |
+| `model` | `qwen3.6-35b` | Catalog key (see `lcode models`) or any installed Ollama model tag; with another [backend](servers.md), a model the server serves |
 | `context` | largest that fits | Context window in tokens; accepts `128k`, `1m` |
 | `num_batch` | 512 | Prompt batch size. Larger reads prompts faster but needs more GPU memory |
 | `keep_alive` | `30m` | How long Ollama keeps the model in memory after the last request |
 | `ollama_host` | `http://localhost:11434` | Ollama server URL |
+| `backend` | `ollama` | The model server: `ollama`, `lmstudio`, `llama.cpp`, `vllm`, `mlx` or `openai` (any OpenAI-compatible API); see [Other model servers](servers.md) |
+| `base_url` | the backend's | The server's OpenAI-compatible address, e.g. `http://localhost:1234/v1` |
 | `permission_mode` | `ask` | `ask`, `plan`, `auto-edit` or `yolo` |
 | `think` | `true` | Let the model reason before answering |
 | `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |
@@ -65,6 +67,9 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `LCODE_NUM_BATCH` | `num_batch` |
 | `LCODE_KEEP_ALIVE` | `keep_alive` |
 | `OLLAMA_HOST` | `ollama_host` (same variable the Ollama CLI uses) |
+| `LCODE_BACKEND` | `backend` |
+| `LCODE_BASE_URL` | `base_url` |
+| `LCODE_API_KEY` or `OPENAI_API_KEY` | API key for an [OpenAI-compatible server](servers.md) that needs one (never stored in the config file) |
 | `LCODE_WEB` | `web` |
 | `LCODE_SANDBOX` | `sandbox` |
 | `LCODE_MEMORY` | `memory` |

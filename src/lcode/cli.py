@@ -12,11 +12,12 @@ from pathlib import Path
 
 import requests
 from rich.console import Console
+from rich.markup import escape
 from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn, TimeRemainingColumn, TransferSpeedColumn
 from rich.prompt import Confirm
 from rich.table import Table
 
-from lcode import __version__, catalog, config, limits, web
+from lcode import __version__, backends, catalog, config, limits, web
 from lcode.agent import Agent, Settings
 from lcode.catalog import ModelSpec
 from lcode.config import ConfigError, format_tokens, parse_context
@@ -40,7 +41,25 @@ def fail(message: str, code: int = 1):
     sys.exit(code)
 
 
+def connect(cfg: dict) -> Ollama:
+    """The model server the settings point at (an OpenAI-compatible one has the same interface)."""
+    if cfg["backend"] == "ollama":
+        return Ollama(cfg["ollama_host"])
+    try:
+        return backends.connect(cfg)
+    except OllamaError as e:
+        fail(str(e))
+
+
 def check_ollama(ollama: Ollama, hw: Hardware | None = None) -> str:
+    if backends.is_openai(ollama):
+        try:
+            return ollama.version()
+        except OllamaError as e:
+            fail(
+                f"{e}\n\nIs {ollama.name} running, with its server started? lcode expects its OpenAI-compatible "
+                "API there; change the address with: lcode config set base_url http://host:port/v1"
+            )
     try:
         version = ollama.version()
     except OllamaError as e:
@@ -52,7 +71,12 @@ def check_ollama(ollama: Ollama, hw: Hardware | None = None) -> str:
 
 
 def resolve_model(ollama: Ollama, name: str) -> tuple[str, ModelSpec | None]:
-    """Map a catalog key or Ollama tag to an installed Ollama model name."""
+    """Map a catalog key or Ollama tag to an installed Ollama model name (or a model the server serves)."""
+    if backends.is_openai(ollama):
+        try:
+            return backends.pick_model(ollama, name), None
+        except OllamaError as e:
+            raise NotInstalled(str(e)) from e
     spec = catalog.find(name)
     installed = ollama.installed_names()
     if spec:
@@ -72,6 +96,8 @@ def choose_context(
     ollama: Ollama, model: str, spec: ModelSpec | None, requested: int | None, hw: Hardware
 ) -> tuple[int, str]:
     """Pick the context window: requested > largest that fits (catalog models) > 32K. Capped at the model max."""
+    if backends.is_openai(ollama):
+        return backends.context_for(ollama, model, requested)
     try:
         limit = ollama.max_context(model) or (spec.max_context if spec else None)
     except OllamaError:
@@ -96,7 +122,29 @@ def choose_context(
 # ----------------------------------------------------------------------------- lcode models
 
 
+def print_served(client: backends.OpenAICompatible, current: str | None) -> None:
+    try:
+        served = client.chat_models()
+        current = backends.pick_model(client, current) if current else None
+    except OllamaError as e:
+        if not isinstance(e, backends.BackendError) or "doesn't serve" not in str(e):
+            console.print(f"[red]{e}[/]")
+            return
+    console.print(f"[bold]Models served by {escape(client.describe())}[/]")
+    for name in served:
+        console.print(f"  {escape(name)}" + ("  [bold]current[/]" if name == current else ""))
+    if not served:
+        console.print("  none listed")
+    console.print(
+        "[dim]Models are downloaded and loaded in the server itself. Choose one with [/]lcode --model <id>[dim] "
+        "or [/]lcode config set model <id>[dim].[/]"
+    )
+
+
 def print_models(ollama: Ollama | None, hw: Hardware, current: str | None = None) -> None:
+    if ollama is not None and backends.is_openai(ollama):
+        print_served(ollama, current)  # type: ignore[arg-type]
+        return
     try:
         installed = ollama.installed_names() if ollama else set()
     except OllamaError:
@@ -141,8 +189,7 @@ def print_models(ollama: Ollama | None, hw: Hardware, current: str | None = None
 
 def cmd_models(args) -> None:
     cfg = config.load()
-    ollama = Ollama(cfg["ollama_host"])
-    print_models(ollama, detect(), cfg["model"])
+    print_models(connect(cfg), detect(), cfg["model"])
 
 
 # ----------------------------------------------------------------------------- lcode setup
@@ -173,6 +220,13 @@ def pull_with_progress(ollama: Ollama, tag: str) -> None:
 
 def cmd_setup(args) -> None:
     cfg = config.load()
+    if cfg["backend"] != "ollama":
+        name = backends.PRESETS[cfg["backend"]][0]
+        fail(
+            f"lcode setup downloads models into Ollama, but lcode uses {name} (backend = {cfg['backend']}). "
+            f"Download and load a model in {name}, then: lcode config set model <id> (see lcode models). "
+            "Back to Ollama: lcode config set backend ollama"
+        )
     ollama = Ollama(cfg["ollama_host"])
     hw = detect()
     console.print(f"[bold]Machine:[/] {hw.describe()}")
@@ -257,15 +311,24 @@ def cmd_doctor(args) -> None:
         f"{config.CONFIG_PATH}" + ("" if config.CONFIG_PATH.exists() else " (not created yet)"),
         True if config.CONFIG_PATH.exists() else None,
     )
-    ollama = Ollama(cfg["ollama_host"])
+    ollama = connect(cfg)
+    openai = backends.is_openai(ollama)
     try:
-        version = ollama.version()
-        fresh = version_tuple(version) >= MIN_VERSION
-        line("Ollama", f"{redact(ollama.host)} · version {version}" + ("" if fresh else " (too old)"), fresh)
-        ok &= fresh
+        if openai:
+            ollama.version()
+            served = ollama.chat_models()  # type: ignore[attr-defined]
+            line("Server", f"{ollama.describe()} · {len(served)} model(s) served", True)
+        else:
+            version = ollama.version()
+            fresh = version_tuple(version) >= MIN_VERSION
+            line("Ollama", f"{redact(ollama.host)} · version {version}" + ("" if fresh else " (too old)"), fresh)
+            ok &= fresh
     except OllamaError as e:
-        line("Ollama", f"{e}", False)
-        line("", f"install: {OLLAMA_INSTALL.get(hw.os, OLLAMA_INSTALL['linux'])}", None)
+        line("Server" if openai else "Ollama", f"{e}", False)
+        if openai:
+            line("", f"start {ollama.name}'s server, or set its address: lcode config set base_url <url>", None)
+        else:
+            line("", f"install: {OLLAMA_INSTALL.get(hw.os, OLLAMA_INSTALL['linux'])}", None)
         sys.exit(1)
     try:
         model, spec = resolve_model(ollama, cfg["model"])
@@ -288,6 +351,8 @@ def cmd_doctor(args) -> None:
                 f"{seer} looks at screenshots and images" + ("" if seer == model else " (loaded when needed)"),
                 True,
             )
+        elif openai:
+            line("Vision", "off; set vision_model to a model the server serves that can see images", None)
         else:
             line("Vision", "off" if cfg["vision_model"] == "off" else vision.INSTALL_HINT, None)
         if limits.get(model):
@@ -475,10 +540,11 @@ def cmd_bench(args) -> None:
         fail(str(e))
     if args.timeout <= 0:
         fail("--timeout must be a positive number of seconds")
-    ollama = Ollama(cfg["ollama_host"])
+    ollama = connect(cfg)
     hw = detect()
     version = check_ollama(ollama, hw)
-    console.print(f"[bold]lcode bench[/] · {hw.describe()} · Ollama {version}")
+    server = ollama.describe() if backends.is_openai(ollama) else ""
+    console.print(f"[bold]lcode bench[/] · {hw.describe()} · {server or f'Ollama {version}'}")
     console.print("[dim]Each task runs in a new temporary folder with every permission granted and web access off.[/]")
     names = args.models or [cfg["model"]]
     resolved: dict[str, tuple[str, ModelSpec | None] | NotInstalled] = {}
@@ -535,10 +601,10 @@ def cmd_bench(args) -> None:
     bench.print_summary(console, runs, tasks)
     if args.json:
         path = Path(args.json).expanduser()
-        bench.write_json(path, bench.report(runs, hw, version))
+        bench.write_json(path, bench.report(runs, hw, version, server))
         console.print(f"Results saved to {path}")
     if args.markdown:
-        print("\n" + bench.markdown(runs, tasks, hw, version))
+        print("\n" + bench.markdown(runs, tasks, hw, version, server))
     if args.keep:
         console.print(f"[dim]Task folders are kept in {tempfile.gettempdir()} (lcode-bench-*).[/]")
 
@@ -560,13 +626,14 @@ def cmd_chat(args) -> None:
     cwd = Path(args.repo).expanduser().resolve()
     if not cwd.is_dir():
         fail(f"not a directory: {cwd}")
-    ollama = Ollama(cfg["ollama_host"])
+    ollama = connect(cfg)
     hw = detect()
     check_ollama(ollama, hw)
     try:
         model, spec = resolve_model(ollama, args.model or cfg["model"])
     except NotInstalled as e:
-        if not args.model and cfg["model"] == config.DEFAULT_MODEL and not config.CONFIG_PATH.exists():
+        first_run = not args.model and cfg["model"] == config.DEFAULT_MODEL and not config.CONFIG_PATH.exists()
+        if first_run and not backends.is_openai(ollama):
             fail("lcode isn't set up yet. Run:  lcode setup")
         fail(str(e))
     context, note = choose_context(ollama, model, spec, requested_ctx, hw)
@@ -744,11 +811,13 @@ def cmd_index(args) -> None:
 
     cfg = config.load()
     root = work_tree_for(Path(args.repo).expanduser().resolve())
-    ollama = Ollama(cfg["ollama_host"])
+    ollama = connect(cfg)
     setting = args.model or cfg["embed_model"]
     if setting == "off":
         fail("semantic code search is off (lcode config set embed_model auto)")
     model = codesearch.pick_model(ollama, "auto" if setting == "off" else setting)
+    if model is None and backends.is_openai(ollama):
+        fail(f"{ollama.describe()} serves no embedding model: load one there (e.g. qwen3-embedding-0.6b)")
     if model is None:
         fail(
             "no embedding model is installed. Install one, for example:\n  ollama pull qwen3-embedding:0.6b\n"
