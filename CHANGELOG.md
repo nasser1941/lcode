@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-06
+
+### Added
+
+- `lcode acp`: lcode inside editors that speak the Agent Client Protocol (Zed, JetBrains IDEs,
+  Neovim, Emacs and others). The editor shows the answers and thinking as they stream, each tool
+  call with the files it touches and a diff for edits, and asks permission questions and plan
+  approvals in its own dialog. lcode's permission modes are the session's modes, the todo list is
+  the editor's plan, and saved sessions reopen with their conversation. The model reads the
+  editor's buffers (unsaved changes included) and edits through them, and MCP servers the editor
+  passes join lcode's own. See [Editors](https://nasser1941.github.io/lcode/editors/) for setup.
+
+### Fixed
+
+- Cancelling a request whose answer was cut off mid-stream no longer ends it as if it were done.
+
 ## [0.18.0] - 2026-10-06
 
 ### Added
@@ -434,7 +450,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/nasser1941/lcode/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/nasser1941/lcode/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/nasser1941/lcode/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/nasser1941/lcode/compare/v0.15.0...v0.16.0
