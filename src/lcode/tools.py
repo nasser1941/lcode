@@ -15,6 +15,7 @@ import signal
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -366,6 +367,9 @@ class Toolbox:
         self.agent = agent
         self.read_mtimes: dict[str, float] = {}
         self.todos: list[dict] = []
+        # An editor's buffers (lcode acp): read unsaved changes and write through the editor.
+        self.reader: Callable[[Path], str | None] | None = None
+        self.writer: Callable[[Path, str], None] | None = None
 
     @property
     def console(self):
@@ -611,7 +615,7 @@ class Toolbox:
             raise ToolError(f"{path} is an image; look at it with view_image")
         if is_binary(p):
             raise ToolError(f"{path} is a binary file ({p.stat().st_size} bytes)")
-        lines = p.read_text(errors="replace").splitlines()
+        lines = self.read_text(p).splitlines()
         offset, limit = max(1, int(offset or 1)), max(1, int(limit or 2000))
         chunk = lines[offset - 1 : offset - 1 + limit]
         self.read_mtimes[str(p)] = p.stat().st_mtime
@@ -704,9 +708,20 @@ class Toolbox:
             diff = diff[:12_000] + "\n... (diff truncated for display)\n"
         return Syntax(diff or "(no changes)", "diff", theme="monokai", word_wrap=True)
 
+    def read_text(self, p: Path) -> str:
+        """A file's text: the editor's buffer when lcode runs inside one, else the file on disk."""
+        if self.reader is not None:
+            text = self.reader(p)
+            if text is not None:
+                return text
+        return p.read_text(errors="replace")
+
     def _write(self, p: Path, content: str) -> None:
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content)
+        if self.writer is not None:
+            self.writer(p, content)  # the editor updates its buffer (and the file)
+        if not p.exists() or p.read_text(errors="replace") != content:
+            p.write_text(content)  # the file on disk must match, for checkpoints and the tools
         self.read_mtimes[str(p)] = p.stat().st_mtime
 
     def t_write_file(self, path: str, content: str) -> str:
@@ -716,7 +731,7 @@ class Toolbox:
             if p.is_dir():
                 raise ToolError(f"{path} is a directory")
             self._check_fresh(p)
-            body = self._diff(p, p.read_text(errors="replace"), content)
+            body = self._diff(p, self.read_text(p), content)
         else:
             lines = content.splitlines()
             preview = "\n".join(lines[:60]) + (f"\n... ({len(lines) - 60} more lines)" if len(lines) > 60 else "")
@@ -725,7 +740,7 @@ class Toolbox:
         ok, feedback = self.agent.perms.request("edit", "edit", f"{verb} {self.rel(p)}", body, self.project_rel(p))
         if not ok:
             return feedback
-        before = p.read_text(errors="replace") if exists else None
+        before = self.read_text(p) if exists else None
         self.agent.checkpoint()
         self._write(p, content)
         n = len(content.splitlines())
@@ -741,7 +756,7 @@ class Toolbox:
             raise ToolError("old_string and new_string are identical")
         if not old_string:
             raise ToolError("old_string is empty; use write_file to create or overwrite files")
-        text = p.read_text(errors="replace")
+        text = self.read_text(p)
         count = text.count(old_string)
         if count == 0:
             new_text = fuzzy_replace(text, old_string, new_string)

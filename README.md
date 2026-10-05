@@ -68,6 +68,8 @@ through [Ollama](https://ollama.com), and when it needs current information it c
 - **Git workflow.** `/commit` writes messages in your repository's style, `/review` checks the
   changes with `file:line` findings, `/pr` opens the pull request, each after you approve it, and
   `lcode --worktree` runs parallel sessions on one repository.
+- **In your editor.** Zed, JetBrains IDEs, Neovim and other editors that speak the Agent Client
+  Protocol run lcode with `lcode acp`, with diffs and approvals in the editor.
 - **Automation.** `lcode -p --output json` for scripts and CI, a Python API (`from lcode import
   Session`), and a GitHub Action that answers `@lcode` in issues and pull requests on your own
   self-hosted runner.
