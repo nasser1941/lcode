@@ -20,6 +20,7 @@ lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases
 | `-r, --repo DIR` | Work in another directory |
 | `-c, --continue` | Continue the most recently used session in this directory |
 | `--resume [SESSION]` | Resume a saved session: pick from a list, or give its number, name or id |
+| `-w, --worktree [NAME]` | Work in a [git worktree](git.md#parallel-sessions-lcode-worktree) of its own, on branch NAME; removed at the end if nothing changed |
 | `--plan` | Start in [plan mode](#plan-mode): agree on a plan before anything changes |
 | `--auto-edit` | Apply file edits without asking (commands still ask) |
 | `--yolo` | Never ask for permission |
@@ -74,6 +75,9 @@ reasoning is on.
 | `/mode [ask\|plan\|auto-edit\|yolo]` | Set the permission mode |
 | `/cd DIR` | Change the working directory |
 | `/todos` | Show the model's task list |
+| `/commit [notes]` | [Commit](git.md#commit) the changes with a message in the repository's style, once you approve it |
+| `/review [base]` | [Review](git.md#review) the uncommitted changes, or the branch against a base |
+| `/pr [base] [notes]` | Push the branch and open a GitHub [pull request](git.md#pr), once you approve it |
 | `/exit` | Quit |
 
 ## What the model can do

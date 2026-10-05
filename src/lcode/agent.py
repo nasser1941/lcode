@@ -130,7 +130,14 @@ def git_info(cwd: Path) -> str:
             return "not a git repository"
         changed = git("status", "--short").stdout.strip().splitlines()
         log = git("log", "--oneline", "-5").stdout.strip() or "(no commits)"
-        return f"branch {branch.stdout.strip()}, {len(changed)} changed file(s)\nRecent commits:\n{log}"
+        dirs = git("rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir").stdout.split()
+        worktree = (
+            "\nThis folder is a git worktree, separate from the repository's main checkout: read, change and "
+            "commit files only here, with paths inside this folder."
+            if len(dirs) == 2 and dirs[0] != dirs[1]
+            else ""
+        )
+        return f"branch {branch.stdout.strip()}, {len(changed)} changed file(s){worktree}\nRecent commits:\n{log}"
     except (OSError, subprocess.TimeoutExpired):
         return "unknown"
 
@@ -242,6 +249,7 @@ class Agent:
         # Set on subagents (see lcode.subagents):
         self.allowed_tools: set[str] | None = None  # None: every tool
         self.read_only = False  # only read-only shell commands
+        self.no_changes = ""  # set during a review: why nothing may change (read-only tools only)
         self.cancel: threading.Event | None = None  # set from another thread to stop
         self.on_tool = None  # called with (name, arguments) before each tool runs
         self.response = None  # the streaming response, so another thread can abort it

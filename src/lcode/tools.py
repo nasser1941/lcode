@@ -440,6 +440,8 @@ class Toolbox:
             return f"Error: {name} isn't available to you. Available: {', '.join(sorted(allowed))}"
         if self.agent.planning() and name not in PLAN_MODE_TOOLS:
             return f"Error: {BLOCKED}"
+        if self.agent.no_changes and name not in PLAN_MODE_TOOLS:
+            return f"Error: {self.agent.no_changes}"
         if name == "present_plan" and not self.agent.planning():
             return "Error: plan mode is off, so there's nothing to present: carry on with the work."
         if self.agent.mcp and self.agent.mcp.owns(name):
@@ -484,6 +486,8 @@ class Toolbox:
         kind = self.agent.agent_types().get(type)
         if self.agent.planning() and kind and not kind.read_only:
             raise ToolError(f"plan mode is on: only read-only agents can run now ({BLOCKED})")
+        if self.agent.no_changes and kind and not kind.read_only:
+            raise ToolError(f"only read-only agents can run now: {self.agent.no_changes}")
         return subagents.run_one(self.agent, {"type": type, "task": task, "description": description})
 
     # -- plan mode
@@ -777,6 +781,8 @@ class Toolbox:
         sandbox = self.agent.sandbox
         if self.agent.planning() and not is_read_only(command):
             raise ToolError(f"{BLOCKED} Until then, only read-only commands run (ls, cat, grep, git log, …).")
+        if self.agent.no_changes and not is_read_only(command):
+            raise ToolError(f"{self.agent.no_changes} Only read-only commands run (ls, cat, grep, git diff, …).")
         if self.agent.read_only and not is_read_only(command):
             raise ToolError(
                 "you can only run read-only commands (such as ls, cat, grep, find, git log, git diff), one at a "

@@ -65,6 +65,9 @@ through [Ollama](https://ollama.com), and when it needs current information it c
 - **Remembers what matters.** Corrections, decisions and where things live carry over to the next
   session as short notes, saved by the model, by you (`/remember`) or by a quick check at the end
   of a session. Not whole conversations, and never secrets.
+- **Git workflow.** `/commit` writes messages in your repository's style, `/review` checks the
+  changes with `file:line` findings, `/pr` opens the pull request, each after you approve it, and
+  `lcode --worktree` runs parallel sessions on one repository.
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
   with tool calling. Or use LM Studio, llama.cpp, vLLM or MLX instead of Ollama.
 - **MCP servers, ready to go.** Connect Jira and Confluence, GitHub, AWS, Google Drive, Grafana,

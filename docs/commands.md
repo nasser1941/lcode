@@ -46,7 +46,8 @@ Report bugs first, with `path:line`, then missing tests. Don't change any files.
 | `~/.config/lcode/commands/<name>.md` | For every repository |
 
 The file name is the command's name. A repository's command overrides one of yours with the same
-name; built-in commands such as `/help` can't be replaced.
+name. A command called `review`, `commit` or `pr` replaces lcode's [built-in one](git.md), so a team
+can use its own checklist; other built-in commands such as `/help` can't be replaced.
 
 ## Skills
 

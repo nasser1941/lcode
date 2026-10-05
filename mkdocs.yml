@@ -95,6 +95,7 @@ nav:
       - Memory: memory.md
       - Subagents: agents.md
       - Commands and skills: commands.md
+      - Git workflow: git.md
       - Code intelligence: lsp.md
       - Repository map and code search: search.md
       - Models & context windows: models.md

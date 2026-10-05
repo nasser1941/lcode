@@ -626,6 +626,17 @@ def cmd_chat(args) -> None:
     cwd = Path(args.repo).expanduser().resolve()
     if not cwd.is_dir():
         fail(f"not a directory: {cwd}")
+    worktree = None
+    if args.worktree is not None:
+        from lcode import gitflow
+
+        try:
+            worktree = gitflow.start_worktree(cwd, args.worktree)
+        except gitflow.GitError as e:
+            fail(f"--worktree: {e}")
+        cwd = worktree.cwd
+        state = "a new worktree" if worktree.created_branch else "the worktree"
+        console.print(f"[dim]Working in {state} {worktree.path}, on branch {escape(worktree.branch)}.[/]")
     ollama = connect(cfg)
     hw = detect()
     check_ollama(ollama, hw)
@@ -714,6 +725,8 @@ def cmd_chat(args) -> None:
             agent.mcp.close()
         if agent.sandbox:
             agent.sandbox.stop()
+        if worktree is not None:
+            console.print(f"[dim]{escape(worktree.finish())}[/]")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -735,6 +748,14 @@ def build_parser() -> argparse.ArgumentParser:
         const="",
         metavar="SESSION",
         help="resume a saved session: pick from a list, or give its number, name or id",
+    )
+    parser.add_argument(
+        "-w",
+        "--worktree",
+        nargs="?",
+        const="",
+        metavar="NAME",
+        help="work in a git worktree of its own, on branch NAME (new, or continue one); removed if nothing changed",
     )
     parser.add_argument("--plan", action="store_true", help="start in plan mode: agree on a plan before any change")
     parser.add_argument("--auto-edit", action="store_true", help="apply file edits without asking")
