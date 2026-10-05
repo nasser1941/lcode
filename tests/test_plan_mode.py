@@ -156,4 +156,6 @@ def test_shift_tab_reaches_plan_mode_first():
 
 def test_steps_come_from_the_numbered_lines():
     assert planning.steps(PLAN) == ["Add mul to src/pkg/math.py", "Test it"]
+    real = "1. **`calc.py`** — add a `div(a, b)` function after `mul`:\n2. **`test_calc.py`** — add *two* tests:"
+    assert planning.steps(real) == ["calc.py — add a div(a, b) function after mul", "test_calc.py — add two tests"]
     assert planning.steps("No numbers here") == []

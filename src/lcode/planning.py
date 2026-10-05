@@ -57,7 +57,9 @@ def steps(plan: str, limit: int = 20) -> list[str]:
     for line in plan.splitlines():
         m = re.match(r"^ {0,3}\d+[.)]\s+(.+)", line)
         if m:
-            text = re.sub(r"[*_`]{1,2}([^*_`]+)[*_`]{1,2}", r"\1", m.group(1)).strip()
+            # Plain text for the todo list: no bold, code or emphasis marks (underscores in names stay).
+            text = m.group(1).replace("**", "").replace("__", "").replace("`", "")
+            text = re.sub(r"(?<!\w)[*_]([^*_]+)[*_](?!\w)", r"\1", text).strip().rstrip(":").strip()
             found.append(text if len(text) <= 120 else text[:119].rstrip() + "…")
     return found[:limit]
 
