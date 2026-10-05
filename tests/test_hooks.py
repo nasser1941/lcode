@@ -1,5 +1,7 @@
 import io
 import json
+import shlex
+import sys
 
 import pytest
 from rich.console import Console
@@ -10,6 +12,11 @@ from lcode.hardware import Hardware
 from lcode.permissions import Permissions
 from lcode.repl import session_start
 
+# A stand-in formatter that works the same with GNU and BSD tools (macOS's sed -i differs).
+FORMAT = (
+    f"{shlex.quote(sys.executable)} -c "
+    "\"import pathlib, sys; p = pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace('  -  ', ' - '))\""
+)
 HW = Hardware("linux", "x", 31, "GPU", 12)
 
 
@@ -108,14 +115,14 @@ def test_after_tool_hooks_format_edited_files_and_report_problems(make_agent, re
     )
     agent.hooks = hook_set(
         {"event": "after_tool", "tools": ["edit_file", "write_file"], "paths": ["*.py"],
-         "command": "sed -i 's/  -  / - /' {path} && echo formatted {path}", "feedback": True},
+         "command": FORMAT + " {path} && echo formatted {path}", "feedback": True},
         {"event": "after_tool", "tools": ["edit_file"], "command": f"cat >> {log}; echo >> {log}"},
         {"event": "after_tool", "tools": ["write_file"], "command": "echo 'lint: notes.txt:1: trailing words'; exit 1"},
     )  # fmt: skip
     agent.run_turn("change it")
     results = [m["content"] for m in agent.messages if m["role"] == "tool"]
     assert "return a - b" in (repo / "src/pkg/math.py").read_text()  # formatted after the edit
-    assert "[A hook ran after this (sed -i" in results[1] and f"formatted {repo / 'src/pkg/math.py'}" in results[1]
+    assert "[A hook ran after this (" in results[1] and f"formatted {repo / 'src/pkg/math.py'}" in results[1]
     assert "exit code 1):\nlint: notes.txt:1: trailing words]" in results[2]  # problems reach the model
     assert "formatted" not in results[2]  # the *.py hook didn't run for notes.txt
     event = json.loads(log.read_text().splitlines()[0])
