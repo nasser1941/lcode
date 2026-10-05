@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-05
+
 ### Fixed
 
 - `lcode mcp add encord` failed with "needs the Encord SDK" when lcode itself was installed with
@@ -309,7 +311,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/nasser1941/lcode/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/nasser1941/lcode/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/nasser1941/lcode/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/nasser1941/lcode/compare/v0.8.0...v0.9.0
