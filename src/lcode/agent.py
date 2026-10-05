@@ -22,6 +22,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from lcode import catalog, extensions, limits, planning, sessions, subagents, vision, web
+from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.checkpoints import Checkpoints
 from lcode.config import format_tokens
@@ -50,6 +51,7 @@ SAFE_NUM_BATCH = 512  # Ollama's default prompt batch
 MAX_STEPS_PER_TURN = 150
 MAX_MALFORMED_CALL_RETRIES = 2  # Ollama rejects tool calls whose arguments aren't valid JSON  # safety cap on tool-call iterations for one request
 AUTO_COMPACT_RATIO = 0.85  # summarize the history when the context is this full
+PRUNED_ENOUGH = 0.6  # after pruning old tool output, summarize only if the context is still this full
 PROJECT_FILES = ("AGENTS.md", "LCODE.md", "CLAUDE.md")
 
 SYSTEM_PROMPT = """You are lcode, an autonomous software-engineering agent running in the user's terminal on their own machine, powered by the local model {model}. You help the user understand codebases, answer questions about code, write scripts (Python by default), fix bugs, refactor, and run commands.
@@ -173,6 +175,7 @@ class Settings:
     subagents: bool = False  # the agent tool (lcode.subagents)
     trust_project: bool = False  # use the repository's own commands, skills and agents (lcode.extensions)
     skills: str = "off"  # all, lcode (only lcode's own skill folders) or off
+    prune: bool = True  # remove old tool output before summarizing (lcode.context)
     max_parallel_agents: int = 1
 
 
@@ -202,6 +205,7 @@ class Agent:
         self._agent_types: tuple[Path, dict[str, subagents.AgentType], list[str]] | None = None
         self.agent_runs: list[subagents.Record] = []  # subagents run in this session, for /agents
         self.plan = ""  # the plan the user approved; kept through compaction
+        self.pruned = self.compacted = 0  # how often the context was pruned or summarized automatically
         self._extensions: tuple[Path, extensions.Extensions] | None = None
         self.skills_loaded: set[str] = set()  # skills whose instructions are in the conversation
         # Set on subagents (see lcode.subagents):
@@ -775,9 +779,24 @@ class Agent:
 
     # -- context management
     def maybe_compact(self) -> None:
-        if self.ctx_used > AUTO_COMPACT_RATIO * self.settings.context:
-            self.console.print("[yellow]Context is nearly full — compacting the conversation…[/]")
-            self.compact()
+        if self.ctx_used <= AUTO_COMPACT_RATIO * self.settings.context:
+            return
+        if self.settings.prune:
+            saved = context_tools.prune(self.messages)  # tool output from before the last two requests
+            if self.ctx_used - saved // 3 > PRUNED_ENOUGH * self.settings.context:
+                saved += context_tools.prune(self.messages, keep=1)  # not enough: before the last request
+            if saved:
+                self.pruned += 1
+                self.ctx_used = max(len(self.messages[0]["content"]) // 3, self.ctx_used - saved // 3)
+                self.console.print(
+                    f"[dim]Removed old tool output from the conversation (~{format_tokens(saved // 3)} tokens) to "
+                    "make room.[/]"
+                )
+                if self.ctx_used <= PRUNED_ENOUGH * self.settings.context:
+                    return
+        self.console.print("[yellow]Context is nearly full — compacting the conversation…[/]")
+        self.compacted += 1
+        self.compact()
 
     def compact(self, focus: str = "") -> None:
         if len(self.messages) <= 2:

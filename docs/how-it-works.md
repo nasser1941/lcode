@@ -41,11 +41,27 @@ in a temporary git worktree, and their changes come back as a diff.
 ## Context management
 
 Ollama keeps the processed conversation in its KV cache, so each turn only processes the new tokens.
-lcode tracks how full the window is from Ollama's token counts. At 85% it asks the model to write a
-summary of the conversation (goals, findings, files changed, next steps) and continues from that
-summary. Just before that, it asks whether anything from the conversation is worth
-[remembering](memory.md), since the summary leaves details out. Tool outputs are capped at 30,000
-characters (head and tail kept) so one noisy command can't flood the window.
+lcode tracks how full the window is from Ollama's token counts. Most of a long session's context is
+old tool output, so when the window is 85% full:
+
+1. **lcode removes old tool output first.** File contents, command output and search results from
+   before your last two requests become one-line notes that say what was there, such as
+   `[lcode: read src/app.py earlier; removed to save context. Read it again if you need it.]`.
+   An earlier copy of a file that was read again later goes too, even in recent requests. Subagent
+   reports, skill instructions and the approved plan stay.
+2. **If that brings the conversation under 70%,** the work simply continues: nothing is summarized,
+   and the conversation itself stays word for word.
+   If it's not, lcode also removes the tool output of your previous request, keeping only the
+   latest one's. (`lcode config set prune false` skips this step.)
+3. **Otherwise lcode summarizes.** It asks whether anything is worth [remembering](memory.md), since
+   the summary leaves details out, then has the model write a summary of the conversation (goals,
+   findings, files changed, next steps) and continues from it.
+
+Long tool output (over 30,000 characters) keeps its beginning, its end and the lines in between
+that look like errors. The full output is saved under `~/.local/state/lcode/outputs/` (for a week)
+and the model is told where, so it can read the rest if it needs to. `/context` shows what's using
+the window, by category: the system prompt and its parts, tool definitions, your messages, attached
+files, the model's replies and each tool's results.
 
 ## Memory sizing
 

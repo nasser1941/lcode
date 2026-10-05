@@ -67,7 +67,7 @@ reasoning is on.
 | `/mcp [tools\|login\|restart NAME]` | [MCP servers](mcp.md), their status and tools |
 | `/plan [request]` | Work out a [plan](#plan-mode) before changing anything, or show the approved plan |
 | `/compact [focus]` | Summarize the conversation to free context |
-| `/context [size]` | Show how full the context window is and change its size: pick from a list with memory estimates, or give a size like `/context 128k` (`/ctx` is a shortcut) |
+| `/context [size]` | Show how full the context window is, what's using it (by category), and change its size: pick from a list with memory estimates, or give a size like `/context 128k` (`/ctx` is a shortcut) |
 | `/model [name]`, `/models` | Switch model, list models |
 | `/think [on\|off]` | Toggle reasoning |
 | `/verbose` | Toggle showing the reasoning text |

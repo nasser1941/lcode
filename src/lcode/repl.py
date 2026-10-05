@@ -26,6 +26,7 @@ from rich.table import Table
 from rich.text import Text
 
 from lcode import __version__, catalog, extensions, limits, sessions, web
+from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
 from lcode.catalog import MIN_USEFUL_CONTEXT
@@ -217,6 +218,8 @@ def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
     if agent.mcp and agent.mcp.ready():
         how = "found on demand" if agent.mcp.searching(s.context) else "sent with every request"
         c.print(f"MCP tools: ~{format_tokens(agent.mcp.cost())} tokens of definitions, {how}.")
+    if not arg:
+        print_breakdown(agent)
     if arg:
         try:
             apply_context(agent, parse_context(arg), hardware)
@@ -254,6 +257,27 @@ def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
             c.print(f"[red]{e}[/]")
             return
     apply_context(agent, size, hardware)
+
+
+def print_breakdown(agent: Agent) -> None:
+    """What uses the context, by category."""
+    parts = [p for p in context_tools.breakdown(agent) if p.tokens]
+    total = sum(p.tokens for p in parts) or 1
+    table = Table(title="What uses the context (estimates)", title_justify="left", header_style="bold")
+    table.add_column("Part")
+    table.add_column("Tokens", justify="right")
+    table.add_column("", no_wrap=True)
+    table.add_column("", style="dim")
+    for part in parts:
+        share = part.tokens / total
+        bar = "█" * max(1, round(share * 20)) + f" {share:.0%}"
+        table.add_row(escape(part.name), format_tokens(part.tokens), bar, escape(part.detail))
+    agent.console.print(table)
+    if agent.pruned or agent.compacted:
+        agent.console.print(
+            f"[dim]This session: old tool output removed {agent.pruned} time(s), conversation summarized "
+            f"{agent.compacted} time(s).[/]"
+        )
 
 
 def sandbox_command(agent: Agent, arg: str) -> None:

@@ -6,6 +6,26 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `/context` shows what uses the context window, by category: the system prompt and its parts
+  (`AGENTS.md`, memory notes, skills, MCP servers), tool definitions, your messages, attached files,
+  the model's replies and each tool's results.
+- `lcode bench --session` runs all tasks in one conversation, to test long sessions and context
+  management; `--rounds N` repeats the tasks and `--no-prune` turns the removal of old tool output
+  off, to compare.
+
+### Changed
+
+- Smarter context management, which matters most at 32K. When the window is 85% full, lcode first
+  replaces old tool output (file contents, command output, search results from before your last
+  two requests, and earlier copies of files that were read again) with one-line notes saying what
+  was there, then the output of your previous request if needed; it summarizes the conversation
+  only if that doesn't free enough room. Measured on 24-task sessions at 32K: fewer summaries, with
+  about as many tasks solved. The `prune` setting turns it off.
+- Long command and MCP output keeps its beginning, its end and the lines that look like errors;
+  the full output is saved to a file the model can read.
+
 ## [0.11.1] - 2026-10-05
 
 ### Fixed

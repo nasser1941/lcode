@@ -285,3 +285,28 @@ def test_ctrl_c_stops_the_run_and_cleans_up(monkeypatch, tmp_path):
     assert run.interrupted and run.tasks == []
     assert not list(tmp_path.iterdir())  # the stopped task's folder is gone too
     assert dict(bench.summary_rows([run], bench.select_tasks("fix-bug,rename")))["Passed"] == ["0/0 (stopped)"]
+
+
+def test_session_runs_all_tasks_in_one_conversation(monkeypatch, tmp_path):
+    monkeypatch.setattr(bench.tempfile, "tempdir", str(tmp_path))
+    tasks = bench.select_tasks("fix-bug,find-code")
+    ollama = FakeOllama([*fix_bug_script(), reply("It is `next_wait` in backoff.py:13.")])
+    run = bench.run_model(ollama, "qwen3.6-35b", settings(), tasks, quiet(), session=True)
+    assert [t.passed for t in run.tasks] == [True, True]
+    assert (run.tasks[0].steps, run.tasks[1].steps) == (5, 1)  # counted per task, not cumulatively
+    last = ollama.payloads[-1]["messages"]
+    assert any("Fix the bug" in str(m.get("content")) or "cart.py" in str(m.get("content")) for m in last[1:4])
+    assert "lcode-bench-find-code-" in last[0]["content"]  # the system prompt moved on to the second folder
+    assert run.session and (run.pruned, run.compacted) == (0, 0)
+    rows = dict(bench.summary_rows([run], tasks))
+    assert rows["One conversation"] == ["pruned 0×, summarized 0×"]
+
+
+def test_rounds_get_one_row_per_task_with_a_mark_per_run(monkeypatch, tmp_path):
+    monkeypatch.setattr(bench.tempfile, "tempdir", str(tmp_path))
+    tasks = bench.select_tasks("find-code") * 2
+    ollama = FakeOllama([probe(), probe(), reply("`next_wait` in backoff.py:13"), reply("no idea")])
+    run = bench.run_model(ollama, "m", settings(), tasks, quiet(), session=True)
+    rows = dict(bench.summary_rows([run], tasks))
+    assert rows["find-code: Answer with file:line"][0].startswith("✓✗ ")
+    assert rows["Passed"] == ["1/2"]

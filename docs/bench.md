@@ -31,6 +31,35 @@ At the end it prints a table comparing the models (see [results](#results-on-a-1
 
 A model usually takes 4 to 12 minutes; each task stops after 5 minutes (`--timeout`).
 
+### Long sessions
+
+Each task normally starts a new conversation. `--session` runs them all in **one** conversation
+instead, as a long working session would, so the context fills up and lcode's
+[context management](how-it-works.md#context-management) has to work: the summary shows how often
+it removed old tool output and how often it summarized the conversation. `--no-prune` turns the
+removal off, to compare.
+
+```bash
+lcode bench --context 32k --session --rounds 3
+lcode bench --context 32k --session --rounds 3 --no-prune
+```
+
+`--rounds 3` runs the tasks three times, 24 in one conversation, which fills a 32K window several
+times over. With qwen3.6-35b on a 12 GB laptop (two runs each; runs vary a lot from one to the
+next):
+
+| | Removing old tool output first | Summarizing only (`--no-prune`) |
+|---|---|---|
+| Conversation summarized | 1 and 2 times | 1 and 3 times |
+| Old tool output removed | 3 times in each run | — |
+| Tasks solved | 21 and 22 of 24 | 23 and 21 of 24 |
+| Time | 26 and 28 min | 21 and 30 min |
+
+Removing old tool output means fewer summaries, so more of the conversation stays word for word,
+at no measurable cost in tasks solved or time. The bench tasks are independent of each other,
+which is where summaries hurt least; in a real session, where later requests build on earlier
+ones, keeping the conversation intact matters more.
+
 ## The tasks
 
 Every task runs in a new temporary folder, with every permission granted (`yolo` mode) and web
