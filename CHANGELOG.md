@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-06
+
+### Added
+
+- `/commit` writes a commit message in the repository's style, from the diff, the conversation
+  and recent commits, and commits once you approve it. It commits what you staged, or every
+  change except files the model thinks are unrelated and files that may hold secrets.
+- `/review [base]` reviews the uncommitted changes, or the branch against a base, and reports
+  findings with `path:line`. The model can read but not change anything during a review.
+- `/pr [base]` pushes the branch and opens a GitHub pull request with `gh` after you approve the
+  title and description; commits made on `main` itself go to a new branch.
+- A command of your own called `commit`, `review` or `pr` replaces the built-in one.
+- `lcode --worktree [NAME]` (`-w`) runs the session in a git worktree on its own branch, so
+  several sessions can work on one repository at once. It's removed at the end if nothing
+  changed. See [Git workflow](https://nasser1941.github.io/lcode/git/).
+
 ### Fixed
 
 - With another model server, `/ctx` no longer says the model reloads: it changes how much of the
@@ -403,7 +419,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/nasser1941/lcode/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/nasser1941/lcode/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/nasser1941/lcode/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/nasser1941/lcode/compare/v0.13.0...v0.14.0
