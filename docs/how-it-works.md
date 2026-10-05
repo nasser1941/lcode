@@ -18,7 +18,7 @@ flowchart LR
 ## The agent loop
 
 1. Your message goes to the model along with a system prompt (environment, repository layout,
-   `AGENTS.md`) and the JSON schemas of the tools.
+   `AGENTS.md`, the index of [memory notes](memory.md)) and the JSON schemas of the tools.
 2. The response streams back. Reasoning shows as a spinner (or text with `--show-thinking`); the
    answer is rendered as markdown, block by block.
 3. If the model called tools, lcode runs them, asking for permission where needed, and appends the
@@ -34,8 +34,9 @@ didn't match).
 Ollama keeps the processed conversation in its KV cache, so each turn only processes the new tokens.
 lcode tracks how full the window is from Ollama's token counts. At 85% it asks the model to write a
 summary of the conversation (goals, findings, files changed, next steps) and continues from that
-summary. Tool outputs are capped at 30,000 characters (head and tail kept) so one noisy command
-can't flood the window.
+summary. Just before that, it asks whether anything from the conversation is worth
+[remembering](memory.md), since the summary leaves details out. Tool outputs are capped at 30,000
+characters (head and tail kept) so one noisy command can't flood the window.
 
 ## Memory sizing
 
@@ -78,6 +79,7 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `mcp/` | MCP client: stdio and HTTP transports, OAuth sign-in, server settings, the catalog, `lcode mcp` |
 | `bench.py` | `lcode bench`: the benchmark tasks, their checks and the reports |
 | `vision.py` | Looking at images with a model that can see |
+| `memory.py` | Notes that carry over between sessions, and the end-of-session check |
 | `sandbox.py` | The optional container for shell commands |
 | `checkpoints.py` | Snapshots before the model changes files, for `/undo` and `/rewind` |
 | `catalog.py`, `models.toml` | Model catalog and memory estimates |

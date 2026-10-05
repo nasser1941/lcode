@@ -341,6 +341,13 @@ def cmd_doctor(args) -> None:
         network = "network on" if cfg["sandbox_network"] else "no network"
         line("Sandbox", problem or f"{cfg['sandbox']} · {network}", problem is None)
         ok &= problem is None
+    if cfg["memory"] == "off":
+        line("Memory", "off (lcode config set memory ask)", True)
+    else:
+        from lcode.memory import Memory
+
+        project, user = Memory(Path.cwd()).counts()
+        line("Memory", f"{cfg['memory']} · {project} note(s) for this repository, {user} for every repository", True)
     node = shutil.which("npx")
     line("Node.js", "found" if node else "not found (some MCP servers need npx)", True if node else None)
     sys.exit(0 if ok else 1)
@@ -509,8 +516,10 @@ def cmd_chat(args) -> None:
         sandbox_image=cfg["sandbox_image"],
         sandbox_network=cfg["sandbox_network"],
         vision_model=cfg["vision_model"],
+        memory="off" if args.no_memory else cfg["memory"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
+    agent.interactive = not args.prompt
     if agent.sandbox:
         # Never run commands unsandboxed when the user asked for a sandbox: stop here instead.
         from lcode.sandbox import SandboxError
@@ -557,6 +566,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-think", action="store_true", help="disable model reasoning (faster, less accurate)")
     parser.add_argument("--no-web", action="store_true", help="don't let the model search or fetch web pages")
     parser.add_argument("--no-mcp", action="store_true", help="don't start MCP servers in this session")
+    parser.add_argument("--no-memory", action="store_true", help="don't load or save memory notes in this session")
     parser.add_argument("--sandbox", action="store_true", help="run shell commands in a container (Docker or Podman)")
     parser.add_argument("--show-thinking", action="store_true", help="print the model's reasoning as it streams")
     parser.add_argument("-V", "--version", action="version", version=f"lcode {__version__}")
