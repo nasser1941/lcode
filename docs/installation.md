@@ -151,6 +151,11 @@ lcode config set ollama_host http://gpu-server:11434
 Your prompts and the code the model reads are then sent to that server. Ollama has no
 authentication; only expose it on a network you trust (or through an SSH tunnel).
 
+### LM Studio, llama.cpp, vLLM or MLX instead of Ollama
+
+lcode also works with any server that has an OpenAI-compatible API: `lcode config set backend
+lmstudio` (or `llama.cpp`, `vllm`, `mlx`). See [Other model servers](servers.md).
+
 ### Windows
 
 Use [WSL2](https://learn.microsoft.com/windows/wsl/install) with Ubuntu and follow the Ubuntu

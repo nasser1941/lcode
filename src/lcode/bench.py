@@ -1010,7 +1010,10 @@ def run_model(
         return run
     where = f" · {run.memory_gb} GB, {run.gpu_percent}% on the GPU" if run.memory_gb else ""
     reads = f" · reads prompts at {run.prompt_tps:,.0f} tok/s" if run.prompt_tps else ""
-    console.print(f"  [dim]Loaded in {run.load_seconds:.0f}s{where}{reads}[/]")
+    if getattr(ollama, "kind", "ollama") == "ollama":
+        console.print(f"  [dim]Loaded in {run.load_seconds:.0f}s{where}{reads}[/]")
+    elif reads:  # the server loads the model itself
+        console.print(f"  [dim]{reads.removeprefix(' · ').capitalize()}[/]")
     for task in tasks:
         log = console if verbose else Console(file=io.StringIO(), width=120, force_terminal=False)
         if session and shared is None:
@@ -1099,12 +1102,13 @@ def print_summary(console: Console, runs: list[ModelRun], tasks: list[Task]) -> 
             console.print(f"[yellow]{escape(run.model)}: {escape(run.error)}[/]")
 
 
-def report(runs: list[ModelRun], hardware: Hardware, ollama_version: str) -> dict:
+def report(runs: list[ModelRun], hardware: Hardware, ollama_version: str, server: str = "") -> dict:
     """The JSON document written by --json (schema version 1)."""
     return {
         "schema": SCHEMA_VERSION,
         "lcode": __version__,
-        "ollama": ollama_version,
+        "ollama": None if server else ollama_version,
+        "server": server or f"Ollama {ollama_version}",
         "date": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "hardware": {**asdict(hardware), "description": hardware.describe()},
         "tasks": [{"id": t.id, "title": t.title} for t in TASKS],
@@ -1112,11 +1116,12 @@ def report(runs: list[ModelRun], hardware: Hardware, ollama_version: str) -> dic
     }
 
 
-def markdown(runs: list[ModelRun], tasks: list[Task], hardware: Hardware, ollama_version: str) -> str:
+def markdown(runs: list[ModelRun], tasks: list[Task], hardware: Hardware, ollama_version: str, server: str = "") -> str:
     """A table to paste into a model test report."""
     date = dt.date.today().isoformat()
+    server = server or f"Ollama {ollama_version}"
     lines = [
-        f"**lcode bench** · lcode {__version__} · Ollama {ollama_version} · {hardware.describe()} · {date}",
+        f"**lcode bench** · lcode {__version__} · {server} · {hardware.describe()} · {date}",
         "",
         "| | " + " | ".join(f"`{r.model}`" for r in runs) + " |",
         "|---|" + "---|" * len(runs),

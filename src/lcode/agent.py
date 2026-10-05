@@ -570,7 +570,8 @@ class Agent:
                 self.console.print(f"[dim]{self.settings.model} does not support reasoning; continuing without.[/]")
                 yield from self.chat(messages, tools, False)
                 return
-            if any(marker in error for marker in GPU_MEMORY_ERRORS):
+            # Only Ollama loads the model with lcode's settings; other servers manage their own memory.
+            if getattr(self.ollama, "kind", "ollama") == "ollama" and any(m in error for m in GPU_MEMORY_ERRORS):
                 batch = self.settings.num_batch
                 if not started and batch and batch > SAFE_NUM_BATCH:
                     # Larger batches read prompts faster but need extra VRAM that isn't always free.

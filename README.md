@@ -66,7 +66,7 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   session as short notes, saved by the model, by you (`/remember`) or by a quick check at the end
   of a session. Not whole conversations, and never secrets.
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
-  with tool calling.
+  with tool calling. Or use LM Studio, llama.cpp, vLLM or MLX instead of Ollama.
 - **MCP servers, ready to go.** Connect Jira and Confluence, GitHub, AWS, Google Drive, Grafana,
   Google Cloud, Sentry, Linear, Notion, Postgres, Kubernetes, Metabase, Encord, Valohai and more with one command
   (`lcode mcp add atlassian`), image generation with ComfyUI, or any other MCP server. Browser sign-in (OAuth) is built in.

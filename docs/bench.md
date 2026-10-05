@@ -12,6 +12,10 @@ lcode bench --json results.json       # also save machine-readable results
 lcode bench --markdown                # also print a table to paste into a test report
 ```
 
+`lcode bench` also runs against [other model servers](servers.md), such as llama-server or LM
+Studio: `LCODE_BACKEND=llama.cpp lcode bench`. The server keeps the model loaded and doesn't report
+its memory use, so those columns stay empty.
+
 ```text
 lcode bench · NVIDIA GeForce RTX 4080 Laptop GPU (12 GB VRAM), 31 GB RAM · Ollama 0.32.15
 
@@ -158,6 +162,7 @@ existing fields keep their meaning until `schema` changes.
   "schema": 1,
   "lcode": "0.3.1",
   "ollama": "0.32.15",
+  "server": "Ollama 0.32.15",
   "date": "2026-09-30T19:09:09+02:00",
   "hardware": {
     "os": "linux", "cpu": "13th Gen Intel(R) Core(TM) i9-13980HX", "ram_gib": 30.96,
@@ -197,6 +202,7 @@ existing fields keep their meaning until `schema` changes.
 
 | Field | Meaning |
 |---|---|
+| `ollama`, `server` | The Ollama version, or `null` with [another model server](servers.md); `server` names the server either way |
 | `runs[].model` | The name you gave (catalog key or Ollama tag); `ollama_model` is the model that ran |
 | `runs[].context`, `num_batch`, `think` | The settings used. lcode lowers the batch size or context if the GPU runs out of memory, and reports what it ended up using |
 | `runs[].memory_gb`, `gpu_percent` | From Ollama's `/api/ps`; `null` if unavailable |

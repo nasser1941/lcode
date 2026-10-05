@@ -53,7 +53,12 @@ def pick_model(ollama: Ollama, setting: str) -> str | None:
         return None
     if setting != "auto":
         return setting if setting in installed or f"{setting}:latest" in installed else None
-    return next((m for m in MODELS if m in installed), None)
+    found = next((m for m in MODELS if m in installed), None)
+    if found is None and getattr(ollama, "kind", "ollama") == "openai":  # e.g. LM Studio's text-embedding-…
+        from lcode.backends import is_embedding
+
+        found = next((m for m in sorted(installed) if is_embedding(m)), None)
+    return found
 
 
 def index_dir(root: Path) -> Path:

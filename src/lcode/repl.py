@@ -26,7 +26,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, catalog, extensions, limits, sessions, web
+from lcode import __version__, backends, catalog, extensions, limits, sessions, web
 from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
@@ -149,7 +149,9 @@ def banner(agent: Agent) -> None:
             Group(
                 Text.from_markup(f"[bold cyan]lcode[/] [dim]v{__version__}[/] — local coding agent\n"),
                 Text.from_markup(
-                    f"[dim]model[/]    {s.model}\n"
+                    f"[dim]model[/]    {escape(s.model)}"
+                    + (f" [dim]· {escape(agent.ollama.describe())}[/]" if backends.is_openai(agent.ollama) else "")
+                    + "\n"
                     f"[dim]context[/]  {format_tokens(s.context)} tokens\n"
                     f"[dim]cwd[/]      {agent.cwd}\n"
                     f"[dim]mode[/]     {agent.perms.mode} [dim](Shift+Tab to cycle)[/]\n"
@@ -221,6 +223,12 @@ def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
         c.print(f"MCP tools: ~{format_tokens(agent.mcp.cost())} tokens of definitions, {how}.")
     if not arg:
         print_breakdown(agent)
+    if not arg and backends.is_openai(agent.ollama):
+        c.print(
+            f"[dim]{agent.ollama.name} sets the context window when it loads the model; lcode uses "
+            f"{format_tokens(s.context)} of it. To summarize sooner: /ctx 16k[/]"
+        )
+        return
     if arg:
         try:
             apply_context(agent, parse_context(arg), hardware)
@@ -838,7 +846,7 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         print_models(agent.ollama, hardware, s.model)
     elif cmd == "/model":
         if not arg:
-            c.print(f"Model: {s.model}. Switch with /model <key or Ollama tag>; list with /models.")
+            c.print(f"Model: {s.model}. Switch with /model <name>; list with /models.")
         else:
             try:
                 name, spec = resolve_model(agent.ollama, arg)
@@ -849,6 +857,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
             s.num_batch = spec.num_batch if spec and name == spec.local_name else None
             if spec:  # size the context for the new model: largest window that fits this machine
                 s.context = limits.cap(name, spec.fit(hardware)[0] or MIN_USEFUL_CONTEXT)
+            elif backends.is_openai(agent.ollama):
+                s.context = backends.context_for(agent.ollama, name, None)[0]  # the server's window
             agent.messages[0]["content"] = agent.system_prompt()
             c.print(f"[green]Switched to {name}[/] (context {format_tokens(s.context)}).")
     elif cmd == "/think":
