@@ -26,6 +26,7 @@ WEB_MODES = ("on", "ask", "off")
 SEARCH_BACKENDS = ("auto", "ollama", "brave", "tavily", "searxng")
 MCP_TOOL_MODES = ("auto", "direct", "search")
 SANDBOX_ENGINES = ("off", "docker", "podman")
+MEMORY_MODES = ("off", "ask", "auto")
 
 # key -> (default, type, help)
 SETTINGS: dict[str, tuple[object, type, str]] = {
@@ -45,6 +46,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "sandbox_network": (False, bool, "let commands in the sandbox use the network"),
     "vision_model": ("auto", str, "model that looks at images: auto | off | an Ollama model with vision"),
     "mcp_tools": ("auto", str, "how MCP tools reach the model: auto | direct | search (on demand, saves context)"),
+    "memory": ("ask", str, "notes that carry over to later sessions: off | ask (confirm each) | auto"),
 }
 ENV_OVERRIDES = {
     "LCODE_MODEL": "model",
@@ -54,6 +56,7 @@ ENV_OVERRIDES = {
     "OLLAMA_HOST": "ollama_host",
     "LCODE_WEB": "web",
     "LCODE_SANDBOX": "sandbox",
+    "LCODE_MEMORY": "memory",
 }
 
 
@@ -109,6 +112,11 @@ def coerce(key: str, value: object) -> object:
         value = {"none": "off", "false": "off", "no": "off"}.get(str(value).lower(), str(value).lower())
         if value not in SANDBOX_ENGINES:
             raise ConfigError(f"sandbox must be one of {', '.join(SANDBOX_ENGINES)}")
+        return value
+    if key == "memory":
+        value = {"on": "ask", "true": "ask", "false": "off", "no": "off"}.get(str(value).lower(), str(value).lower())
+        if value not in MEMORY_MODES:
+            raise ConfigError(f"memory must be one of {', '.join(MEMORY_MODES)}")
         return value
     if key == "mcp_tools" and value not in MCP_TOOL_MODES:
         raise ConfigError(f"mcp_tools must be one of {', '.join(MCP_TOOL_MODES)}")

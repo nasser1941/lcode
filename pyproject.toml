@@ -69,6 +69,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "src/lcode/agent.py" = ["E501"] # the prompts are prose; wrapping them would change what the model sees
+"src/lcode/memory.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

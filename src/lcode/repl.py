@@ -6,6 +6,9 @@ import html
 import json
 import os
 import re
+import shlex
+import shutil
+import subprocess
 import threading
 from pathlib import Path
 
@@ -22,6 +25,7 @@ from rich.table import Table
 from rich.text import Text
 
 from lcode import __version__, catalog, limits, sessions, web
+from lcode import memory as memory_notes
 from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
 from lcode.catalog import MIN_USEFUL_CONTEXT
 from lcode.checkpoints import Checkpoint, CheckpointError, Restore
@@ -39,6 +43,8 @@ COMMANDS = {
     "/undo": "Undo the file changes of the last request (lcode saves a checkpoint before changing files)",
     "/rewind": "Go back to before an earlier request: its files, and optionally the conversation",
     "/checkpoints": "List the requests that changed files, and which files",
+    "/remember": "Save a note for later sessions, e.g. /remember use pnpm, not npm (-g: for every repository)",
+    "/memory": "Notes lcode remembers: /memory, /memory show|edit|delete <number or name>, /memory path",
     "/sandbox": "Shell-command sandbox: status, or /sandbox network on|off",
     "/mcp": "MCP servers and their tools: /mcp, /mcp tools NAME, /mcp login NAME, /mcp restart NAME",
     "/compact": "Summarize the conversation to free context (optional: what to focus on)",
@@ -149,6 +155,7 @@ def banner(agent: Agent) -> None:
                         if agent.sandbox
                         else ""
                     )
+                    + (f"[dim]memory[/]   {memory_status(agent)}\n" if s.memory != "off" else "")
                     + "\n"
                     "[dim]/help for commands · @file to attach · Esc+Enter for a newline[/]"
                 ),
@@ -314,6 +321,129 @@ def mcp_command(agent: Agent, arg: str) -> None:
         agent.prepare_mcp()  # the model sees the server's tools from the next request
 
 
+def memory_status(agent: Agent) -> str:
+    project, user = agent.memory().counts()
+    if not (project or user):
+        return f"{agent.settings.memory} · no notes yet [dim](/remember)[/]"
+    parts = [f"{project} for this repository"] if project else []
+    parts += [f"{user} for every repository"] if user else []
+    total = project + user
+    return f"{agent.settings.memory} · {total} note{'' if total == 1 else 's'}: {', '.join(parts)} [dim](/memory)[/]"
+
+
+def memory_off(agent: Agent) -> bool:
+    if agent.settings.memory != "off":
+        return False
+    agent.console.print(
+        "Memory is off in this session. Turn it on with: lcode config set memory ask (or drop --no-memory)"
+    )
+    return True
+
+
+def remember_command(agent: Agent, arg: str) -> None:
+    """/remember [-g] [type:] text — save a note the user writes, without asking the model."""
+    c = agent.console
+    if memory_off(agent):
+        return
+    words = arg.split()
+    scope = "project"
+    if words and words[0] in ("-g", "--global", "--user"):
+        scope, words = "user", words[1:]
+    text = " ".join(words)
+    if not text:
+        c.print(
+            "Usage: /remember <fact>, e.g. /remember the staging database needs the VPN. "
+            "Add -g for a note for every repository, and start with feedback:, reference: or user: to set its type."
+        )
+        return
+    kind = "user" if scope == "user" else "project"
+    m = re.match(r"(feedback|project|reference|user):\s*(.*)", text, re.I | re.S)
+    if m:
+        kind, text = m.group(1).lower(), m.group(2)
+    description, details = text, ""
+    if len(text) > memory_notes.MAX_DESCRIPTION:
+        description, details = text[: memory_notes.MAX_DESCRIPTION - 1].rstrip() + "…", text
+    try:
+        note = memory_notes.make_note(memory_notes.slugify(description), kind, description, details, scope)
+    except memory_notes.NoteError as e:
+        c.print(f"[red]{escape(str(e))}[/]")
+        return
+    saved, updated = agent.memory().save(note)
+    where = "every repository" if scope == "user" else "this repository"
+    c.print(f"[green]{'Updated' if updated else 'Remembered'} for {where}:[/] {escape(saved.description)}")
+    agent.messages.append(
+        {"role": "user", "content": f"[lcode] The user saved a note that later sessions will see: {saved.description}"}
+    )
+    agent.save()
+
+
+def memory_command(agent: Agent, arg: str) -> None:
+    c = agent.console
+    if memory_off(agent):
+        return
+    memory = agent.memory()
+    notes = memory.notes()
+    action, _, target = arg.partition(" ")
+    target = target.strip()
+    if action == "path":
+        c.print(f"For this repository: {memory.project}\nFor every repository: {memory.user}")
+        return
+    if action in ("", "list"):
+        if not notes:
+            c.print(
+                "No notes yet. lcode saves what later sessions should know: the model with its memory tool, you "
+                "with /remember, and a short check when a session ends."
+            )
+            return
+        table = Table(title="Memory", title_justify="left", header_style="bold")
+        table.add_column("#", justify="right", style="cyan")
+        table.add_column("For")
+        table.add_column("Type")
+        table.add_column("Note")
+        table.add_column("Updated", no_wrap=True)
+        for i, note in enumerate(notes, 1):
+            table.add_row(
+                str(i),
+                "every repo" if note.scope == "user" else "this repo",
+                note.type,
+                f"{escape(note.description)} [dim]{escape(note.name)}[/]",
+                note.modified,
+            )
+        c.print(table)
+        c.print("[dim]/memory show|edit|delete <number or name> · the model sees these at the start of a session[/]")
+        return
+    if action not in ("show", "edit", "delete", "forget"):
+        c.print("[yellow]Use /memory, /memory show|edit|delete <number or name> or /memory path.[/]")
+        return
+    note = notes[int(target) - 1] if target.isdigit() and 1 <= int(target) <= len(notes) else None
+    note = note or (memory.find(target) if target else None)
+    if note is None or note.path is None:
+        c.print(f"[yellow]No note {escape(target)!r}. /memory lists them.[/]" if target else "[yellow]Which note?[/]")
+        return
+    if action == "show":
+        where = "every repository" if note.scope == "user" else "this repository"
+        c.print(
+            Panel(
+                escape(note.render()), title=f"{escape(note.name)} · {where}", title_align="left", border_style="blue"
+            )
+        )
+        c.print(f"[dim]{escape(str(note.path))}[/]")
+    elif action == "edit":
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or ("nano" if shutil.which("nano") else "vi")
+        try:
+            subprocess.call([*shlex.split(editor), str(note.path)])
+        except OSError as e:
+            c.print(f"[red]Can't start the editor {escape(editor)}: {escape(str(e))}[/]")
+            return
+        if memory_notes.parse(note.path.read_text(errors="replace"), note.scope, note.path) is None:
+            c.print(f"[yellow]{escape(str(note.path))} no longer has a name and description, so lcode ignores it.[/]")
+        memory.write_index(note.scope)
+        c.print("[dim]Saved. The model sees the change from the next session.[/]")
+    elif ask_yes(f"Delete the note '{note.description}'?"):
+        memory.delete(note)
+        c.print(f"Deleted {escape(note.name)}. [dim]The model sees the change from the next session.[/]")
+
+
 def ask_yes(question: str) -> bool:
     try:
         return input(f"  {question} [y/N] ").strip().lower() in ("y", "yes")
@@ -450,6 +580,7 @@ def restore_checkpoint(agent: Agent, target: Checkpoint, rewind: bool) -> None:
         c.print(f"[green]Done:[/] {escape(file_summary(plan, limit=8))}.")
     if truncate:
         agent.messages = agent.messages[:index]
+        agent.reflected = min(agent.reflected, index)
         agent.ctx_used = sum(len(json.dumps(m)) for m in agent.messages) // 3
         c.print(f"The conversation is back to before request {target.n} as well.")
     elif plan.restore or plan.remove:
@@ -525,6 +656,7 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         )
         c.print(Panel(f"{rows}\n\n  [dim]{keys}[/]", title="lcode commands", border_style="cyan"))
     elif cmd == "/clear":
+        memory_notes.reflect(agent)
         agent.new_session()
         c.print("[green]Started a new conversation.[/] The previous one is saved; /resume brings it back.")
     elif cmd == "/rename":
@@ -544,6 +676,10 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         rewind_command(agent, arg)
     elif cmd == "/checkpoints":
         print_checkpoints(agent)
+    elif cmd == "/remember":
+        remember_command(agent, arg)
+    elif cmd == "/memory":
+        memory_command(agent, arg)
     elif cmd == "/mcp":
         mcp_command(agent, arg)
     elif cmd == "/sandbox":
@@ -727,6 +863,7 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
             continue
         agent.console.print(Rule(style="dim"))
         run_safely(agent, line)
+    memory_notes.reflect(agent)
     agent.console.print("[dim]Bye.[/]")
 
 

@@ -25,6 +25,7 @@ lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases
 | `--no-think` | Turn off the model's reasoning: faster, less accurate |
 | `--no-web` | No web search or page fetching in this session |
 | `--no-mcp` | Don't start [MCP servers](mcp.md) in this session |
+| `--no-memory` | Don't load or save [memory notes](memory.md) in this session |
 | `--sandbox` | Run shell commands in a container that only sees the project ([Sandbox](sandbox.md)) |
 | `--show-thinking` | Print the model's reasoning as it streams |
 | `-V, --version` | Print the version |
@@ -56,6 +57,8 @@ reasoning is on.
 | `/undo` | Undo the file changes of the last request ([details](#undo-and-checkpoints)) |
 | `/rewind [N]` | Go back to before request N: its files, and optionally the conversation |
 | `/checkpoints` | List the requests that changed files, and which files |
+| `/remember [-g] TEXT` | Save a [note](memory.md) for later sessions (`-g`: for every repository) |
+| `/memory [show\|edit\|delete N]` | The [notes](memory.md) lcode remembers |
 | `/sandbox [network on\|off]` | The [sandbox](sandbox.md) for shell commands |
 | `/mcp [tools\|login\|restart NAME]` | [MCP servers](mcp.md), their status and tools |
 | `/compact [focus]` | Summarize the conversation to free context |
@@ -224,6 +227,10 @@ instructions found in it. Command and edit approvals still apply.
 At startup lcode reads `AGENTS.md` (or `LCODE.md`, or `CLAUDE.md`) from the working directory and
 adds it to the model's instructions. Use it for build and test commands, architecture notes and
 conventions. `/init` writes a first version for you.
+
+What doesn't belong in `AGENTS.md` but should carry over, such as your corrections and preferences,
+goes into lcode's [memory](memory.md): short notes the model, you (`/remember`) or a short check at
+the end of a session save, and that every later session in the repository loads.
 
 ## Sessions
 

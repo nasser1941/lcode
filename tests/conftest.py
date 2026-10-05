@@ -22,13 +22,15 @@ class FakeOllama:
         self.loaded = [{"name": "lcode-qwen3.6-35b:latest", "size": 23_000_000_000, "size_vram": 11_500_000_000}]
         self.unloaded: list[str] = []
         self.description = "A login form with a red 'Sign in' button."
+        self.chat_replies: list[str] = []  # answers to non-streaming requests, before falling back to description
 
     def show(self, model: str) -> dict:
         return {"capabilities": self.capabilities.get(model, ["completion", "tools"])}
 
     def chat(self, payload: dict) -> dict:
         self.chats.append(payload)
-        return {"message": {"role": "assistant", "content": self.description}}
+        content = self.chat_replies.pop(0) if self.chat_replies else self.description
+        return {"message": {"role": "assistant", "content": content}}
 
     def chat_stream(self, payload: dict):
         self.payloads.append(payload)

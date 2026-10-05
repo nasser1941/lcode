@@ -21,6 +21,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from lcode import catalog, limits, sessions, vision, web
+from lcode import memory as memory_notes
 from lcode.checkpoints import Checkpoints
 from lcode.config import format_tokens
 from lcode.mcp import McpManager
@@ -29,6 +30,7 @@ from lcode.permissions import Permissions
 from lcode.render import MarkdownStreamer
 from lcode.sandbox import Sandbox, SandboxError, project_root
 from lcode.tools import (
+    MEMORY_SCHEMA,
     SCHEMAS,
     VIEW_IMAGE_SCHEMA,
     WEB_FETCH_SCHEMA,
@@ -74,7 +76,7 @@ SYSTEM_PROMPT = """You are lcode, an autonomous software-engineering agent runni
 
 # Top-level layout of the working directory
 {tree}
-{web}{memory}"""
+{web}{project}{notes}"""
 
 WEB_PROMPT = """
 # Web access
@@ -148,6 +150,7 @@ class Settings:
     sandbox_image: str | None = None
     sandbox_network: bool = False
     vision_model: str = "auto"  # auto, off or an Ollama model that can see images
+    memory: str = "off"  # off, ask or auto: notes that carry over to later sessions (lcode.memory)
 
 
 class Agent:
@@ -170,6 +173,9 @@ class Agent:
         self._vision: str | bool | None = False  # the model that looks at images; False = not decided yet
         self.session_name = ""
         self.session_title = ""
+        self.interactive = True  # False for `lcode -p`: no end-of-session questions
+        self.reflected = 0  # messages before this index were already checked for notes to remember
+        self._memory: memory_notes.Memory | None = None
         self.ctx_used = 0
         self.last_speed = 0.0
         self.usage = {"requests": 0, "prompt_tokens": 0, "prompt_ns": 0, "output_tokens": 0, "output_ns": 0}
@@ -182,11 +188,11 @@ class Agent:
         return dt.datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
 
     def system_prompt(self) -> str:
-        memory = ""
+        project = ""
         for name in PROJECT_FILES:
             f = self.cwd / name
             if f.is_file():
-                memory = f"\n# Project instructions ({name})\n{truncate(f.read_text(errors='replace'), 20_000)}\n"
+                project = f"\n# Project instructions ({name})\n{truncate(f.read_text(errors='replace'), 20_000)}\n"
                 break
         return SYSTEM_PROMPT.format(
             model=self.settings.model,
@@ -196,9 +202,16 @@ class Agent:
             date=dt.date.today().isoformat(),
             git=git_info(self.cwd),
             tree=tree(self.cwd, depth=1, limit=120),
-            memory=memory,
+            project=project,
+            notes=self.memory().prompt(self.settings.context) if self.settings.memory != "off" else "",
             web=self.web_prompt(),
         )
+
+    def memory(self) -> memory_notes.Memory:
+        """The notes for the current folder's repository, plus the user's own."""
+        if self._memory is None or self._memory.cwd != self.cwd:
+            self._memory = memory_notes.Memory(self.cwd)
+        return self._memory
 
     def search_backend(self) -> str | None:
         if self.settings.web == "off":
@@ -211,6 +224,8 @@ class Agent:
             schemas += [*([WEB_SEARCH_SCHEMA] if self.search_backend() else []), WEB_FETCH_SCHEMA]
         if self.vision_model():
             schemas.append(VIEW_IMAGE_SCHEMA)
+        if self.settings.memory != "off":
+            schemas.append(MEMORY_SCHEMA)
         if self.mcp:
             schemas += self.mcp.schemas(self.settings.context)
         return schemas
@@ -301,6 +316,7 @@ class Agent:
         self.messages = [{"role": "system", "content": self.system_prompt()}]
         self._mcp_prompt = ""
         self.tools.read_mtimes.clear()
+        self.reflected = len(self.messages)
         self.ctx_used = len(self.messages[0]["content"]) // 3
 
     def session_file(self) -> Path:
@@ -357,6 +373,7 @@ class Agent:
         self.session_name = data.get("name", "")
         self.session_title = data.get("title") or sessions.title_from(self.messages)
         self.tools.read_mtimes.clear()  # files may have changed since; the model must read them again
+        self.reflected = len(self.messages)  # checked for notes to remember when that session ended
         self.ctx_used = sum(len(json.dumps(m)) for m in self.messages) // 3
         return note
 
@@ -513,6 +530,8 @@ class Agent:
             return f"glob({args.get('pattern', '')})"
         if name == "list_dir":
             return f"list_dir({args.get('path', '.')})"
+        if name == "memory":
+            return f"memory({' '.join(str(args.get(k) or '') for k in ('action', 'name')).strip()})"
         if self.mcp and self.mcp.owns(name):
             if name == "mcp_find_tools":
                 return f"mcp_find_tools({args.get('query', '')!r})"
@@ -646,6 +665,8 @@ class Agent:
     def compact(self, focus: str = "") -> None:
         if len(self.messages) <= 2:
             return
+        if self.interactive:
+            memory_notes.reflect(self)  # what the summary leaves out is gone for good
         instructions = (
             "Summarize this conversation so the work can continue in a fresh context. Include: the user's goals "
             "and requests, key facts learned about the codebase (files, functions, paths with line numbers), "
@@ -664,6 +685,7 @@ class Agent:
             {"role": "assistant", "content": "Got it — I have the context from the summary and will continue."},
         ]
         self.ctx_used = sum(len(m["content"]) for m in self.messages) // 3
+        self.reflected = len(self.messages)
         self.console.print(Panel(Markdown(summary), title="Compacted summary", border_style="blue"))
 
     # -- settings changes

@@ -30,6 +30,7 @@ lcode config path                      # print the file location
 | `sandbox_network` | `false` | Let commands in the sandbox use the network |
 | `vision_model` | `auto` | The model that [looks at images](usage.md#images): `auto`, `off` or an Ollama model that can see |
 | `mcp_tools` | `auto` | How [MCP](mcp.md#context) tool definitions reach the model: `auto`, `direct` or `search` (on demand) |
+| `memory` | `ask` | [Notes that carry over](memory.md) to later sessions: `ask` (confirm each), `auto` or `off` |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
 
 Example file:
@@ -55,6 +56,7 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `OLLAMA_HOST` | `ollama_host` (same variable the Ollama CLI uses) |
 | `LCODE_WEB` | `web` |
 | `LCODE_SANDBOX` | `sandbox` |
+| `LCODE_MEMORY` | `memory` |
 | `OLLAMA_API_KEY`, `BRAVE_API_KEY`, `TAVILY_API_KEY` | API key for that [search provider](usage.md#web-search) (never stored in the config file) |
 | `LCODE_HOME` | where sessions and prompt history are stored |
 
@@ -69,6 +71,7 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `~/.local/state/lcode/mcp-auth/` | Sign-in tokens for remote MCP servers (readable only by you) |
 | `~/.local/state/lcode/mcp-logs/` | Error output of local MCP servers |
 | `~/.local/state/lcode/checkpoints/` | Checkpoints for `/undo` (copies of your project's files; deleted after 14 days) |
+| `~/.local/state/lcode/memory/` | [Memory](memory.md) notes: `user/` for every repository, `projects/<repository>/` for each one |
 | `~/.local/state/lcode/limits.json` | Context sizes that ran out of GPU memory on this machine (safe to delete) |
 
 Sessions contain everything the model read, including file contents. Delete the folder to clear them.

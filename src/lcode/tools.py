@@ -173,7 +173,34 @@ VIEW_IMAGE_SCHEMA = _fn(
     },
     ["path"],
 )
-TOOL_NAMES = {s["function"]["name"] for s in [*SCHEMAS, WEB_SEARCH_SCHEMA, WEB_FETCH_SCHEMA, VIEW_IMAGE_SCHEMA]}
+MEMORY_SCHEMA = _fn(
+    "memory",
+    "Your memory across sessions. save: keep a fact that a future session needs and that isn't in the code, git "
+    "history or AGENTS.md (one fact per note; saving under an existing name updates that note). delete: remove a "
+    "note that turned out wrong. read: a note's details, or the list of all notes when no name is given.",
+    {
+        "action": {"type": "string", "enum": ["save", "read", "delete"]},
+        "name": {"type": "string", "description": "Short kebab-case name, e.g. use-pnpm"},
+        "type": {
+            "type": "string",
+            "enum": ["feedback", "project", "reference", "user"],
+            "description": "save: feedback = the user's corrections and preferences; project = decisions, "
+            "constraints, ongoing work; reference = where things live outside the repository; user = who the "
+            "user is",
+        },
+        "description": {"type": "string", "description": "save: the fact, in one line"},
+        "details": {"type": "string", "description": "save (optional): why, and how to apply it"},
+        "scope": {
+            "type": "string",
+            "enum": ["project", "user"],
+            "description": "save: project (default) = this repository only; user = every repository",
+        },
+    },
+    ["action"],
+)
+TOOL_NAMES = {
+    s["function"]["name"] for s in [*SCHEMAS, WEB_SEARCH_SCHEMA, WEB_FETCH_SCHEMA, VIEW_IMAGE_SCHEMA, MEMORY_SCHEMA]
+}
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -339,6 +366,16 @@ class Toolbox:
             parts.append(f"missing required argument(s) {', '.join(map(repr, missing))}")
         valid = ", ".join(p if params[p].default is inspect.Parameter.empty else f"{p} (optional)" for p in params)
         return f"{'; '.join(parts)}. Valid arguments: {valid}."
+
+    # -- memory
+    def t_memory(
+        self, action: str, name: str = "", type: str = "", description: str = "", details: str = "", scope: str = ""
+    ) -> str:
+        if self.agent.settings.memory == "off":
+            raise ToolError("memory is turned off")
+        from lcode.memory import run_tool
+
+        return run_tool(self.agent, action, name, type, description, details, scope)
 
     # -- images
     def t_view_image(self, path: str, question: str = "") -> str:

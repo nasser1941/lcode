@@ -48,6 +48,9 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   Podman) that only sees your project, without network access unless you allow it.
 - **Undo.** lcode saves a checkpoint before the model changes files; `/undo` takes back the last
   request's edits, new files and shell-command changes, without touching your git history.
+- **Remembers what matters.** Corrections, decisions and where things live carry over to the next
+  session as short notes, saved by the model, by you (`/remember`) or by a quick check at the end
+  of a session. Not whole conversations, and never secrets.
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
   with tool calling.
 - **MCP servers, ready to go.** Connect Jira and Confluence, GitHub, AWS, Google Drive, Grafana,

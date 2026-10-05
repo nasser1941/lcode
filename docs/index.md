@@ -69,6 +69,13 @@ until the task is done, asking before it changes anything.
     Every edit is shown as a diff and every non-read-only command needs your approval, unless you
     choose otherwise. `/undo` takes back a request's file changes.
 
+-   :material-brain:{ .lg .middle } **Remembers what matters**
+
+    ---
+
+    Your corrections, decisions and where things live carry over to the next session as short
+    [notes](memory.md), never whole conversations or secrets.
+
 -   :material-connection:{ .lg .middle } **MCP servers**
 
     ---
