@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-05
+
 ### Added
 
 - Plan mode: a `plan` permission mode (Shift+Tab from `ask`, `/mode plan`, `lcode --plan`, or
@@ -262,7 +264,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/nasser1941/lcode/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/nasser1941/lcode/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/nasser1941/lcode/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/nasser1941/lcode/compare/v0.6.0...v0.6.1
