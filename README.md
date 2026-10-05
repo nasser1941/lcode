@@ -180,7 +180,6 @@ fills up. Details: [How it works](https://nasser1941.github.io/lcode/how-it-work
 
 See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). Next up:
 
-- [Long-running work: finish notifications and background commands](https://github.com/nasser1941/lcode/issues/51)
 - More models in the catalog, and test reports from your hardware ([report one](https://github.com/nasser1941/lcode/issues/new?template=model_request.yml))
 
 ## Contributing
