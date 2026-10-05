@@ -92,6 +92,11 @@ def present(agent: Agent, title: str, plan: str) -> str:
     plan = plan.strip()
     if not plan:
         return "Error: the plan is empty. Write the steps, the files, the risks and how you'll verify the work."
+    if agent.plan_review is not None:  # an editor shows the plan (lcode acp)
+        choice = agent.plan_review(title, plan)
+        if choice in ("ask", "auto-edit"):
+            return approve(agent, title, plan, choice, False)
+        return choice or "The user didn't approve the plan. Ask them what they'd like to change."
     edited = False
     while True:
         c.print(Panel(Markdown(plan), title=f"Plan: {escape(title)}", title_align="left", border_style="cyan"))

@@ -774,12 +774,23 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     from lcode.mcp.commands import build_parser as mcp_parser
 
     subs["mcp"] = mcp_parser()
+    subs["acp"] = argparse.ArgumentParser(
+        prog="lcode acp",
+        description="Run as the agent inside an editor, over the Agent Client Protocol on stdin and stdout "
+        "(Zed and other ACP editors start it for you; see the docs).",
+    )
     subs["action"] = argparse.ArgumentParser(
         prog="lcode action",
         description="Run as a GitHub Action on a self-hosted runner: answer @lcode in issues and pull requests, "
         "and review pull requests. Configured through the action's inputs (see the docs).",
     )
     return subs
+
+
+def cmd_acp(args) -> None:
+    from lcode import acp
+
+    sys.exit(acp.main())
 
 
 def cmd_action(args) -> None:
@@ -851,6 +862,7 @@ COMMANDS = {
     "mcp": cmd_mcp,
     "index": cmd_index,
     "action": cmd_action,
+    "acp": cmd_acp,
 }
 
 

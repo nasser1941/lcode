@@ -10,6 +10,7 @@ lcode doctor                 # check the installation (include this in bug repor
 lcode config [set|unset]     # show or change settings
 lcode bench [models]         # score models on small coding tasks on this machine
 lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases… (see MCP servers)
+lcode acp                    # run inside an editor over the Agent Client Protocol (see Editors)
 ```
 
 | Option | Meaning |

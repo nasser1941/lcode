@@ -76,7 +76,8 @@ class Permissions:
         self.always: set[str] = set()
         self.rules = Rules()  # allow and deny lists from the settings (lcode.hooks)
         self.on_prompt = None  # called with the title before lcode asks the user (notification hooks)
-        self.approve: Callable[[dict], bool] | None = None  # decides instead of asking (see lcode.api)
+        # Decides instead of asking (lcode.api, lcode acp): True, False, or a message saying why not.
+        self.approve: Callable[[dict], bool | str] | None = None
 
     def rule(self, kind: str, target: str) -> tuple[bool, str] | None:
         """A rule's verdict on an action: (allowed, message for the model), or None when no rule matches."""
@@ -109,9 +110,10 @@ class Permissions:
             target = target or key.split(":", 1)[-1]
             if kind == "bash":
                 target = LEADING_CD.sub("", target)  # the command itself, without `cd <folder> &&`
-            if self.approve({"kind": kind, "title": title, "target": target}):
+            verdict = self.approve({"kind": kind, "title": title, "target": target, "key": key})
+            if verdict is True:
                 return True, ""
-            return False, NOT_ASKED
+            return False, verdict if isinstance(verdict, str) and verdict else NOT_ASKED
         if self.on_prompt:
             self.on_prompt(title)
         self.console.print(Panel(body, title=title, title_align="left", border_style="yellow"))

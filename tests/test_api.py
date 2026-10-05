@@ -54,7 +54,12 @@ def test_permission_requests_go_to_approve(server, repo):
     ]
     with api.Session(repo, permission_mode="ask", approve=lambda r: asked.append(r) or len(asked) == 1) as session:
         result = session.run("make files")
-    assert asked[0] == {"kind": "bash", "title": f"Run command (in {repo})", "target": "touch made-by-bash"}
+    assert asked[0] == {
+        "kind": "bash",
+        "title": f"Run command (in {repo})",
+        "target": "touch made-by-bash",
+        "key": "bash:touch",
+    }
     assert (repo / "made-by-bash").exists() and not (repo / "second").exists()
     assert result.tool_calls[1]["output"] == NOT_ASKED and result.tool_calls[1]["error"] is True
     assert result.tool_calls[0]["error"] is False

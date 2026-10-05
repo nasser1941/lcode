@@ -257,6 +257,10 @@ class Agent:
         self.cancel: threading.Event | None = None  # set from another thread to stop
         self.on_tool = None  # called with (name, arguments) before each tool runs
         self.on_event: Callable[[dict], None] | None = None  # each step and tool result, for --output stream-json
+        self.on_delta: Callable[[str, str], None] | None = None  # ("text" or "thinking", piece) as it streams
+        self.current_call = ""  # id of the tool call that's running, so a permission request can name it
+        # Decides on a presented plan instead of asking in the terminal: "ask", "auto-edit", or why not.
+        self.plan_review: Callable[[str, str], str] | None = None
         self.max_steps = MAX_STEPS_PER_TURN
         self.turn_status = ""  # how the last request ended: success, max_steps
         self.response = None  # the streaming response, so another thread can abort it
@@ -649,6 +653,8 @@ class Agent:
                 msg = chunk.get("message", {})
                 if msg.get("thinking"):
                     thinking += msg["thinking"]
+                    if self.on_delta:
+                        self.on_delta("thinking", msg["thinking"])
                     progress.update("Thinking", msg["thinking"])
                     if self.settings.show_thinking:
                         stop_spinner()  # raw text is printed as it streams
@@ -659,6 +665,8 @@ class Agent:
                         self.console.print("\n")
                         printed_thinking = False
                     content += msg["content"]
+                    if self.on_delta:
+                        self.on_delta("text", msg["content"])
                     progress.update("Writing", msg["content"])
                     # Finished markdown blocks print above the spinner, which keeps running meanwhile.
                     start_spinner()
@@ -667,6 +675,8 @@ class Agent:
                     tool_calls.extend(msg["tool_calls"])
                 if chunk.get("done"):
                     final = chunk
+            if self.cancel is not None and self.cancel.is_set():
+                raise KeyboardInterrupt  # cancelled while the answer streamed: its end never came
         except KeyboardInterrupt:
             stop_spinner()
             md.flush()
@@ -833,6 +843,7 @@ class Agent:
                     raise
             for i, call in enumerate(calls):
                 name, args = call.get("function", {}).get("name", ""), call_arguments(call)
+                self.current_call = call.get("id", "")
                 if self.on_tool:
                     self.on_tool(name, args)
                 if name not in ("bash", "todo_write", "web_search", "web_fetch", "agent"):  # those print their own
