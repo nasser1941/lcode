@@ -27,6 +27,7 @@ SEARCH_BACKENDS = ("auto", "ollama", "brave", "tavily", "searxng")
 MCP_TOOL_MODES = ("auto", "direct", "search")
 SANDBOX_ENGINES = ("off", "docker", "podman")
 MEMORY_MODES = ("off", "ask", "auto")
+SKILL_SOURCES = ("all", "lcode", "off")
 
 # key -> (default, type, help)
 SETTINGS: dict[str, tuple[object, type, str]] = {
@@ -47,6 +48,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "vision_model": ("auto", str, "model that looks at images: auto | off | an Ollama model with vision"),
     "mcp_tools": ("auto", str, "how MCP tools reach the model: auto | direct | search (on demand, saves context)"),
     "memory": ("ask", str, "notes that carry over to later sessions: off | ask (confirm each) | auto"),
+    "skills": ("all", str, "skills to offer the model: all (also other agents' folders) | lcode | off"),
     "subagents": (True, bool, "let the model hand tasks to subagents that have their own context"),
     "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),
 }
@@ -120,6 +122,10 @@ def coerce(key: str, value: object) -> object:
         if value not in MEMORY_MODES:
             raise ConfigError(f"memory must be one of {', '.join(MEMORY_MODES)}")
         return value
+    if key == "skills" and str(value).lower() not in SKILL_SOURCES:
+        raise ConfigError(f"skills must be one of {', '.join(SKILL_SOURCES)}")
+    if key == "skills":
+        return str(value).lower()
     if key == "mcp_tools" and value not in MCP_TOOL_MODES:
         raise ConfigError(f"mcp_tools must be one of {', '.join(MCP_TOOL_MODES)}")
     if key == "search_backend" and value not in SEARCH_BACKENDS:

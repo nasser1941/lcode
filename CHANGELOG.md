@@ -6,6 +6,27 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Custom commands: prompt templates in `.lcode/commands/<name>.md` or
+  `~/.config/lcode/commands/`, run as `/name args`, with `$ARGUMENTS` and `$1`…`$9`, and an
+  optional frontmatter for the description, an argument hint and the tools allowed for the
+  request.
+- Skills in the [Agent Skills](https://agentskills.io) format, from `.lcode/skills/`,
+  `.agents/skills/` and `.claude/skills/` (in the repository and in your home folder). Only their
+  names and descriptions are in the system prompt; the model loads a skill's instructions with the
+  new `skill` tool when a task matches, and its scripts and reference files when the instructions
+  call for them. `/name` starts a skill yourself. `/help` lists commands and skills and where each
+  comes from. The `skills` setting limits them to lcode's own folders (`lcode`) or turns them off.
+  An example command and skill are in `examples/`. See
+  [Commands and skills](https://nasser1941.github.io/lcode/commands/).
+
+### Changed
+
+- A repository's own commands, skills and agents are used only after you approve them; lcode asks
+  the first time and again when they change, like a project's `.mcp.json`. Custom agents from a
+  repository (new in 0.8.0) used to load without asking.
+
 ## [0.9.0] - 2026-10-05
 
 ### Added

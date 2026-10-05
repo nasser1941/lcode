@@ -86,7 +86,14 @@ def make_agent(repo: Path, monkeypatch, tmp_path_factory):
 
     def factory(scripts=None, mode: str = "yolo", **settings) -> Agent:
         console = Console(file=io.StringIO(), width=100, force_terminal=False)
-        opts = {"model": "lcode-qwen3.6-35b", "context": 65536, "permission_mode": mode, **settings}
+        opts = {
+            "model": "lcode-qwen3.6-35b",
+            "context": 65536,
+            "permission_mode": mode,
+            "trust_project": True,
+            "skills": "all",
+        }
+        opts.update(settings)
         return Agent(FakeOllama(scripts), Settings(**opts), repo, console=console)
 
     return factory

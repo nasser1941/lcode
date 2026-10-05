@@ -25,7 +25,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, catalog, limits, sessions, web
+from lcode import __version__, catalog, extensions, limits, sessions, web
 from lcode import memory as memory_notes
 from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
 from lcode.catalog import MIN_USEFUL_CONTEXT
@@ -73,7 +73,7 @@ class InputCompleter(Completer):
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
         if text.startswith("/") and " " not in text:
-            for cmd, desc in COMMANDS.items():
+            for cmd, desc in {**COMMANDS, **custom_commands(self.agent)}.items():
                 if cmd.startswith(text):
                     yield Completion(cmd, start_position=-len(text), display_meta=desc)
             return
@@ -380,6 +380,48 @@ def agents_command(agent: Agent, arg: str) -> None:
         if n > 1
         else "[dim]Subagents run one at a time (max_parallel_agents = 1).[/]"
     )
+
+
+def custom_commands(agent: Agent) -> dict[str, str]:
+    """The user's and the repository's commands and skills, as /name -> description (built-ins win)."""
+    ext = agent.extensions()
+    found = {f"/{name}": skill.description for name, skill in ext.skills.items()}
+    found.update({f"/{name}": command.description for name, command in ext.commands.items()})
+    return {name: description for name, description in found.items() if name not in COMMANDS}
+
+
+def help_extensions(agent: Agent) -> None:
+    c, ext = agent.console, agent.extensions()
+    if ext.commands:
+        table = Table(title="Your commands", title_justify="left", header_style="bold")
+        for column in ("Command", "Does", "From"):
+            table.add_column(column)
+        for command in ext.commands.values():
+            hidden = " [yellow](hidden by the built-in command)[/]" if f"/{command.name}" in COMMANDS else ""
+            usage = f"/{command.name}" + (f" {command.argument_hint}" if command.argument_hint else "")
+            table.add_row(escape(usage), escape(command.description) + hidden, escape(agent.tools.rel(command.path)))
+        c.print(table)
+    if ext.skills:
+        table = Table(
+            title="Skills (the model loads them when a task matches; /name runs one)",
+            title_justify="left",
+            header_style="bold",
+        )
+        for column in ("Skill", "Does", "From"):
+            table.add_column(column)
+        for skill in ext.skills.values():
+            description = skill.description if len(skill.description) <= 140 else skill.description[:139] + "…"
+            if f"/{skill.name}" in COMMANDS or skill.name in ext.commands:
+                description += f" [yellow](/{skill.name} runs the command; the model can still load the skill)[/]"
+            table.add_row(f"/{escape(skill.name)}", escape(description), escape(agent.tools.rel(skill.folder)))
+        c.print(table)
+    for problem in ext.problems:
+        c.print(f"[yellow]Skipped {escape(problem)}[/]")
+    if not agent.settings.trust_project and extensions.status(agent.cwd) in ("new", "changed"):
+        c.print(
+            "[dim]This repository's own commands, skills and agents aren't in use: you didn't approve them "
+            "(restart lcode here to be asked again).[/]"
+        )
 
 
 def memory_status(agent: Agent) -> str:
@@ -716,6 +758,7 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
             "@path = attach a file · Shift+Tab = cycle permission mode"
         )
         c.print(Panel(f"{rows}\n\n  [dim]{keys}[/]", title="lcode commands", border_style="cyan"))
+        help_extensions(agent)
     elif cmd == "/clear":
         memory_notes.reflect(agent)
         agent.new_session()
@@ -807,6 +850,23 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         agent.tools.show_todos()
     elif cmd == "/init":
         run_safely(agent, INIT_PROMPT)
+    elif cmd[1:] in agent.extensions().commands:
+        command = agent.extensions().commands[cmd[1:]]
+        c.print(f"[dim]/{escape(command.name)} from {escape(agent.tools.rel(command.path))}[/]")
+        c.print(Rule(style="dim"))
+        previous = agent.allowed_tools
+        if command.tools is not None:
+            agent.allowed_tools = set(command.tools)
+        try:
+            run_safely(agent, command.render(arg))
+        finally:
+            agent.allowed_tools = previous
+    elif cmd[1:] in agent.extensions().skills:
+        skill = agent.extensions().skills[cmd[1:]]
+        agent.skills_loaded.add(skill.name)
+        c.print(f"[dim]Using the {escape(skill.name)} skill from {escape(agent.tools.rel(skill.folder))}[/]")
+        c.print(Rule(style="dim"))
+        run_safely(agent, f"{arg or f'Use the {skill.name} skill.'}\n\n{extensions.content(skill)}")
     else:
         c.print(f"[red]Unknown command {cmd}.[/] Type /help.")
     return True

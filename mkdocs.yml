@@ -94,6 +94,7 @@ nav:
       - Using lcode: usage.md
       - Memory: memory.md
       - Subagents: agents.md
+      - Commands and skills: commands.md
       - Models & context windows: models.md
       - Benchmarking models: bench.md
       - MCP servers: mcp.md

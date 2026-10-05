@@ -31,6 +31,7 @@ lcode config path                      # print the file location
 | `vision_model` | `auto` | The model that [looks at images](usage.md#images): `auto`, `off` or an Ollama model that can see |
 | `mcp_tools` | `auto` | How [MCP](mcp.md#context) tool definitions reach the model: `auto`, `direct` or `search` (on demand) |
 | `memory` | `ask` | [Notes that carry over](memory.md) to later sessions: `ask` (confirm each), `auto` or `off` |
+| `skills` | `all` | Which [skills](commands.md#skills) the model is offered: `all` (lcode's folders and the ones other agents share), `lcode` (only `.lcode/skills/` and `~/.config/lcode/skills/`) or `off` |
 | `subagents` | `true` | Let the model hand tasks to [subagents](agents.md) with their own context |
 | `max_parallel_agents` | `1` | Subagents that run at the same time; more needs `OLLAMA_NUM_PARALLEL` on the Ollama server ([details](agents.md#several-at-once)) |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
@@ -74,6 +75,8 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `~/.local/state/lcode/mcp-logs/` | Error output of local MCP servers |
 | `~/.local/state/lcode/checkpoints/` | Checkpoints for `/undo` (copies of your project's files; deleted after 14 days) |
 | `~/.local/state/lcode/memory/` | [Memory](memory.md) notes: `user/` for every repository, `projects/<repository>/` for each one |
+| `~/.config/lcode/commands/`, `~/.config/lcode/skills/` | Your [commands and skills](commands.md) (a repository's go in `.lcode/`) |
+| `~/.local/state/lcode/extensions-approved.json` | Repositories whose commands, skills and agents you approved |
 | `~/.config/lcode/agents/` | Your [custom agents](agents.md#custom-agents) (a repository's go in `.lcode/agents/`) |
 | `~/.local/state/lcode/limits.json` | Context sizes that ran out of GPU memory on this machine (safe to delete) |
 

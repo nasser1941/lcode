@@ -215,7 +215,7 @@ PRESENT_PLAN_SCHEMA = _fn(
 TOOL_NAMES = {
     s["function"]["name"]
     for s in [*SCHEMAS, WEB_SEARCH_SCHEMA, WEB_FETCH_SCHEMA, VIEW_IMAGE_SCHEMA, MEMORY_SCHEMA, PRESENT_PLAN_SCHEMA]
-}
+} | {"agent", "skill"}  # those two have schemas that depend on the session
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -334,10 +334,15 @@ class Toolbox:
         p = Path(os.path.expanduser(path or "."))
         return (p if p.is_absolute() else self.agent.cwd / p).resolve()
 
-    def path(self, path: str | None) -> Path:
-        """Resolve a path from the model; with the sandbox on, it must be inside the project."""
+    def path(self, path: str | None, read: bool = False) -> Path:
+        """Resolve a path from the model; with the sandbox on, it must be inside the project (or, for
+        reading, inside a skill's folder)."""
         p = self.resolve(path)
         root = self.agent.sandbox_root()
+        if read and root is not None:
+            skills = self.agent.extensions().skills.values()
+            if any(p == s.folder or s.folder in p.parents for s in skills):
+                return p
         if root is not None and p != root and root not in p.parents:
             raise ToolError(f"{path} is outside the project ({root}); with the sandbox on, that's all you can use")
         return p
@@ -406,6 +411,15 @@ class Toolbox:
 
         return present(self.agent, title, plan)
 
+    # -- skills
+    def t_skill(self, name: str) -> str:
+        from lcode.extensions import activate
+
+        result = activate(self.agent, name)
+        if not result.startswith("Error:"):
+            self.console.print(Text(f"  ⎿ loaded the {name} skill", style="dim"))
+        return result
+
     # -- memory
     def t_memory(
         self, action: str, name: str = "", type: str = "", description: str = "", details: str = "", scope: str = ""
@@ -459,7 +473,7 @@ class Toolbox:
 
     # -- read-only
     def t_read_file(self, path: str, offset: int = 1, limit: int = 2000) -> str:
-        p = self.path(path)
+        p = self.path(path, read=True)
         if not p.exists():
             raise ToolError(f"{path} does not exist")
         if p.is_dir():
@@ -481,7 +495,7 @@ class Toolbox:
         return truncate(out, 120_000)
 
     def t_list_dir(self, path: str = ".", depth: int = 2) -> str:
-        p = self.path(path)
+        p = self.path(path, read=True)
         if not p.is_dir():
             raise ToolError(f"{path} is not a directory")
         return tree(p, depth=max(1, min(int(depth or 2), 6)))

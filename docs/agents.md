@@ -134,7 +134,9 @@ Report bugs first, with `path:line`, then missing tests, then style. Don't fix a
 | `~/.config/lcode/agents/<name>.md` | For every repository |
 
 The file name is the agent's name. A repository's agent overrides one of yours with the same name,
-and both override the built-in types. `/agents` and `lcode doctor` point out files that couldn't be
+and both override the built-in types. A repository's agents are used only after you
+[approve them](commands.md#approving-a-repositorys-commands-skills-and-agents), together with its
+commands and skills. `/agents` and `lcode doctor` point out files that couldn't be
 read.
 
 ## Settings

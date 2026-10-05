@@ -59,6 +59,7 @@ reasoning is on.
 | `/undo` | Undo the file changes of the last request ([details](#undo-and-checkpoints)) |
 | `/rewind [N]` | Go back to before request N: its files, and optionally the conversation |
 | `/checkpoints` | List the requests that changed files, and which files |
+| `/name [args]` | Run one of your [commands or skills](commands.md); `/help` lists them |
 | `/agents [N]` | [Subagent](agents.md) types, and what this session's subagents did |
 | `/remember [-g] TEXT` | Save a [note](memory.md) for later sessions (`-g`: for every repository) |
 | `/memory [show\|edit\|delete N]` | The [notes](memory.md) lcode remembers |
@@ -92,6 +93,7 @@ reasoning is on.
 | `view_image` | Look at an image: a model that can see describes it ([Images](#images)) |
 | `agent` | Hand a task to a [subagent](agents.md) with its own context; only its report comes back |
 | `memory` | Save, update or delete [notes](memory.md) that later sessions load |
+| `skill` | Load a [skill](commands.md#skills)'s instructions when a task matches it |
 | `present_plan` | In [plan mode](#plan-mode): show the plan and ask for approval |
 
 lcode refuses to edit a file the model hasn't read in the session, or one that changed on disk since
@@ -275,6 +277,9 @@ instructions found in it. Command and edit approvals still apply.
 At startup lcode reads `AGENTS.md` (or `LCODE.md`, or `CLAUDE.md`) from the working directory and
 adds it to the model's instructions. Use it for build and test commands, architecture notes and
 conventions. `/init` writes a first version for you.
+
+Instructions that are only needed for some tasks fit better in a [command or skill](commands.md),
+which costs no context until it's used.
 
 What doesn't belong in `AGENTS.md` but should carry over, such as your corrections and preferences,
 goes into lcode's [memory](memory.md): short notes the model, you (`/remember`) or a short check at

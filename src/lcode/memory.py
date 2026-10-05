@@ -39,6 +39,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from lcode import config
+from lcode.frontmatter import split as frontmatter
 
 if TYPE_CHECKING:
     from lcode.agent import Agent
@@ -184,19 +185,6 @@ def project_dir(cwd: Path) -> Path:
         name, ident = cwd.name, cwd.resolve()
     key = hashlib.sha256(str(ident).encode()).hexdigest()[:8]
     return memory_dir() / "projects" / f"{slugify(name, 40) or 'folder'}-{key}"
-
-
-def frontmatter(text: str) -> tuple[dict[str, str], str] | None:
-    """The `key: value` header between --- lines, and the body after it (None without a header)."""
-    m = re.match(r"---\r?\n(.*?)\r?\n---\r?\n?(.*)", text, re.S)
-    if not m:
-        return None
-    fields = {}
-    for line in m.group(1).splitlines():
-        key, sep, value = line.partition(":")
-        if sep:
-            fields[key.strip()] = value.strip()
-    return fields, m.group(2)
 
 
 def parse(text: str, scope: str, path: Path | None = None) -> Note | None:

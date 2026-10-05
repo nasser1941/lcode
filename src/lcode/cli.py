@@ -367,6 +367,20 @@ def cmd_doctor(args) -> None:
             line("", f"{n} × {slots[1]} context may not fit in memory here; {slots[0]} would", None)
         for problem in problems:
             line("", problem, None)
+    from lcode import extensions
+
+    project_state = extensions.status(Path.cwd())
+    ext = extensions.load(Path.cwd(), include_project=project_state == "approved", skills_from=cfg["skills"])
+    found = f"{len(ext.commands)} command(s), {len(ext.skills)} skill(s)"
+    note = {
+        "none": "",
+        "approved": " · this repository's are approved",
+        "new": " · this repository brings its own: approve them when lcode asks",
+        "changed": " · this repository's changed since you approved them: lcode asks again",
+    }[project_state]
+    line("Extras", found + note, None if project_state in ("new", "changed") else True)
+    for problem in ext.problems:
+        line("", problem, None)
     if cfg["memory"] == "off":
         line("Memory", "off (lcode config set memory ask)", True)
     else:
@@ -528,6 +542,9 @@ def cmd_chat(args) -> None:
             num_batch = spec.num_batch
         else:  # the tuned batch size assumes the text-only variant; the vision projector needs that VRAM
             console.print(f"[dim]Tip: run `lcode setup {spec.key}` once to create the faster text-only variant.[/]")
+    from lcode import extensions
+
+    trust_project = extensions.trust_project(cwd, console, interactive=not args.prompt)
     settings = Settings(
         model=model,
         context=context,
@@ -547,6 +564,8 @@ def cmd_chat(args) -> None:
         memory="off" if args.no_memory else cfg["memory"],
         subagents=cfg["subagents"],
         max_parallel_agents=cfg["max_parallel_agents"],
+        trust_project=trust_project,
+        skills=cfg["skills"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.interactive = not args.prompt

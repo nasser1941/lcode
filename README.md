@@ -46,6 +46,8 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   your approval. `auto-edit` and `yolo` modes when you want speed.
 - **Sandbox (optional).** `lcode --sandbox` runs the model's shell commands in a container (Docker or
   Podman) that only sees your project, without network access unless you allow it.
+- **Commands and skills.** Your own `/commands` as prompt templates, and skills in the
+  [Agent Skills](https://agentskills.io) format that the model loads only when a task needs them.
 - **Plan mode.** `/plan <request>` or Shift+Tab: the model explores read-only and presents a plan;
   you approve, edit or send it back before anything changes.
 - **Undo.** lcode saves a checkpoint before the model changes files; `/undo` takes back the last
