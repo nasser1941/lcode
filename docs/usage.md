@@ -93,6 +93,8 @@ reasoning is on.
 | `view_image` | Look at an image: a model that can see describes it ([Images](#images)) |
 | `agent` | Hand a task to a [subagent](agents.md) with its own context; only its report comes back |
 | `memory` | Save, update or delete [notes](memory.md) that later sessions load |
+| `repo_map` | The [repository map](search.md): important files, classes and functions, ranked (larger repositories; small ones get it in the instructions) |
+| `search_code` | Find code by meaning with a local [embedding model](search.md#semantic-code-search), once the repository is indexed |
 | `lsp` | Ask a [language server](lsp.md) for a symbol's definition, references, type, or a file's outline |
 | `skill` | Load a [skill](commands.md#skills)'s instructions when a task matches it |
 | `present_plan` | In [plan mode](#plan-mode): show the plan and ask for approval |

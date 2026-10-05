@@ -744,11 +744,26 @@ TASKS = [
 ]
 
 
+def extra_tasks() -> list[Task]:
+    """Tasks that only run when asked for with --tasks (they're slower, or test optional features)."""
+    from lcode import bench_backend
+
+    return [
+        Task(
+            "find-concept",
+            "Find code by what it does (40 files)",
+            bench_backend.PROMPT,
+            bench_backend.FILES,
+            bench_backend.check,
+        )
+    ]
+
+
 def select_tasks(ids: str | None) -> list[Task]:
     if not ids:
         return list(TASKS)
     wanted = [i.strip() for i in ids.split(",") if i.strip()]
-    known = {task.id: task for task in TASKS}
+    known = {task.id: task for task in [*TASKS, *extra_tasks()]}
     unknown = [i for i in wanted if i not in known]
     if unknown:
         raise ValueError(f"unknown task(s) {', '.join(unknown)}; choose from {', '.join(known)}")
@@ -870,6 +885,13 @@ def run_task(
         else:  # the same conversation moves on to this task's folder, as with /cd
             agent.cwd = folder.resolve()
             agent.messages[0]["content"] = agent.system_prompt()
+        if settings.embed_model != "off":  # --code-search: index the task's folder first, outside the timer
+            from lcode import codesearch
+
+            model = codesearch.pick_model(ollama, settings.embed_model)
+            if model:
+                codesearch.Index(folder, model).update(ollama)  # on the CPU: lcode's model stays loaded
+            agent._code_index = None
         before = dict(agent.usage)
         first = len(agent.messages)
         error = None
@@ -890,6 +912,9 @@ def run_task(
         except Exception as e:  # a check must never crash the benchmark
             check = Check(False, f"check failed: {type(e).__name__}: {e}")
     finally:  # also when Ctrl+C stops the task
+        from lcode.codesearch import index_dir
+
+        shutil.rmtree(index_dir(folder), ignore_errors=True)
         if keep:
             (folder / "lcode-bench.log").write_text(log.file.getvalue() if isinstance(log.file, io.StringIO) else "")
         else:

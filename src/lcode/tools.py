@@ -200,6 +200,23 @@ MEMORY_SCHEMA = _fn(
     },
     ["action"],
 )
+REPO_MAP_SCHEMA = _fn(
+    "repo_map",
+    "A map of the repository: the important files with their classes and functions, signatures and line numbers, "
+    "ranked by how much of the code uses them. Use it to find your way around before reading files.",
+    {"path": {"type": "string", "description": "Only this folder (to see more of it)"}},
+    [],
+)
+SEARCH_CODE_SCHEMA = _fn(
+    "search_code",
+    "Find code by what it does, not by its exact words: e.g. 'where are failed uploads retried'. Returns the "
+    "closest matches with file:line. Use grep for exact names.",
+    {
+        "query": {"type": "string", "description": "What you're looking for, in words"},
+        "path": {"type": "string", "description": "Only in this folder (optional)"},
+    },
+    ["query"],
+)
 LSP_SCHEMA = _fn(
     "lsp",
     "Ask the language server about code: where a symbol is defined, where it's used, its type or signature, or "
@@ -226,18 +243,20 @@ PRESENT_PLAN_SCHEMA = _fn(
     },
     ["title", "plan"],
 )
-TOOL_NAMES = {
-    s["function"]["name"]
-    for s in [
-        *SCHEMAS,
-        WEB_SEARCH_SCHEMA,
-        WEB_FETCH_SCHEMA,
-        VIEW_IMAGE_SCHEMA,
-        MEMORY_SCHEMA,
-        PRESENT_PLAN_SCHEMA,
-        LSP_SCHEMA,
-    ]
-} | {"agent", "skill"}  # those two have schemas that depend on the session
+OPTIONAL_SCHEMAS = [
+    WEB_SEARCH_SCHEMA,
+    WEB_FETCH_SCHEMA,
+    VIEW_IMAGE_SCHEMA,
+    MEMORY_SCHEMA,
+    PRESENT_PLAN_SCHEMA,
+    LSP_SCHEMA,
+    REPO_MAP_SCHEMA,
+    SEARCH_CODE_SCHEMA,
+]
+TOOL_NAMES = {s["function"]["name"] for s in [*SCHEMAS, *OPTIONAL_SCHEMAS]} | {
+    "agent",
+    "skill",
+}  # those depend on the session
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -437,6 +456,32 @@ class Toolbox:
         from lcode.planning import present
 
         return present(self.agent, title, plan)
+
+    # -- finding one's way around
+    def t_repo_map(self, path: str = "") -> str:
+        repo = self.agent.repo_map()
+        if repo is None:
+            raise ToolError("the repository map is turned off")
+        if path:
+            self.path(path, read=True)  # with the sandbox on, only the project
+        return repo.for_tool(self.rel(self.resolve(path)) if path else "")
+
+    def t_search_code(self, query: str, path: str = "") -> str:
+        from lcode import codesearch
+
+        index = self.agent.code_index()
+        if index is None:
+            raise ToolError("semantic code search isn't set up for this repository: use grep")
+        note = ""
+        try:
+            index.update(self.agent.ollama, limit=codesearch.SESSION_UPDATE_LIMIT)
+        except codesearch.SearchError as e:
+            note = f"\n[The index is out of date ({e}); run `lcode index` to refresh it.]"
+        try:
+            hits = index.search(self.agent.ollama, query, folder=self.rel(self.resolve(path)) if path else "")
+        except codesearch.SearchError as e:
+            raise ToolError(str(e)) from e
+        return codesearch.format_hits(index.root, hits) + note
 
     # -- language servers
     def t_lsp(self, action: str, path: str = "", line: int = 0, symbol: str = "", query: str = "") -> str:

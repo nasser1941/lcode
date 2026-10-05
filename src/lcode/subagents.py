@@ -65,6 +65,8 @@ READ_ONLY_TOOLS = frozenset(
         "todo_write",
         "skill",
         "lsp",
+        "repo_map",
+        "search_code",
     }
 )
 EDIT_TOOLS = frozenset({"write_file", "edit_file"})

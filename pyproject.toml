@@ -80,6 +80,9 @@ ignore = [
 "src/lcode/extensions.py" = ["E501"]
 "src/lcode/context.py" = ["E501"]
 "src/lcode/lsp.py" = ["E501"]
+"src/lcode/repomap.py" = ["E501"]
+"src/lcode/codesearch.py" = ["E501"]
+"src/lcode/bench_backend.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

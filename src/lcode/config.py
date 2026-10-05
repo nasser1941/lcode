@@ -49,6 +49,8 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "mcp_tools": ("auto", str, "how MCP tools reach the model: auto | direct | search (on demand, saves context)"),
     "memory": ("ask", str, "notes that carry over to later sessions: off | ask (confirm each) | auto"),
     "skills": ("all", str, "skills to offer the model: all (also other agents' folders) | lcode | off"),
+    "repo_map": (True, bool, "give the model a ranked map of the repository's symbols"),
+    "embed_model": ("auto", str, "embedding model for semantic code search (lcode index): auto | off | a model"),
     "lsp": ("auto", str, "language servers for code navigation and errors after edits: auto | off"),
     "prune": (True, bool, "before summarizing a full conversation, first remove old tool output from it"),
     "subagents": (True, bool, "let the model hand tasks to subagents that have their own context"),

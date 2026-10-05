@@ -31,6 +31,14 @@ At the end it prints a table comparing the models (see [results](#results-on-a-1
 
 A model usually takes 4 to 12 minutes; each task stops after 5 minutes (`--timeout`).
 
+### More tasks and features
+
+`--tasks find-concept` adds a task in a larger repository: 40 files of a small backend where the
+model has to find a function by what it does. It isn't in the default set, so results stay
+comparable with earlier versions. `--repo-map` gives the model the [repository map](search.md) and
+`--code-search` indexes each task's folder for [semantic search](search.md#semantic-code-search);
+both are off in `lcode bench` by default, for the same reason.
+
 ### Long sessions
 
 Each task normally starts a new conversation. `--session` runs them all in **one** conversation
