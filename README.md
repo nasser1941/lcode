@@ -68,6 +68,9 @@ through [Ollama](https://ollama.com), and when it needs current information it c
 - **Git workflow.** `/commit` writes messages in your repository's style, `/review` checks the
   changes with `file:line` findings, `/pr` opens the pull request, each after you approve it, and
   `lcode --worktree` runs parallel sessions on one repository.
+- **Automation.** `lcode -p --output json` for scripts and CI, a Python API (`from lcode import
+  Session`), and a GitHub Action that answers `@lcode` in issues and pull requests on your own
+  self-hosted runner.
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
   with tool calling. Or use LM Studio, llama.cpp, vLLM or MLX instead of Ollama.
 - **MCP servers, ready to go.** Connect Jira and Confluence, GitHub, AWS, Google Drive, Grafana,

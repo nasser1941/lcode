@@ -481,7 +481,8 @@ class Run:
         """Run the subagent to its report. Safe to call in a thread: errors end up in self.error."""
         child = self.child
         try:
-            child._run_turn(self.task, max_steps=self.kind.max_steps)
+            child.max_steps = self.kind.max_steps
+            child._run_turn(self.task)
             last = child.messages[-1]
             if last.get("role") != "assistant" or last.get("tool_calls") or not last.get("content", "").strip():
                 # It ran out of steps: ask for what it has so far, without tools.
