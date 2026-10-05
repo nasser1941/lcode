@@ -7,7 +7,7 @@
 # requires commands that must be installed.
 # login    sign in through the browser (OAuth) after adding.
 #
-# Commands and URLs were checked against each project's documentation in September 2026.
+# Commands and URLs were checked against each project's documentation in September and October 2026.
 
 [atlassian]
 name = "Atlassian"
@@ -224,3 +224,59 @@ homepage = "https://developers.notion.com/docs/mcp"
 login = true
 setup = "Sign in with your Notion account in the browser."
 server = { type = "http", url = "https://mcp.notion.com/mcp" }
+
+[metabase]
+name = "Metabase"
+description = "Explore your data and ask questions through Metabase's semantic layer, with your Metabase permissions"
+homepage = "https://www.metabase.com/docs/latest/ai/mcp"
+login = true
+setup = """Needs Metabase 60 or later with its MCP server switched on: an admin turns it on under Admin > AI > MCP.
+Sign in with your Metabase account in the browser."""
+server = { type = "http", url = "${METABASE_URL}/api/metabase-mcp" }
+
+[[metabase.inputs]]
+var = "METABASE_URL"
+prompt = "Metabase address, e.g. https://metabase.example.com"
+
+[encord]
+name = "Encord"
+description = "Projects, datasets, ontologies, labeling progress, tasks and labels (read-only)"
+homepage = "https://nasser1941.github.io/lcode/mcp/#encord"
+requires = ["uvx"]
+setup = """Encord has no MCP server of its own, so this one comes with lcode (it uses the Encord SDK). It signs in with an SSH
+key registered in Encord: Settings > Public keys. Read-only: add --allow-writes to its args in mcp.json to let the
+model assign tasks and set priorities; lcode still asks before every call."""
+
+[encord.server]
+command = "uvx"
+args = ["--python", "3.12", "--from", "lcode-cli[encord]", "lcode-mcp-encord"]
+env = { ENCORD_SSH_KEY_FILE = "${ENCORD_SSH_KEY_FILE}" }
+
+[[encord.inputs]]
+var = "ENCORD_SSH_KEY_FILE"
+prompt = "Path to the SSH private key registered in Encord"
+default = "~/.ssh/id_ed25519"
+
+[valohai]
+name = "Valohai"
+description = "ML executions with their logs, metrics and outputs, and pipelines (read-only)"
+homepage = "https://nasser1941.github.io/lcode/mcp/#valohai"
+requires = ["uvx"]
+setup = """Valohai has no MCP server of its own, so this one comes with lcode. It needs an API token: My Profile >
+Authentication > Manage tokens. Read-only: add --allow-writes to its args in mcp.json to let the model start and stop
+executions; lcode still asks before every call."""
+
+[valohai.server]
+command = "uvx"
+args = ["--python", "3.12", "--from", "lcode-cli", "lcode-mcp-valohai"]
+env = { VALOHAI_TOKEN = "${VALOHAI_TOKEN}", VALOHAI_HOST = "${VALOHAI_HOST}" }
+
+[[valohai.inputs]]
+var = "VALOHAI_TOKEN"
+prompt = "Valohai API token"
+secret = true
+
+[[valohai.inputs]]
+var = "VALOHAI_HOST"
+prompt = "Valohai address (Enter for app.valohai.com; for a self-hosted installation, its URL)"
+optional = true

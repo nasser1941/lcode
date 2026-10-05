@@ -61,7 +61,7 @@ through [Ollama](https://ollama.com), and when it needs current information it c
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
   with tool calling.
 - **MCP servers, ready to go.** Connect Jira and Confluence, GitHub, AWS, Google Drive, Grafana,
-  Google Cloud, Sentry, Linear, Notion, Postgres, Kubernetes and more with one command
+  Google Cloud, Sentry, Linear, Notion, Postgres, Kubernetes, Metabase, Encord, Valohai and more with one command
   (`lcode mcp add atlassian`), image generation with ComfyUI, or any other MCP server. Browser sign-in (OAuth) is built in.
 - **Sees images.** Attach a screenshot or mockup with `@path` and lcode looks at it, using the
   vision part of your model. With ComfyUI (`lcode mcp add comfyui`) it can also generate and edit

@@ -99,6 +99,10 @@ def build(preset: Preset, answers: dict[str, str | None]) -> dict:
     server = copy.deepcopy(preset.server)
     for spec in preset.inputs:
         value = answers.get(spec.var)
+        if value and spec.var.endswith(("_URL", "_HOST")):
+            value = value.rstrip("/")  # the URL may have a path appended, e.g. ${METABASE_URL}/api/metabase-mcp
+            if "://" not in value:
+                value = "https://" + value  # people type metabase.example.com
         if value:
             server = _replace(server, spec.var, value)
         elif spec.optional and not os.environ.get(spec.var):

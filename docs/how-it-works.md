@@ -85,6 +85,7 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `agent.py` | System prompt, streaming, tool loop, compaction, sessions |
 | `tools.py` | Tool schemas and implementations |
 | `permissions.py` | Approval prompts and the read-only allowlist |
+| `servers/` | The MCP servers lcode ships for services without one: Encord, Valohai |
 | `mcp/` | MCP client: stdio and HTTP transports, OAuth sign-in, server settings, the catalog, `lcode mcp` |
 | `bench.py` | `lcode bench`: the benchmark tasks, their checks and the reports |
 | `vision.py` | Looking at images with a model that can see |

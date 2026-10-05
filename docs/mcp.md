@@ -35,13 +35,16 @@ and find the code for the top one."*
 | `kubernetes` | Pods, deployments, logs and events, read-only | `npx` and a kubeconfig |
 | `linear` | Issues, projects and cycles | a Linear account (browser sign-in) |
 | `notion` | Pages and databases | a Notion account (browser sign-in) |
+| `metabase` | Explore your data and ask questions through Metabase's semantic layer | Metabase 60 or later with MCP on ([below](#metabase)) |
+| `encord` | Projects, datasets, ontologies, labeling progress, tasks and labels, read-only | `uvx`, an SSH key registered in Encord ([below](#encord)) |
+| `valohai` | ML executions with their logs, metrics and outputs, and pipelines, read-only | `uvx`, a Valohai API token ([below](#valohai)) |
 
 `npx` comes with [Node.js](https://nodejs.org) (18 or newer) and `uvx` with
 [uv](https://docs.astral.sh/uv/getting-started/installation/). `lcode mcp catalog` shows what's missing
 on your machine.
 
 Servers that can change things start read-only where the server supports it (`aws`, `postgres`,
-`kubernetes`); the setup note tells you which setting to change to allow writes.
+`kubernetes`, `encord`, `valohai`); the setup note tells you which setting to change to allow writes.
 
 ### Signing in
 
@@ -133,6 +136,51 @@ The first time, the model has to find the right template and fill in its setting
 size, prompt), which can take several minutes of trial and error. Once an image comes out right, ask
 lcode to save that workflow in your project (for example `assets/icon.workflow.json`) and reuse it:
 later images are a single `run_workflow` call.
+
+### Metabase
+
+Metabase has its own MCP server inside every instance (Metabase 60 and later), at
+`/api/metabase-mcp`. An admin switches it on under **Admin > AI > MCP**. Then:
+
+```bash
+lcode mcp add metabase        # asks for your Metabase address, then signs in in the browser
+```
+
+You sign in with your Metabase account, and the model sees exactly the data your Metabase
+permissions allow. See [Metabase's MCP docs](https://www.metabase.com/docs/latest/ai/mcp).
+
+### Encord
+
+Encord has no MCP server of its own, so lcode ships one: `lcode-mcp-encord`, built on the Encord SDK
+and run with `uvx --from "lcode-cli[encord]"`. It signs in with an SSH key that you register in
+Encord under **Settings > Public keys**; `lcode mcp add encord` asks for the key file's path.
+
+| Tool | |
+|---|---|
+| `list_projects`, `list_datasets` | What you can see |
+| `get_project`, `get_ontology` | A project's datasets, ontology classes and workflow stages |
+| `workflow_progress` | How many tasks are in each workflow stage, by status |
+| `list_tasks` | Data units with their stage, status and last edit, filtered by stage or title |
+| `get_labels` | The labels on one data unit: counts per class and the label JSON |
+| `assign_task`, `set_priority` | Only with `--allow-writes` in the server's `args` in `mcp.json` |
+
+### Valohai
+
+Valohai has no MCP server of its own either, so lcode ships `lcode-mcp-valohai`, which talks to
+Valohai's REST API. It needs an API token (**My Profile > Authentication > Manage tokens**), and the
+address of a self-hosted installation if you use one; `lcode mcp add valohai` asks for both.
+
+| Tool | |
+|---|---|
+| `list_projects`, `list_pipelines` | Projects and their pipelines |
+| `list_executions`, `get_execution` | Executions with their status, parameters, metrics, outputs and errors |
+| `get_execution_logs` | The last lines of an execution's log, optionally only stderr |
+| `list_outputs` | The files an execution produced, with `datum://` URIs to use as inputs |
+| `compare_executions` | Metrics and differing parameters of several executions side by side |
+| `start_execution`, `stop_execution` | Only with `--allow-writes` in the server's `args` in `mcp.json` |
+
+Both servers are ordinary MCP servers: other MCP clients can use them too, for example
+`uvx --from lcode-cli lcode-mcp-valohai` with `VALOHAI_TOKEN` set.
 
 ## Adding your own servers
 
