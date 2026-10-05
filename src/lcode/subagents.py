@@ -45,7 +45,7 @@ from rich.text import Text
 
 from lcode import config
 from lcode.checkpoints import _clean_env, work_tree_for
-from lcode.memory import frontmatter
+from lcode.frontmatter import split as frontmatter
 from lcode.ollama import OllamaError
 
 if TYPE_CHECKING:
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from lcode.permissions import Permissions
 
 READ_ONLY_TOOLS = frozenset(
-    {"read_file", "list_dir", "glob", "grep", "bash", "web_search", "web_fetch", "view_image", "todo_write"}
+    {"read_file", "list_dir", "glob", "grep", "bash", "web_search", "web_fetch", "view_image", "todo_write", "skill"}
 )
 EDIT_TOOLS = frozenset({"write_file", "edit_file"})
 NOT_FOR_SUBAGENTS = frozenset({"agent", "memory"})  # no agents inside agents; only the main session remembers
@@ -123,9 +123,9 @@ BUILT_IN = {
 # ----------------------------------------------------------------------------- agent types
 
 
-def agent_dirs(cwd: Path) -> list[Path]:
-    """Where custom agents live, lowest priority first: the user's, then the repository's."""
-    return [config.CONFIG_DIR / "agents", work_tree_for(cwd) / ".lcode" / "agents"]
+def agent_dirs(cwd: Path, include_project: bool = True) -> list[Path]:
+    """Where custom agents live, lowest priority first: the user's, then the repository's (once approved)."""
+    return [config.CONFIG_DIR / "agents", *([work_tree_for(cwd) / ".lcode" / "agents"] if include_project else [])]
 
 
 def parse_agent(text: str, name: str, source: str) -> AgentType:
@@ -173,11 +173,11 @@ def parse_agent(text: str, name: str, source: str) -> AgentType:
     )
 
 
-def load_types(cwd: Path) -> tuple[dict[str, AgentType], list[str]]:
+def load_types(cwd: Path, include_project: bool = True) -> tuple[dict[str, AgentType], list[str]]:
     """The agent types for `cwd` (custom ones override built-in ones), and problems with custom ones."""
     types = dict(BUILT_IN)
     problems = []
-    for folder in agent_dirs(cwd):
+    for folder in agent_dirs(cwd, include_project):
         if not folder.is_dir():
             continue
         for f in sorted(folder.glob("*.md")):

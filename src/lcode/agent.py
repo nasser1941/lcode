@@ -21,7 +21,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
-from lcode import catalog, limits, planning, sessions, subagents, vision, web
+from lcode import catalog, extensions, limits, planning, sessions, subagents, vision, web
 from lcode import memory as memory_notes
 from lcode.checkpoints import Checkpoints
 from lcode.config import format_tokens
@@ -78,7 +78,7 @@ SYSTEM_PROMPT = """You are lcode, an autonomous software-engineering agent runni
 
 # Top-level layout of the working directory
 {tree}
-{web}{agents}{project}{notes}"""
+{web}{agents}{skills}{project}{notes}"""
 
 WEB_PROMPT = """
 # Web access
@@ -171,6 +171,8 @@ class Settings:
     vision_model: str = "auto"  # auto, off or an Ollama model that can see images
     memory: str = "off"  # off, ask or auto: notes that carry over to later sessions (lcode.memory)
     subagents: bool = False  # the agent tool (lcode.subagents)
+    trust_project: bool = False  # use the repository's own commands, skills and agents (lcode.extensions)
+    skills: str = "off"  # all, lcode (only lcode's own skill folders) or off
     max_parallel_agents: int = 1
 
 
@@ -200,6 +202,8 @@ class Agent:
         self._agent_types: tuple[Path, dict[str, subagents.AgentType], list[str]] | None = None
         self.agent_runs: list[subagents.Record] = []  # subagents run in this session, for /agents
         self.plan = ""  # the plan the user approved; kept through compaction
+        self._extensions: tuple[Path, extensions.Extensions] | None = None
+        self.skills_loaded: set[str] = set()  # skills whose instructions are in the conversation
         # Set on subagents (see lcode.subagents):
         self.allowed_tools: set[str] | None = None  # None: every tool
         self.read_only = False  # only read-only shell commands
@@ -236,7 +240,14 @@ class Agent:
             notes=self.memory().prompt(self.settings.context) if self.settings.memory != "off" else "",
             web=self.web_prompt(),
             agents=self.agents_prompt(),
+            skills=extensions.skills_prompt(self.extensions().skills, self.settings.context),
         )
+
+    def extensions(self) -> extensions.Extensions:
+        """Custom commands and skills for the current folder (a repository's only once approved)."""
+        if self._extensions is None or self._extensions[0] != self.cwd:
+            self._extensions = (self.cwd, extensions.load(self.cwd, self.settings.trust_project, self.settings.skills))
+        return self._extensions[1]
 
     def agents_prompt(self) -> str:
         if not self.settings.subagents:
@@ -252,7 +263,7 @@ class Agent:
     def agent_types(self) -> dict[str, subagents.AgentType]:
         """Built-in and custom agent types for the current folder."""
         if self._agent_types is None or self._agent_types[0] != self.cwd:
-            types, problems = subagents.load_types(self.cwd)
+            types, problems = subagents.load_types(self.cwd, self.settings.trust_project)
             self._agent_types = (self.cwd, types, problems)
         return self._agent_types[1]
 
@@ -290,6 +301,8 @@ class Agent:
             schemas.append(subagents.schema(self.agent_types(), self.settings.max_parallel_agents))
         if self.planning():
             schemas.append(PRESENT_PLAN_SCHEMA)
+        if self.extensions().skills:
+            schemas.append(extensions.schema(self.extensions().skills))
         if self.mcp:
             schemas += self.mcp.schemas(self.settings.context)
         if self.allowed_tools is not None:
@@ -409,6 +422,7 @@ class Agent:
 
     def new_session(self) -> None:
         self.reset()
+        self.skills_loaded.clear()
         self.session_id = self.new_session_id()
         self.session_name = ""
         self.session_title = ""
@@ -787,6 +801,12 @@ class Agent:
         ]
         if self.plan:  # the approved plan stays word for word
             self.messages[1]["content"] += f"\n\n[The plan the user approved; keep following it]\n\n{self.plan}"
+        if self.skills_loaded:  # their instructions were in the old messages: load them again when needed
+            names = ", ".join(sorted(self.skills_loaded))
+            self.messages[1]["content"] += (
+                f"\n\n[Skills in use before the summary: {names}. Load them again with the skill tool if you still need them.]"
+            )
+            self.skills_loaded.clear()
         self.ctx_used = sum(len(m["content"]) for m in self.messages) // 3
         self.reflected = len(self.messages)
         self.console.print(Panel(Markdown(summary), title="Compacted summary", border_style="blue"))
