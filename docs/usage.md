@@ -93,6 +93,7 @@ reasoning is on.
 | `view_image` | Look at an image: a model that can see describes it ([Images](#images)) |
 | `agent` | Hand a task to a [subagent](agents.md) with its own context; only its report comes back |
 | `memory` | Save, update or delete [notes](memory.md) that later sessions load |
+| `lsp` | Ask a [language server](lsp.md) for a symbol's definition, references, type, or a file's outline |
 | `skill` | Load a [skill](commands.md#skills)'s instructions when a task matches it |
 | `present_plan` | In [plan mode](#plan-mode): show the plan and ask for approval |
 

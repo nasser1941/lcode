@@ -367,8 +367,18 @@ def cmd_doctor(args) -> None:
             line("", f"{n} × {slots[1]} context may not fit in memory here; {slots[0]} would", None)
         for problem in problems:
             line("", problem, None)
-    from lcode import extensions
+    from lcode import extensions, lsp
 
+    if cfg["lsp"] == "off":
+        line("Code intel", "off (lcode config set lsp auto)", True)
+    else:
+        found = lsp.available()
+        names = [f"{lsp.NAMES[lang]} ({Path(cmds[0][0]).name})" for lang, cmds in found.items()]
+        line("Code intel", ", ".join(names) or "no language servers found", True if found else None)
+        if "python" not in found:
+            line("", f"for Python: {lsp.INSTALL['python']}", None)
+        if "typescript" not in found:
+            line("", f"for TypeScript and JavaScript: {lsp.INSTALL['typescript']}", None)
     project_state = extensions.status(Path.cwd())
     ext = extensions.load(Path.cwd(), include_project=project_state == "approved", skills_from=cfg["skills"])
     found = f"{len(ext.commands)} command(s), {len(ext.skills)} skill(s)"
@@ -573,6 +583,13 @@ def cmd_chat(args) -> None:
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.interactive = not args.prompt
+    if cfg["lsp"] == "auto":
+        from lcode import lsp
+        from lcode.checkpoints import work_tree_for
+
+        if lsp.available():
+            agent.lsp = lsp.Manager(work_tree_for(cwd))
+            agent.messages[0]["content"] = agent.system_prompt()  # now it mentions the language servers
     if agent.sandbox:
         # Never run commands unsandboxed when the user asked for a sandbox: stop here instead.
         from lcode.sandbox import SandboxError
@@ -589,6 +606,8 @@ def cmd_chat(args) -> None:
     try:
         repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)
     finally:
+        if agent.lsp is not None:
+            agent.lsp.close()
         if agent.mcp:
             agent.mcp.close()
         if agent.sandbox:

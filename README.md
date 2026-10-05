@@ -46,6 +46,9 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   your approval. `auto-edit` and `yolo` modes when you want speed.
 - **Sandbox (optional).** `lcode --sandbox` runs the model's shell commands in a container (Docker or
   Podman) that only sees your project, without network access unless you allow it.
+- **Code intelligence.** With a language server installed (basedpyright, typescript-language-server,
+  gopls, rust-analyzer, clangd), the model looks up definitions, references and types precisely,
+  and sees the errors an edit introduced right away.
 - **Commands and skills.** Your own `/commands` as prompt templates, and skills in the
   [Agent Skills](https://agentskills.io) format that the model loads only when a task needs them.
 - **Plan mode.** `/plan <request>` or Shift+Tab: the model explores read-only and presents a plan;

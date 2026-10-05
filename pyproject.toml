@@ -79,6 +79,7 @@ ignore = [
 "src/lcode/planning.py" = ["E501"]
 "src/lcode/extensions.py" = ["E501"]
 "src/lcode/context.py" = ["E501"]
+"src/lcode/lsp.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
