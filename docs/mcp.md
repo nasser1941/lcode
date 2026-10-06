@@ -29,6 +29,7 @@ and find the code for the top one."*
 | `github` | Repositories, issues, pull requests, Actions | a GitHub token (or the GitHub CLI) |
 | `playwright` | A real (headless) browser: open pages, click, fill forms | `npx` |
 | `comfyui` | Generate and edit images with local models (FLUX, SDXL, SD 1.5, Qwen-Image) | `uvx` and [ComfyUI](#images-with-comfyui) running locally |
+| `xai` | Generate and edit images, and generate videos and speech, with xAI's Grok Imagine (paid, in the cloud) | `uvx`, an xAI API key ([below](#images-videos-and-speech-with-xai)) |
 | `context7` | Up-to-date docs and examples for thousands of libraries | nothing (an API key is optional) |
 | `sentry` | Errors, issues, traces and releases | a Sentry account (browser sign-in) |
 | `postgres` | Schemas, read-only queries, query performance | `uvx`, a connection URL |
@@ -136,6 +137,36 @@ The first time, the model has to find the right template and fill in its setting
 size, prompt), which can take several minutes of trial and error. Once an image comes out right, ask
 lcode to save that workflow in your project (for example `assets/icon.workflow.json`) and reuse it:
 later images are a single `run_workflow` call.
+
+### Images, videos and speech with xAI
+
+xAI's [Grok Imagine](https://docs.x.ai/developers/model-capabilities/imagine) and
+[text to speech](https://docs.x.ai/developers/models/text-to-speech) APIs make images, videos and
+speech in the cloud: no GPU needed, but each call is billed to your xAI account. lcode ships an MCP
+server for them, `lcode-mcp-xai`.
+
+```bash
+lcode mcp add xai             # asks for your xAI API key (create one at https://console.x.ai)
+```
+
+The key is typed hidden and kept in `~/.config/lcode/mcp.json`, readable only by you. If
+`XAI_API_KEY` is already set in your environment, lcode uses that and doesn't store the key.
+
+| Tool | | Costs |
+|---|---|---|
+| `generate_image` | Images from a description: 1–10 at a time, aspect ratio, 1k or 2k | $0.02–0.05 an image |
+| `edit_image` | Change a local image as described | the same |
+| `generate_video` | A 1–15 second MP4 from a description, optionally starting from a local image, up to 1080p. Waits for it (a minute or more) | $0.02–0.08 a second |
+| `video_status` | Fetch a video that wasn't ready within 10 minutes | |
+| `text_to_speech` | Speech in one of 26 voices and 20 languages, as MP3 or WAV | per character |
+
+Files are saved in `generated/` in the project, or where you ask (*"generate an app icon and save
+it as assets/icon.png"*). xAI has no music generation API.
+
+Your prompts, and the images you edit or animate, go to xAI. lcode asks before each call, since each
+one costs money. To stop asking for some tools, list them under `"allow"` for the server in
+`mcp.json`, for example `"allow": ["generate_image", "text_to_speech"]`. xAI applies its own usage
+policies to what it generates; when it refuses a prompt, lcode passes its message to the model.
 
 ### Metabase
 

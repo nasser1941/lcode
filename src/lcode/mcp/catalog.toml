@@ -281,3 +281,24 @@ secret = true
 var = "VALOHAI_HOST"
 prompt = "Valohai address (Enter for app.valohai.com; for a self-hosted installation, its URL)"
 optional = true
+
+[xai]
+name = "xAI Grok Imagine"
+description = "Generate and edit images, and generate videos and speech, with xAI's Grok Imagine and voice API (paid, in the cloud)"
+homepage = "https://nasser1941.github.io/lcode/mcp/#xai"
+requires = ["uvx"]
+setup = """Uses xAI's API: your prompts, and images you edit or animate, go to xAI, and every call is billed to your xAI
+account (an image $0.02-0.05, video $0.02-0.08 a second, speech per character). Create an API key at https://console.x.ai.
+Files are saved in generated/ in the project. lcode asks before each call; to stop asking for some tools, list them
+under "allow" for this server in mcp.json. xAI has no music generation."""
+
+[xai.server]
+command = "uvx"
+args = ["--isolated", "--python", "3.12", "--from", "lcode-cli", "lcode-mcp-xai"]
+env = { XAI_API_KEY = "${XAI_API_KEY}" }
+timeout = 900  # a video takes minutes
+
+[[xai.inputs]]
+var = "XAI_API_KEY"
+prompt = "xAI API key (create one at https://console.x.ai)"
+secret = true

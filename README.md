@@ -80,7 +80,8 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   (`lcode mcp add atlassian`), image generation with ComfyUI, or any other MCP server. Browser sign-in (OAuth) is built in.
 - **Sees images.** Attach a screenshot or mockup with `@path` and lcode looks at it, using the
   vision part of your model. With ComfyUI (`lcode mcp add comfyui`) it can also generate and edit
-  images with local models such as FLUX, SDXL and Qwen-Image.
+  images with local models such as FLUX, SDXL and Qwen-Image, or, in the cloud, images, videos
+  and speech with xAI's Grok Imagine (`lcode mcp add xai`).
 - **Web search when needed.** Looks up the latest versions, docs and error messages with Ollama web
   search, Brave, Tavily or your own SearXNG, and reads pages as clean text.
 - **Private.** The model runs on your machine, lcode never uploads your files and has no telemetry.
