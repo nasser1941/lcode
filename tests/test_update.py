@@ -170,7 +170,7 @@ def output_of(console):
 def test_a_compose_container_is_updated_through_its_compose_file(docker, tmp_path, monkeypatch):
     container, path = compose_container(tmp_path)
     monkeypatch.setattr(update, "find_container", lambda host: container)
-    console = Console(file=io.StringIO(), width=200)
+    console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "ollama", yes=True) == 0
     assert docker["stream"][0] == ["docker", "pull", "ollama/ollama:0.35.1"]
     assert docker["stream"][1][:4] == ["docker", "compose", "-p", "lab"]
@@ -186,7 +186,7 @@ def test_a_failed_compose_update_puts_the_file_back(docker, tmp_path, monkeypatc
     container, path = compose_container(tmp_path)
     monkeypatch.setattr(update, "find_container", lambda host: container)
     docker["stream_codes"]["compose"] = 1
-    console = Console(file=io.StringIO(), width=200)
+    console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "ollama", yes=True) == 1
     assert path.read_text() == COMPOSE and "✗ docker compose up failed" in output_of(console)
 
@@ -194,7 +194,7 @@ def test_a_failed_compose_update_puts_the_file_back(docker, tmp_path, monkeypatc
 def test_check_and_no_terminal_change_nothing(docker, tmp_path, monkeypatch):
     container, path = compose_container(tmp_path)
     monkeypatch.setattr(update, "find_container", lambda host: container)
-    console = Console(file=io.StringIO(), width=200)
+    console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "ollama", check=True) == 0
     monkeypatch.setattr("sys.stdin.isatty", lambda: False, raising=False)
     assert update.command(console, "ollama") == 0
@@ -225,7 +225,7 @@ def test_the_same_settings_for_the_new_container():
 def test_a_plain_container_is_recreated_and_put_back_if_needed(docker, monkeypatch):
     container = Container("ce403d03b71e", "my-ollama", "ollama/ollama:latest", inspect(name="my-ollama"))
     monkeypatch.setattr(update, "find_container", lambda host: container)
-    console = Console(file=io.StringIO(), width=200)
+    console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "ollama", yes=True) == 0
     commands = [c[:3] for c in docker["run"] if c[0] == "docker"]
     assert ["docker", "stop", "my-ollama"] in commands
@@ -251,14 +251,14 @@ def test_up_to_date_and_pinned(docker, monkeypatch):
     container = Container("ce403d03b71e", "my-ollama", "ollama/ollama:0.35.1", inspect(image="ollama/ollama:0.35.1"))
     monkeypatch.setattr(update, "find_container", lambda host: container)
     monkeypatch.setattr("lcode.ollama.Ollama.version", lambda self: "0.35.1")
-    console = Console(file=io.StringIO(), width=200)
+    console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "ollama", yes=True) == 0
     assert docker["stream"] == [] and "✓ Ollama is up to date, on ollama/ollama:0.35.1." in output_of(console)
 
 
 def test_ollama_outside_docker_gets_instructions(docker, monkeypatch):
     monkeypatch.setattr(update, "find_container", lambda host: None)
-    console = Console(file=io.StringIO(), width=200)
+    console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "ollama", yes=True) == 0
     assert "Ollama 0.32.15 → 0.35.1 is out" in output_of(console) and docker["stream"] == []
 
@@ -269,7 +269,7 @@ def test_ollama_outside_docker_gets_instructions(docker, monkeypatch):
 def test_lcode_updates_the_way_it_was_installed(docker, monkeypatch):
     monkeypatch.setattr(update, "lcode_install", lambda: Install("uv", ["uv", "tool", "upgrade", "lcode-cli"]))
     monkeypatch.setattr(update, "latest_lcode", lambda: "99.0.0")
-    console = Console(file=io.StringIO(), width=200)
+    console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "lcode", yes=True) == 0
     assert docker["stream"] == [["uv", "tool", "upgrade", "lcode-cli"]]
     monkeypatch.setattr(update, "latest_lcode", lambda: __version__)
@@ -296,7 +296,7 @@ def test_a_checkout_is_pulled(tmp_path, monkeypatch):
     git(other, "commit", "-qam", "two")
     git(other, "push", "-q")
     monkeypatch.setattr(update, "lcode_install", lambda: Install("checkout", path=clone))
-    console = Console(file=io.StringIO(), width=200)
+    console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "lcode", check=True) == 0
     assert "1 new commit(s) on origin/main" in output_of(console) and (clone / "a.txt").read_text() == "1\n"
     assert update.command(console, "lcode", yes=True) == 0
