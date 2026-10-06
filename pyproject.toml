@@ -49,6 +49,7 @@ Changelog = "https://github.com/nasser1941/lcode/blob/main/CHANGELOG.md"
 lcode = "lcode.cli:main"
 lcode-mcp-valohai = "lcode.servers.valohai:main"
 lcode-mcp-encord = "lcode.servers.encord:main"
+lcode-mcp-xai = "lcode.servers.xai:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
@@ -88,6 +89,7 @@ ignore = [
 "src/lcode/action.py" = ["E501"]
 "src/lcode/acp.py" = ["E501"]
 "src/lcode/update.py" = ["E501"]
+"src/lcode/servers/xai.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
