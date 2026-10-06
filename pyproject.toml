@@ -87,6 +87,7 @@ ignore = [
 "src/lcode/gitflow.py" = ["E501"]
 "src/lcode/action.py" = ["E501"]
 "src/lcode/acp.py" = ["E501"]
+"src/lcode/update.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

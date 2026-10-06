@@ -161,11 +161,36 @@ lmstudio` (or `llama.cpp`, `vllm`, `mlx`). See [Other model servers](servers.md)
 Use [WSL2](https://learn.microsoft.com/windows/wsl/install) with Ubuntu and follow the Ubuntu
 steps. NVIDIA GPUs work inside WSL2 with the regular Windows driver.
 
-## Upgrade and uninstall
+## Updating
 
 ```bash
-uv tool upgrade lcode-cli        # upgrade (pipx: pipx upgrade lcode-cli; Homebrew: brew upgrade lcode)
-uv tool uninstall lcode-cli      # remove lcode (Homebrew: brew uninstall lcode)
+lcode update            # update lcode, and Ollama if it runs in Docker
+lcode update --check    # only show which versions are out
+```
+
+- **lcode** updates the way you installed it: `uv tool upgrade`, `pipx upgrade`, `brew upgrade`
+  or `pip`. If it runs from a git checkout, `git pull` (on `main`, without local changes).
+- **Ollama in a Docker container** is updated to the newest release on Docker Hub. lcode looks
+  that up instead of trusting a local `latest` tag, which can be months old, and skips release
+  candidates. It pulls the version's own tag, such as `ollama/ollama:0.35.1`, so `docker ps` shows
+  which version runs. A ROCm image stays ROCm.
+  - **A container from Docker Compose:** lcode changes the `image:` line in its compose file and
+    runs `docker compose up -d` for that service, so Compose keeps managing it.
+  - **Any other container** is recreated with the same name, ports, volumes, environment, GPUs,
+    network and restart policy. The old one is kept until the new one answers with the new
+    version, and is put back if it doesn't.
+  - Your models stay: they're in the container's volume.
+- **Ollama installed without Docker** gets the command that updates it: on Linux,
+  `curl -fsSL https://ollama.com/install.sh | sh`; on macOS, `brew upgrade ollama` or the app
+  itself.
+
+lcode shows what it will do and asks first. `lcode update lcode` or `lcode update ollama` updates
+only one; `-y` doesn't ask.
+
+## Uninstall
+
+```bash
+uv tool uninstall lcode-cli      # remove lcode (pipx: pipx uninstall lcode-cli; Homebrew: brew uninstall lcode)
 rm -rf ~/.config/lcode ~/.local/state/lcode    # remove settings and saved sessions
 ollama rm lcode-qwen3.6-35b qwen3.6:35b-a3b-coding   # remove downloaded models
 ```
