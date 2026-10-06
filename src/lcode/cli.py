@@ -678,7 +678,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lcode",
         description="A local-first terminal coding agent powered by open-weight models via Ollama.",
-        epilog="Subcommands: lcode setup | models | doctor | config | bench | mcp | index "
+        epilog="Subcommands: lcode setup | models | doctor | config | bench | mcp | index | update "
         "(lcode <subcommand> --help). "
         "Docs: https://nasser1941.github.io/lcode/",
     )
@@ -774,6 +774,15 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     from lcode.mcp.commands import build_parser as mcp_parser
 
     subs["mcp"] = mcp_parser()
+    p = argparse.ArgumentParser(
+        prog="lcode update",
+        description="Update lcode, and Ollama when it runs in Docker (to the newest version on Docker Hub, pinned "
+        "to its version tag).",
+    )
+    p.add_argument("what", nargs="?", choices=["lcode", "ollama"], help="only this one (default: both)")
+    p.add_argument("--check", action="store_true", help="only show which versions are out")
+    p.add_argument("-y", "--yes", action="store_true", help="don't ask before updating")
+    subs["update"] = p
     subs["acp"] = argparse.ArgumentParser(
         prog="lcode acp",
         description="Run as the agent inside an editor, over the Agent Client Protocol on stdin and stdout "
@@ -785,6 +794,12 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
         "and review pull requests. Configured through the action's inputs (see the docs).",
     )
     return subs
+
+
+def cmd_update(args) -> None:
+    from lcode import update
+
+    sys.exit(update.command(console, args.what or "", check=args.check, yes=args.yes))
 
 
 def cmd_acp(args) -> None:
@@ -863,6 +878,7 @@ COMMANDS = {
     "index": cmd_index,
     "action": cmd_action,
     "acp": cmd_acp,
+    "update": cmd_update,
 }
 
 

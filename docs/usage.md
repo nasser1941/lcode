@@ -11,6 +11,7 @@ lcode config [set|unset]     # show or change settings
 lcode bench [models]         # score models on small coding tasks on this machine
 lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases… (see MCP servers)
 lcode acp                    # run inside an editor over the Agent Client Protocol (see Editors)
+lcode update [--check]       # update lcode, and Ollama when it runs in Docker (see Installation)
 ```
 
 | Option | Meaning |
