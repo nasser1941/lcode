@@ -6,6 +6,23 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-06
+
+### Added
+
+- Background commands: the model starts a dev server, a watcher or another process that keeps
+  running with `bash` and `background: true`, reads its new output with `bash_output` and stops it
+  with `bash_stop`. `/jobs` lists them, and they all stop when the session ends.
+- Desktop notifications (`notify-send` on Linux, `osascript` on macOS, else the terminal bell)
+  when a request that ran longer than 30 seconds is done, or lcode waits for your answer during
+  one. Settings: `notify` and `notify_after`.
+
+### Fixed
+
+- A command that starts something with `&` no longer hangs until its timeout while that process
+  holds the output open. What it left running is stopped when it ends, and the model is told to
+  use a background command instead.
+
 ## [0.19.0] - 2026-10-06
 
 ### Added
@@ -450,7 +467,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/nasser1941/lcode/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/nasser1941/lcode/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/nasser1941/lcode/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/nasser1941/lcode/compare/v0.16.0...v0.17.0
