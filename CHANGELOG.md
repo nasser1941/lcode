@@ -6,6 +6,17 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-06
+
+### Added
+
+- `lcode mcp add xai`: images, image edits, videos and speech with xAI's Grok Imagine and text to
+  speech APIs, in the cloud and billed to your xAI account. It asks for your xAI API key, and runs
+  `lcode-mcp-xai`, a new MCP server that ships with lcode, with the tools `generate_image`,
+  `edit_image`, `generate_video` (waits for the video and downloads it), `video_status` and
+  `text_to_speech`. Files are saved in `generated/` in the project or where you ask. See
+  [Images, videos and speech with xAI](https://nasser1941.github.io/lcode/mcp/#images-videos-and-speech-with-xai).
+
 ## [0.21.0] - 2026-10-06
 
 ### Added
@@ -480,7 +491,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/nasser1941/lcode/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/nasser1941/lcode/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/nasser1941/lcode/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/nasser1941/lcode/compare/v0.18.0...v0.19.0
