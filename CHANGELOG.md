@@ -6,6 +6,19 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-06
+
+### Added
+
+- `lcode update` updates lcode the way it was installed (uv tool, pipx, Homebrew, pip, or
+  `git pull` for a checkout), and Ollama when it runs in Docker. The newest Ollama release comes
+  from Docker Hub, not a local `latest` tag, and is pulled by its version tag (such as
+  `ollama/ollama:0.35.1`) so `docker ps` shows the version. A container from Docker Compose gets
+  the new tag in its compose file and is recreated with `docker compose up`; any other container is
+  recreated with the same settings, and the old one comes back if the new one doesn't start.
+  `lcode update --check` only shows which versions are out. See
+  [Updating](https://nasser1941.github.io/lcode/installation/#updating).
+
 ## [0.20.0] - 2026-10-06
 
 ### Added
@@ -467,7 +480,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/nasser1941/lcode/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/nasser1941/lcode/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/nasser1941/lcode/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/nasser1941/lcode/compare/v0.17.0...v0.18.0
