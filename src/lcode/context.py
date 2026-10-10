@@ -29,12 +29,66 @@ if TYPE_CHECKING:
 KEEP_RECENT_REQUESTS = 2  # tool results of the last requests stay as they are
 MIN_PRUNE_CHARS = 400  # shorter results aren't worth replacing
 PRUNED = "[lcode: "  # how stubs start, so they're never pruned twice
+GONE = (  # a removed file read: firm, because models answer from the stub instead of reading it again
+    "earlier; its content was removed to save context and isn't in this conversation any more. Read it again "
+    "before answering anything about it.]"
+)
 KEEP_TOOLS = {"agent", "skill", "memory", "todo_write", "present_plan"}  # short, or still guiding the work
 ERROR_LINE = re.compile(
     r"error|exception|traceback|failed|failure|fatal|panic|assert|denied|not found|cannot|can't|undefined", re.I
 )
 MAX_ERROR_LINES = 40
 OUTPUT_DAYS = 7  # saved full outputs are deleted after this
+
+
+# ----------------------------------------------------------------------------- the user's requests
+
+REQUESTS_HEADER = "[The user's requests in this conversation, word for word, oldest first]"
+MAX_REQUESTS = 8  # the most recent ones are kept through a summary
+MAX_REQUEST_CHARS = 1500
+# What lcode appends to the user's words: attached files, images and folders, and its own notes.
+ATTACHED = re.compile(r"\n\n(?:<file path=|<image path=|<directory path=|\[lcode[:\]] |\[The user wants the )")
+
+
+def request_text(content: str) -> str:
+    """The user's own words in a message, without what lcode attached to it."""
+    cut = ATTACHED.search(content)
+    return (content[: cut.start()] if cut else content).strip()
+
+
+def user_requests(messages: list[dict]) -> list[str]:
+    """What the user asked in the conversation, oldest first, including the requests an earlier summary kept."""
+    requests: list[str] = []
+    for message in messages:
+        content = message.get("content") or ""
+        if message.get("role") != "user":
+            continue
+        if content.startswith(SUMMARY_PREFIX):
+            start = content.find(REQUESTS_HEADER)
+            if start >= 0:
+                rest = content[start + len(REQUESTS_HEADER) :]
+                try:
+                    kept, _ = json.JSONDecoder().raw_decode(rest[rest.index("[") :])
+                    requests += [str(r) for r in kept]
+                except ValueError:
+                    pass
+            continue
+        if content.startswith("[lcode]"):
+            continue  # lcode's own nudges
+        text = request_text(content)
+        if text:
+            requests.append(text)
+    return requests
+
+
+def requests_block(requests: list[str]) -> str:
+    """The user's latest requests, word for word, to keep the goal through a summary."""
+    if not requests:
+        return ""
+    kept = [r if len(r) <= MAX_REQUEST_CHARS else f"{r[: MAX_REQUEST_CHARS - 200]} […] {r[-150:]}" for r in requests]
+    older = len(kept) - MAX_REQUESTS
+    note = f" (and {older} earlier, in the summary)" if older > 0 else ""
+    return f"\n\n{REQUESTS_HEADER}{note}\n{json.dumps(kept[-MAX_REQUESTS:], ensure_ascii=False, indent=1)}"
 
 
 # ----------------------------------------------------------------------------- pruning
@@ -63,7 +117,7 @@ def stub(name: str, args: dict, content: str) -> str:
         if args.get("offset") or args.get("limit"):
             start = int(args.get("offset") or 1)
             span = f" from line {start}"
-        return f"{PRUNED}read {args.get('path', 'a file')}{span} earlier; removed to save context. Read it again if you need it.]"
+        return f"{PRUNED}read {args.get('path', 'a file')}{span} {GONE}"
     if name == "bash":
         command = " ".join(str(args.get("command", "")).split())
         command = command if len(command) <= 80 else command[:79] + "…"
@@ -92,8 +146,9 @@ def boundary(messages: list[dict], keep: int = KEEP_RECENT_REQUESTS) -> int:
     return requests[-keep] if len(requests) >= keep else 0
 
 
-def prune(messages: list[dict], keep: int = KEEP_RECENT_REQUESTS) -> int:
-    """Replace stale tool results with stubs, in place. Returns the number of characters saved."""
+def prune(messages: list[dict], keep: int = KEEP_RECENT_REQUESTS, removed: list[str] | None = None) -> int:
+    """Replace stale tool results with stubs, in place. Returns the number of characters saved; the files and
+    pages whose only copy went are added to `removed`."""
     calls = calls_for_results(messages)
     edge = boundary(messages, keep)
     # A read is superseded by a later read of the whole file, or of the same lines: not by a later
@@ -118,10 +173,32 @@ def prune(messages: list[dict], keep: int = KEEP_RECENT_REQUESTS) -> int:
             continue
         new = stub(name, args, content)
         if reread:
-            new = new.replace("earlier; removed", "earlier (read again later); removed")
+            new = new.replace(
+                GONE, "earlier (read again later); removed to save context. Read it again if you need it.]"
+            )
+        elif removed is not None and name in ("read_file", "web_fetch"):
+            what = str(args.get("path") or args.get("url") or "")
+            if what and what not in removed:
+                removed.append(what)
         messages[i]["content"] = new
         saved += len(content) - len(new)
     return saved
+
+
+def note_removed(messages: list[dict], removed: list[str]) -> None:
+    """Tell the model, next to the request it's working on, which files it no longer has: a stub deep in the
+    conversation is easy to overlook, and models then answer from memory instead of reading again."""
+    if not removed:
+        return
+    for message in reversed(messages):
+        content = str(message.get("content", ""))
+        if message.get("role") == "user" and not content.startswith(("[lcode]", SUMMARY_PREFIX)):
+            names = ", ".join(removed[:10]) + (f" and {len(removed) - 10} more" if len(removed) > 10 else "")
+            message["content"] = (
+                f"{content}\n\n[lcode] To make room, lcode removed what you read earlier from: {names}. It isn't in "
+                "this conversation any more: read it again before answering anything about it, don't answer from memory."
+            )
+            return
 
 
 # ----------------------------------------------------------------------------- long output

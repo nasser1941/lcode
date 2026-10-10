@@ -579,6 +579,7 @@ def cmd_bench(args) -> None:
             web="off",
             checkpoints=False,
             prune=not args.no_prune,
+            compact_at=cfg["compact_at"] if args.compact_at is None else args.compact_at,
             repo_map=args.repo_map,
             embed_model=cfg["embed_model"] if args.code_search else "off",
         )
@@ -678,6 +679,14 @@ def cmd_chat(args) -> None:
         sys.exit(exit_code)
 
 
+def compact_tokens(value: str) -> int:
+    """`--compact-at`: a token count such as 64k, or 0."""
+    try:
+        return config.parse_compact_at(value)
+    except ConfigError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lcode",
@@ -765,6 +774,12 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument("--repo-map", action="store_true", help="give the model the repository map (off by default)")
     p.add_argument("--code-search", action="store_true", help="index each task's folder and offer semantic code search")
     p.add_argument("--no-prune", action="store_true", help="don't remove old tool output (to compare, with --session)")
+    p.add_argument(
+        "--compact-at",
+        type=compact_tokens,
+        metavar="TOKENS",
+        help="summarize at this many tokens, e.g. 64k (default: the compact_at setting; 0: only at 85%%)",
+    )
     subs["bench"] = p
     p = argparse.ArgumentParser(
         prog="lcode index",

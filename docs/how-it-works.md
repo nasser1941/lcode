@@ -73,21 +73,32 @@ in a temporary git worktree, and their changes come back as a diff.
 ## Context management
 
 Ollama keeps the processed conversation in its KV cache, so each turn only processes the new tokens.
-lcode tracks how full the window is from Ollama's token counts. Most of a long session's context is
-old tool output, so when the window is 85% full:
+lcode tracks how full the window is from Ollama's token counts. It makes room when the window is
+85% full, or when the conversation reaches 64K tokens (`compact_at`), whichever comes first.
+Small models lose track in long contexts well before a large window is full: in one long session,
+Qwen3.6 35B started repeating itself and overlooking what it had read once the conversation passed
+about 75K tokens. Most of a long session's
+context is old tool output, so:
 
 1. **lcode removes old tool output first.** File contents, command output and search results from
    before your last two requests become one-line notes that say what was there, such as
-   `[lcode: read src/app.py earlier; removed to save context. Read it again if you need it.]`.
+   `[lcode: read src/app.py earlier; its content was removed …. Read it again before answering anything about it.]`.
    An earlier copy of a file that was read again later goes too, even in recent requests. Subagent
-   reports, skill instructions and the approved plan stay.
-2. **If that brings the conversation under 70%,** the work simply continues: nothing is summarized,
+   reports, skill instructions and the approved plan stay. The files whose only copy went are also
+   named next to the request the model is working on, since models tend to overlook a note deep in
+   the conversation and answer from memory instead of reading the file again.
+2. **If that brings the conversation well under the limit** (70% of the window, or about 53K
+   tokens with `compact_at`), the work simply continues: nothing is summarized,
    and the conversation itself stays word for word.
    If it's not, lcode also removes the tool output of your previous request, keeping only the
    latest one's. (`lcode config set prune false` skips this step.)
 3. **Otherwise lcode summarizes.** It asks whether anything is worth [remembering](memory.md), since
    the summary leaves details out, then has the model write a summary of the conversation (goals,
-   findings, files changed, next steps) and continues from it.
+   findings, files changed, next steps) and continues from it. Your latest requests (up to eight)
+   are kept word for word under the summary, so the goal isn't lost in the retelling.
+
+`lcode config set compact_at 128k` moves the ceiling, and `0` turns it off, leaving only the 85%
+rule. `/context` shows where the current session makes room.
 
 Long tool output (over 30,000 characters) keeps its beginning, its end and the lines in between
 that look like errors. The full output is saved under `~/.local/state/lcode/outputs/` (for a week)
