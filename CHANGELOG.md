@@ -14,6 +14,12 @@ All notable changes to lcode are documented here. The format follows
   exit code `4` with `lcode -p`). Results that change, and checks run after an edit, don't count. `repeat_limit` changes the threshold; `0` turns it off. See
   [When the model repeats itself](https://nasser1941.github.io/lcode/how-it-works/#when-the-model-repeats-itself).
 
+### Fixed
+
+- A tool call Ollama can't parse because its XML is broken (`XML syntax error … unexpected EOF`, from
+  models such as Qwen3.6 that write their calls in XML) is now sent back to the model to make again,
+  like a call with broken JSON, instead of ending the request with an error.
+
 ## [0.22.0] - 2026-10-06
 
 ### Added

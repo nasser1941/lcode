@@ -137,6 +137,23 @@ def test_malformed_tool_calls_are_retried(make_agent):
     assert nudge["role"] == "user" and "unexpected end of JSON input" in nudge["content"]
 
 
+def test_malformed_xml_tool_calls_are_retried(make_agent):
+    agent = make_agent([reply("fixed it")])
+    calls = {"n": 0}
+    real = agent.ollama.chat_stream
+
+    def chat_stream(payload):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OllamaError("Ollama error: XML syntax error on line 16: unexpected EOF")
+        yield from real(payload)
+
+    agent.ollama.chat_stream = chat_stream
+    agent.run_turn("read status.txt")
+    assert agent.messages[-1]["content"] == "fixed it"
+    assert "(on line 16: unexpected EOF)" in agent.messages[-2]["content"]
+
+
 def test_malformed_tool_calls_give_up_eventually(make_agent):
     agent = make_agent()
 
