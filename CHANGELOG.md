@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-10
+
 ### Added
 
 - lcode checks for secrets before the model runs `git commit` or `git push`: passwords, keys and
@@ -551,7 +553,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/nasser1941/lcode/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/nasser1941/lcode/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/nasser1941/lcode/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/nasser1941/lcode/compare/v0.22.0...v0.23.0

@@ -12,7 +12,7 @@ lcode
 
 ```text
 ╭──────────────────────────────────────────────╮
-│ lcode v0.25.0 — local coding agent           │
+│ lcode v0.26.0 — local coding agent           │
 │                                              │
 │ model    lcode-qwen3.6-35b                   │
 │ context  256K tokens                         │
