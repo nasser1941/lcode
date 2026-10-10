@@ -6,6 +6,26 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Long sessions are summarized earlier: once the conversation reaches 64K tokens (`compact_at`),
+  even when the window is larger. Before, a 256K window was summarized only at about 220K, far past
+  where small models work well. lcode still removes old tool output first, and summarizes only if
+  that's not enough. `lcode config set compact_at 0` keeps only the 85% rule, and
+  `lcode bench --compact-at` compares ceilings. Measured with qwen3.6-35b: making room earlier
+  doesn't cost tasks (21 of 24 either way) and saved 17% of the time. See
+  [Context management](https://nasser1941.github.io/lcode/how-it-works/#context-management).
+- Summaries keep your latest requests (up to eight) word for word, so the goal survives the
+  retelling. `/context` shows where the session makes room.
+
+### Fixed
+
+- After lcode removed an earlier file read to make room, the model sometimes answered questions
+  about that file from memory, and got them wrong, instead of reading it again. The files whose
+  only copy went are now named next to the request it's working on, and the note in their place
+  says plainly that the content is gone. A conversation that was just summarized isn't summarized
+  again until it has grown by a quarter of `compact_at`, which must be at least 16K (or 0).
+
 ## [0.26.0] - 2026-10-10
 
 ### Added

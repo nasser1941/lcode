@@ -234,6 +234,7 @@ class Settings:
     notify_after: int = 30  # seconds: a request this long notifies when it's done or waits for an answer
     max_parallel_agents: int = 1
     secret_check: bool = True  # scan what git commit and git push would add (lcode.secretscan)
+    compact_at: int = 0  # tokens: make room at this size even when the window is larger (0: only at 85%)
     repeat_limit: int = 3  # identical calls with identical results before the model is told (lcode.repeats)
 
 
@@ -270,6 +271,7 @@ class Agent:
         self.agent_runs: list[subagents.Record] = []  # subagents run in this session, for /agents
         self.plan = ""  # the plan the user approved; kept through compaction
         self.pruned = self.compacted = 0  # how often the context was pruned or summarized automatically
+        self.summarized_size = 0  # tokens right after the last summary (0: none in this conversation)
         self._extensions: tuple[Path, extensions.Extensions] | None = None
         self.skills_loaded: set[str] = set()  # skills whose instructions are in the conversation
         # Set on subagents (see lcode.subagents):
@@ -514,6 +516,7 @@ class Agent:
         return WEB_PROMPT.format(tools=tools, date=dt.date.today().isoformat())
 
     def reset(self) -> None:
+        self.summarized_size = 0
         self.messages = [{"role": "system", "content": self.system_prompt()}]
         self._mcp_prompt = ""
         self.tools.read_mtimes.clear()
@@ -1046,13 +1049,27 @@ class Agent:
         return text + ("\n\n" + "\n\n".join(attached) if attached else "")
 
     # -- context management
+    def compact_limit(self) -> int:
+        """The tokens in use at which lcode makes room: 85% of the window, or `compact_at` when that's lower.
+        Small models lose track in long contexts well before a large window is full."""
+        limit = int(AUTO_COMPACT_RATIO * self.settings.context)
+        if self.settings.compact_at > 0:
+            limit = min(limit, self.settings.compact_at)
+        return limit
+
     def maybe_compact(self) -> None:
-        if self.ctx_used <= AUTO_COMPACT_RATIO * self.settings.context:
+        limit = self.compact_limit()
+        if self.ctx_used <= limit:
             return
+        enough = int(limit * PRUNED_ENOUGH / AUTO_COMPACT_RATIO)  # after pruning, a summary isn't needed below this
         if self.settings.prune:
-            saved = context_tools.prune(self.messages)  # tool output from before the last two requests
-            if self.ctx_used - saved // 3 > PRUNED_ENOUGH * self.settings.context:
-                saved += context_tools.prune(self.messages, keep=1)  # not enough: before the last request
+            removed: list[str] = []  # files and pages whose only copy goes
+            saved = context_tools.prune(self.messages, removed=removed)  # tool output from before the last two requests
+            if self.ctx_used - saved // 3 > enough:
+                saved += context_tools.prune(
+                    self.messages, keep=1, removed=removed
+                )  # not enough: before the last request
+            context_tools.note_removed(self.messages, removed)
             if saved:
                 self.pruned += 1
                 self.ctx_used = max(len(self.messages[0]["content"]) // 3, self.ctx_used - saved // 3)
@@ -1060,9 +1077,17 @@ class Agent:
                     f"[dim]Removed old tool output from the conversation (~{format_tokens(saved // 3)} tokens) to "
                     "make room.[/]"
                 )
-                if self.ctx_used <= PRUNED_ENOUGH * self.settings.context:
+                if self.ctx_used <= enough:
                     return
-        self.console.print("[yellow]Context is nearly full — compacting the conversation…[/]")
+        window_full = self.ctx_used > AUTO_COMPACT_RATIO * self.settings.context
+        if not window_full and self.summarized_size and self.ctx_used - self.summarized_size < limit // 4:
+            return  # summarized not long ago: summarizing again so soon would only lose more
+        if limit < AUTO_COMPACT_RATIO * self.settings.context:
+            self.console.print(
+                f"[yellow]The conversation reached {format_tokens(limit)} tokens (compact_at) — summarizing it…[/]"
+            )
+        else:
+            self.console.print("[yellow]Context is nearly full — compacting the conversation…[/]")
         self.compacted += 1
         self.compact()
 
@@ -1083,9 +1108,13 @@ class Agent:
         with self.console.status("[cyan]Compacting…[/]"):
             for chunk in self.chat([*self.messages, {"role": "user", "content": instructions}], None, False):
                 summary += chunk.get("message", {}).get("content", "")
+        requests = context_tools.user_requests(self.messages)
         self.messages = [
             {"role": "system", "content": self.system_prompt()},
-            {"role": "user", "content": f"[Summary of our conversation so far]\n\n{summary}"},
+            {
+                "role": "user",
+                "content": f"{sessions.SUMMARY_PREFIX}\n\n{summary}" + context_tools.requests_block(requests),
+            },
             {"role": "assistant", "content": "Got it — I have the context from the summary and will continue."},
         ]
         if self.plan:  # the approved plan stays word for word
@@ -1097,6 +1126,7 @@ class Agent:
             )
             self.skills_loaded.clear()
         self.ctx_used = sum(len(m["content"]) for m in self.messages) // 3
+        self.summarized_size = self.ctx_used
         self.reflected = len(self.messages)
         self.console.print(Panel(Markdown(summary), title="Compacted summary", border_style="blue"))
 

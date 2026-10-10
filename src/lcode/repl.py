@@ -242,7 +242,8 @@ def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
     c.print(
         f"In use: {format_tokens(agent.ctx_used)} of {format_tokens(s.context)} tokens "
         f"({100 * agent.ctx_used / s.context:.0f}%) in {len(agent.messages)} message"
-        f"{'' if len(agent.messages) == 1 else 's'}; auto-compacts at 85%."
+        f"{'' if len(agent.messages) == 1 else 's'}; makes room at {format_tokens(agent.compact_limit())} "
+        + ("(compact_at)." if agent.compact_limit() < AUTO_COMPACT_RATIO * s.context else "(85%).")
     )
     if agent.mcp and agent.mcp.ready():
         how = "found on demand" if agent.mcp.searching(s.context) else "sent with every request"

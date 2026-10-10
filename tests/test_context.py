@@ -1,3 +1,5 @@
+import pytest
+
 from conftest import output, reply
 from lcode import context
 from lcode.hardware import Hardware
@@ -159,3 +161,87 @@ def test_context_shows_what_uses_it(make_agent, repo, monkeypatch):
     monkeypatch.setattr("builtins.input", lambda prompt="": "")  # keep the window size
     handle_command(agent, "/context", HW)
     assert "What uses the context" in output(agent) and "tool results: read_file" in output(agent)
+
+
+def test_a_large_window_is_summarized_at_the_ceiling(make_agent):
+    assert make_agent(context=262144, compact_at=65536).compact_limit() == 65536
+    assert make_agent(context=262144, compact_at=0).compact_limit() == int(0.85 * 262144)
+    assert make_agent(context=32768, compact_at=65536).compact_limit() == int(0.85 * 32768)
+    agent = make_agent([reply("Summary.")], context=262144, compact_at=8192)
+    agent.messages = conversation()
+    agent.ctx_used = 9000  # 3% of the window, but past the ceiling
+    agent.maybe_compact()
+    assert agent.pruned == 1 and agent.compacted == 1
+    assert "The conversation reached 8K tokens (compact_at)" in output(agent)
+    agent.ctx_used = 5000
+    agent.maybe_compact()  # under the ceiling again: nothing to do
+    assert agent.compacted == 1
+
+
+def test_summaries_keep_the_users_requests_word_for_word(make_agent):
+    agent = make_agent([reply("Summary one."), reply("ok"), reply("Summary two.")], context=16384)
+    agent.messages = conversation()
+    agent.messages[1]["content"] = 'make it 2x3\n\n<file path="config.json">\n{"grid": "3x3"}\n</file>'
+    agent.compact()
+    summary = agent.messages[1]["content"]
+    assert summary.startswith("[Summary of our conversation so far]\n\nSummary one.")
+    assert context.REQUESTS_HEADER in summary and '"make it 2x3"' in summary and "config.json" not in summary
+    agent.run_turn("now commit it")
+    agent.compact()
+    assert context.user_requests(agent.messages)[:1] == ["make it 2x3"]
+    assert context.user_requests(agent.messages)[-1] == "now commit it"
+    assert agent.messages[1]["content"].count(context.REQUESTS_HEADER) == 1
+
+
+def test_only_the_latest_requests_are_kept(make_agent):
+    requests = [f"request {n}" for n in range(12)] + ["x" * 5000]
+    block = context.requests_block(requests)
+    assert "(and 5 earlier, in the summary)" in block and '"request 4"' not in block and '"request 5"' in block
+    assert "[…]" in block and len(block) < 3000
+
+
+def test_context_shows_when_it_makes_room(make_agent):
+    agent = make_agent(context=262144, compact_at=65536)
+    handle_command(agent, "/context 262144", HW)
+    assert "makes room at 64K (compact_at)" in output(agent)
+
+
+def test_a_fresh_summary_is_not_summarized_again_right_away(make_agent):
+    agent = make_agent([reply("Summary."), reply("Summary again.")], context=262144, compact_at=16384)
+    agent.messages = conversation()
+    agent.ctx_used = 17000
+    agent.maybe_compact()
+    assert agent.compacted == 1
+    agent.summarized_size = 15000  # the summary and the requests it keeps are large
+    agent.ctx_used = 17000  # past the ceiling, but it grew only 2K since
+    agent.maybe_compact()
+    assert agent.compacted == 1
+    agent.ctx_used = 15000 + 16384 // 4 + 1  # it grew by a quarter of the ceiling: summarize again
+    agent.maybe_compact()
+    assert agent.compacted == 2
+    agent.summarized_size, agent.ctx_used = 200000, 230000  # the window itself is full: always
+    agent.ollama.scripts.append(reply("Summary three."))
+    agent.maybe_compact()
+    assert agent.compacted == 3
+
+
+def test_compact_at_has_a_floor():
+    from lcode import config
+    from lcode.config import ConfigError
+
+    assert config.coerce("compact_at", "64k") == 65536 and config.coerce("compact_at", "off") == 0
+    with pytest.raises(ConfigError, match="at least 16k"):
+        config.coerce("compact_at", "8k")
+
+
+def test_the_model_is_told_next_to_its_request_what_it_no_longer_has(make_agent):
+    agent = make_agent([reply("ok")], context=16384)
+    agent.messages = conversation(BIG * 10)
+    agent.messages[12]["tool_calls"] = [tool("read_file", path="c.py"), tool("read_file", path="b.py")]
+    agent.ctx_used = int(0.9 * 16384)
+    agent.maybe_compact()
+    assert agent.messages[11]["content"].startswith(
+        "third request\n\n[lcode] To make room, lcode removed what you read earlier from: a.py. It isn't in this "
+        "conversation any more: read it again"
+    )
+    assert context.user_requests(agent.messages)[-1] == "third request"

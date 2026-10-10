@@ -61,6 +61,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "notify_after": (30, int, "seconds a request runs before it notifies (with notify on)"),
     "repeat_limit": (3, int, "identical tool calls with identical results before lcode steps in (0: never)"),
     "secret_check": (True, bool, "before git commit and git push, look for passwords, keys and tokens they'd add"),
+    "compact_at": (65536, int, "summarize at this many tokens even when the window is larger (0: only at 85%)"),
     "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),
 }
 ENV_OVERRIDES = {
@@ -79,6 +80,19 @@ ENV_OVERRIDES = {
 
 class ConfigError(ValueError):
     pass
+
+
+MIN_COMPACT_AT = 16384  # below this, the system prompt and a summary alone come close to the ceiling
+
+
+def parse_compact_at(value: str | int) -> int:
+    """compact_at: a token count like parse_context's, at least 16K, or 0 (off)."""
+    if str(value).strip().lower() in ("0", "off", "false", "none"):
+        return 0
+    tokens = parse_context(value)
+    if tokens < MIN_COMPACT_AT:
+        raise ConfigError(f"compact_at {tokens} is too small: use at least 16k, or 0 to turn it off")
+    return tokens
 
 
 def parse_context(value: str | int) -> int:
@@ -118,6 +132,8 @@ def coerce(key: str, value: object) -> object:
     _, typ, _ = SETTINGS[key]
     if key == "context":
         return parse_context(value)  # type: ignore[arg-type]
+    if key == "compact_at":
+        return parse_compact_at(value)  # type: ignore[arg-type]
     if key in ("ollama_host", "searxng_url"):
         return normalize_host(str(value))
     if key == "base_url":

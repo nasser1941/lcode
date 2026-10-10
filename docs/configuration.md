@@ -37,6 +37,7 @@ lcode config path                      # print the file location
 | `repo_map` | `true` | Give the model a ranked [map of the repository](search.md) |
 | `embed_model` | `auto` | Embedding model for [semantic code search](search.md#semantic-code-search): `auto`, `off` or a model name |
 | `lsp` | `auto` | Use installed [language servers](lsp.md) for code navigation and errors after edits: `auto` or `off` |
+| `compact_at` | `65536` | Make room (prune, then summarize) once the conversation reaches this many tokens, even in a larger window (at least 16K); `0` leaves only the 85% rule ([why](how-it-works.md#context-management)) |
 | `prune` | `true` | When the context is 85% full, first remove old tool output, and summarize the conversation only if that's not enough ([how](how-it-works.md#context-management)) |
 | `subagents` | `true` | Let the model hand tasks to [subagents](agents.md) with their own context |
 | `max_parallel_agents` | `1` | Subagents that run at the same time; more needs `OLLAMA_NUM_PARALLEL` on the Ollama server ([details](agents.md#several-at-once)) |

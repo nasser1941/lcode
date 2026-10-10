@@ -51,7 +51,7 @@ Each task normally starts a new conversation. `--session` runs them all in **one
 instead, as a long working session would, so the context fills up and lcode's
 [context management](how-it-works.md#context-management) has to work: the summary shows how often
 it removed old tool output and how often it summarized the conversation. `--no-prune` turns the
-removal off, to compare.
+removal off, to compare, and `--compact-at` sets the ceiling (`--compact-at 0`: only at 85%).
 
 ```bash
 lcode bench --context 32k --session --rounds 3
@@ -73,6 +73,17 @@ Removing old tool output means fewer summaries, so more of the conversation stay
 at no measurable cost in tasks solved or time. The bench tasks are independent of each other,
 which is where summaries hurt least; in a real session, where later requests build on earlier
 ones, keeping the conversation intact matters more.
+
+With a large window, `compact_at` decides when lcode makes room. In a 128K window, 24 tasks in one
+conversation reach about 40K tokens, so the default ceiling of 64K never comes into play. Making
+room earlier than needed doesn't cost tasks:
+
+| 128K window, 24 tasks | No room made (peak ~40K) | `--compact-at 32k` |
+|---|---|---|
+| Conversation summarized | 0 times | 1 time (old tool output removed once) |
+| Tasks solved | 21 of 24 | 21 of 24 |
+| Time | 33 min | 27.5 min |
+| Average prompt | 22.9K tokens | 16.6K tokens |
 
 ## The tasks
 
