@@ -38,8 +38,10 @@ A model usually takes 4 to 12 minutes; each task stops after 5 minutes (`--timeo
 ### More tasks and features
 
 `--tasks find-concept` adds a task in a larger repository: 40 files of a small backend where the
-model has to find a function by what it does. It isn't in the default set, so results stay
-comparable with earlier versions. `--repo-map` gives the model the [repository map](search.md) and
+model has to find a function by what it does. `--tasks runtime-bug` adds a bug that shows only
+when the code runs: a camera wall's window grows taller with every video frame and can't be made
+smaller again. Reading the code suggests band-aids that fail the hidden test; running it shows the
+cause. Neither is in the default set, so results stay comparable with earlier versions. `--repo-map` gives the model the [repository map](search.md) and
 `--code-search` indexes each task's folder for [semantic search](search.md#semantic-code-search);
 both are off in `lcode bench` by default, for the same reason.
 

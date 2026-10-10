@@ -29,6 +29,19 @@ All tools return text, and failures come back to the model as `Error: …` messa
 crashing the session, so the model can correct itself (for example re-read a file when an edit
 didn't match).
 
+### Checking its own work
+
+Small models like to call work done after a syntax check. The system prompt tells the model what
+counts as checked:
+
+- run what it changed the way it will be used;
+- reproduce a bug before fixing it, then show it's gone;
+- check what it can't see (a GUI, a web page, a layout) without a screen: Qt's `offscreen`
+  platform, a headless browser, or a script that prints sizes or renders an image it then looks
+  at;
+- never mark a task done or call something tested without having run it, and tell you what to
+  look at when it couldn't check.
+
 ### When the model repeats itself
 
 Small models sometimes fall into a loop: they make a call, get a result, and make the very same call

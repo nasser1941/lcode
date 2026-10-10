@@ -133,3 +133,12 @@ def test_image_names_without_a_folder_may_be_new_files(make_agent):
     agent = make_agent()
     text = "rename logo.png to icon.png and see https://example.com/banner.png"
     assert agent.expand_mentions(text) == text
+
+
+def test_the_model_is_told_how_to_check_what_it_cant_see(make_agent):
+    blind = make_agent()
+    prompt = blind.system_prompt()
+    assert "# Verifying your work" in prompt and "QT_QPA_PLATFORM=offscreen" in prompt
+    assert "first reproduce each problem" in prompt and "view_image" not in prompt  # it has no such tool
+    agent = seeing(make_agent(), "qwen3.6:35b-a3b-coding")
+    assert "renders to an image you look at with view_image" in agent.system_prompt()
