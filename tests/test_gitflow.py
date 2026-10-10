@@ -1,9 +1,8 @@
 import json
-import subprocess
 
 import pytest
 
-from conftest import output, reply
+from conftest import output, reply, run
 from lcode import gitflow
 from lcode.agent import git_info
 from lcode.cli import build_parser
@@ -11,24 +10,6 @@ from lcode.hardware import Hardware
 from lcode.repl import handle_command
 
 HW = Hardware("linux", "x", 31, "GPU", 12)
-
-
-def run(cwd, *args) -> str:
-    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
-
-
-@pytest.fixture
-def git_repo(repo, tmp_path_factory, monkeypatch):
-    """The demo repository under git, with one commit on main and git isolated from the user's settings."""
-    home = tmp_path_factory.mktemp("home")
-    (home / "gitconfig").write_text("[user]\n\tname = Test\n\temail = test@example.com\n")
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(home / "gitconfig"))
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    (repo / ".gitignore").write_text("node_modules/\n")
-    run(repo, "init", "-q", "-b", "main")
-    run(repo, "add", "-A")
-    run(repo, "commit", "-q", "-m", "fix: start the demo")
-    return repo
 
 
 def answers(monkeypatch, *values):
@@ -159,26 +140,6 @@ def test_a_command_of_your_own_replaces_review(make_agent, git_repo):
 
 
 # ----------------------------------------------------------------------------- /pr
-
-
-@pytest.fixture
-def github(git_repo, tmp_path_factory, monkeypatch):
-    """A bare repository as origin, and a stand-in gh that logs its arguments."""
-    remote = tmp_path_factory.mktemp("remote") / "demo.git"
-    run(remote.parent, "init", "-q", "--bare", "-b", "main", str(remote))
-    run(git_repo, "remote", "add", "origin", str(remote))
-    run(git_repo, "push", "-q", "-u", "origin", "main")
-    bin_dir = tmp_path_factory.mktemp("bin")
-    log = bin_dir / "gh.log"
-    gh = bin_dir / "gh"
-    gh.write_text(
-        f'#!/bin/sh\nprintf "%s\\n" "$*" >> {log}\n'
-        'if [ "$1 $2" = "pr view" ]; then exit 1; fi\n'
-        'if [ "$1 $2" = "pr create" ]; then echo https://github.com/acme/demo/pull/7; fi\n'
-    )
-    gh.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{bin_dir}:{__import__('os').environ['PATH']}")
-    return remote, log
 
 
 def test_pr_moves_commits_on_main_to_a_new_branch_and_opens_it(make_agent, git_repo, github, monkeypatch):

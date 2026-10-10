@@ -233,6 +233,7 @@ class Settings:
     notify: bool = False  # desktop notifications after long requests (lcode.notify)
     notify_after: int = 30  # seconds: a request this long notifies when it's done or waits for an answer
     max_parallel_agents: int = 1
+    secret_check: bool = True  # scan what git commit and git push would add (lcode.secretscan)
     repeat_limit: int = 3  # identical calls with identical results before the model is told (lcode.repeats)
 
 

@@ -194,6 +194,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         embed_model=cfg["embed_model"],
         notify=cfg["notify"],
         notify_after=cfg["notify_after"],
+        secret_check=cfg["secret_check"],
         repeat_limit=cfg["repeat_limit"],
     )
     agent = Agent(ollama, settings, cwd, console=console)

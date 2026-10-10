@@ -6,6 +6,17 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- lcode checks for secrets before the model runs `git commit` or `git push`: passwords, keys and
+  tokens in code or configuration, credentials in URLs (`rtsp://user:pass@…`), private keys,
+  tokens with a known form, and `.env` files, in the lines a commit adds or the commits a push
+  sends. In `ask` mode you decide; in `auto-edit` and `yolo` the command doesn't run, and the model
+  is told to move the secret out of the code. `/commit` and `/pr` show the findings before you
+  confirm, and the GitHub Action doesn't commit at all. `lcode: allow-secret` in a comment allows a
+  line; `secret_check = false` turns the check off. See
+  [Secrets in commits](https://nasser1941.github.io/lcode/usage/#secrets-in-commits).
+
 ## [0.25.0] - 2026-10-10
 
 ### Changed

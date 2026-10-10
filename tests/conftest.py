@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -106,3 +108,41 @@ def agent(make_agent) -> Agent:
 
 def output(agent: Agent) -> str:
     return agent.console.file.getvalue()
+
+
+def run(cwd, *args) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
+
+
+@pytest.fixture
+def git_repo(repo, tmp_path_factory, monkeypatch):
+    """The demo repository under git, with one commit on main and git isolated from the user's settings."""
+    home = tmp_path_factory.mktemp("home")
+    (home / "gitconfig").write_text("[user]\n\tname = Test\n\temail = test@example.com\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(home / "gitconfig"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    (repo / ".gitignore").write_text("node_modules/\n")
+    run(repo, "init", "-q", "-b", "main")
+    run(repo, "add", "-A")
+    run(repo, "commit", "-q", "-m", "fix: start the demo")
+    return repo
+
+
+@pytest.fixture
+def github(git_repo, tmp_path_factory, monkeypatch):
+    """A bare repository as origin, and a stand-in gh that logs its arguments."""
+    remote = tmp_path_factory.mktemp("remote") / "demo.git"
+    run(remote.parent, "init", "-q", "--bare", "-b", "main", str(remote))
+    run(git_repo, "remote", "add", "origin", str(remote))
+    run(git_repo, "push", "-q", "-u", "origin", "main")
+    bin_dir = tmp_path_factory.mktemp("bin")
+    log = bin_dir / "gh.log"
+    gh = bin_dir / "gh"
+    gh.write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$*" >> {log}\n'
+        'if [ "$1 $2" = "pr view" ]; then exit 1; fi\n'
+        'if [ "$1 $2" = "pr create" ]; then echo https://github.com/acme/demo/pull/7; fi\n'
+    )
+    gh.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    return remote, log

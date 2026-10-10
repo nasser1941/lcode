@@ -302,7 +302,14 @@ def answer(hub: GitHub, task: Task, inputs: Inputs, cwd: Path) -> None:
         reply = result.text.strip() or "(no answer)"
         changed = git(cwd, "status", "--porcelain").strip()
         if changed:
-            from lcode import gitflow
+            from lcode import gitflow, secretscan
+
+            found = secretscan.in_files(cwd, ["."], staged=False)
+            if found:
+                raise ActionError(
+                    secretscan.report("commit", found, excerpts=False) + "\n\nSo lcode didn't commit or push its "
+                    "changes. Secrets belong in the repository's secrets or in configuration that git ignores."
+                )
 
             data = gitflow.ask(
                 session.agent,
