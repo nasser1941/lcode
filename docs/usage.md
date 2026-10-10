@@ -154,8 +154,19 @@ lcode can look at screenshots, mockups, diagrams and photos:
 ❯ make the settings page match @design/settings.png
 ```
 
-- Attach an image with `@path`, like a file. lcode describes it in detail, with all visible text
-  transcribed and with your question in mind, and the model works from that description.
+- **Paste a screenshot with ++ctrl+v++.** A terminal can only paste text, so lcode reads the
+  clipboard itself, saves the image in its state folder (`~/.local/state/lcode/pasted/`, the last
+  50) and puts `@path` in the prompt. Anything else on the clipboard is pasted as text. It needs
+  `wl-clipboard` on Wayland or `xclip` on X11 (`sudo apt install wl-clipboard`); on macOS it works
+  as is, and faster with `brew install pngpaste`. `lcode doctor` shows whether it works.
+- Attach an image with `@path`, like a file, or just write its path: `/tmp/shot.png`,
+  `~/Pictures/bug.png`, `'./shots/My Shot.png'` and `file://` paths dragged into the terminal are
+  attached too. lcode describes the image in detail, with all visible text transcribed and with your
+  question in mind, and the model works from that description.
+- **A path to an image that doesn't exist** is reported right away
+  (`/tmp/pasted-image-.png doesn't exist, so the model can't see it`), and the model is told it
+  can't see the image, so it asks instead of guessing what it shows. A bare name such as `logo.png`
+  may be a file you want created, so it's left alone.
 - The model can open images itself with the `view_image` tool, for example a screenshot a test wrote.
 - Screenshots that [MCP](mcp.md) tools return, such as the Playwright browser's, are described too.
 

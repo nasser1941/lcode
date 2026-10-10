@@ -102,3 +102,34 @@ def test_view_image_respects_the_sandbox(make_agent, tmp_path_factory):
     outside.write_bytes(PNG)
     agent = seeing(make_agent(sandbox="docker"), "qwen3.6:35b-a3b-coding")
     assert agent.tools.run("view_image", {"path": str(outside)}).startswith("Error:")
+
+
+def test_image_paths_are_attached_without_an_at(make_agent, repo):
+    (repo / "shots").mkdir()
+    (repo / "shots" / "My Shot.png").write_bytes(PNG)
+    (repo / "bug.png").write_bytes(PNG)
+    agent = seeing(make_agent(), "qwen3.6:35b-a3b-coding")
+    text = agent.expand_mentions(f"compare {repo / 'bug.png'} with './shots/My Shot.png', and @bug.png again")
+    assert text.count("<image") == 2
+    assert '<image path="bug.png"' in text and '<image path="shots/My Shot.png"' in text
+    uri = agent.expand_mentions(f"dragged in: file://{repo}/shots/My%20Shot.png")
+    assert '<image path="shots/My Shot.png"' in uri
+    quoted = agent.expand_mentions('see @"shots/My Shot.png"')
+    assert '<image path="shots/My Shot.png"' in quoted
+
+
+def test_a_missing_image_is_reported_not_guessed(make_agent):
+    agent = seeing(make_agent([reply("Please paste it again.")]), "qwen3.6:35b-a3b-coding")
+    agent.run_turn("now we see something like /tmp/pasted-image-.png")
+    sent = agent.messages[1]["content"]
+    assert "[lcode: the user's message mentions the image /tmp/pasted-image-.png, but there's no such file" in sent
+    assert "Don't guess what it shows" in sent and "<image" not in sent
+    assert "/tmp/pasted-image-.png doesn't exist, so the model can't see it" in output(agent)
+    assert agent.ollama.chats == []  # nothing to look at
+    assert "no such file" in agent.expand_mentions("look at @gone.png")
+
+
+def test_image_names_without_a_folder_may_be_new_files(make_agent):
+    agent = make_agent()
+    text = "rename logo.png to icon.png and see https://example.com/banner.png"
+    assert agent.expand_mentions(text) == text

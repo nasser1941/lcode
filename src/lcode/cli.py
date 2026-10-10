@@ -346,6 +346,10 @@ def cmd_doctor(args) -> None:
             line("Vision", "off; set vision_model to a model the server serves that can see images", None)
         else:
             line("Vision", "off" if cfg["vision_model"] == "off" else vision.INSTALL_HINT, None)
+        if seer:
+            from lcode import clipboard
+
+            line("Clipboard", *clipboard.status())
         if limits.get(model):
             line(
                 "Limit",

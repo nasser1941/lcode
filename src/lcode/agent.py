@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.parse
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -63,6 +64,15 @@ MAX_MALFORMED_CALL_RETRIES = 2  # Ollama rejects tool calls whose arguments aren
 MALFORMED_CALL = ("error parsing tool call", "XML syntax error")
 AUTO_COMPACT_RATIO = 0.85  # summarize the history when the context is this full
 PRUNED_ENOUGH = 0.6  # after pruning old tool output, summarize only if the context is still this full
+# @path, @"path with spaces" or @'path'
+MENTION = re.compile(r"""(?<!\S)@(?:"([^"\n]+)"|'([^'\n]+)'|([\w./~\-]+))""")
+# An image path written in a message: in quotes, or without spaces (a space escaped as "\ " is fine), or as a
+# file:// address, the way terminals paste a dragged file.
+IMAGE_PATH = re.compile(
+    r"""(['"])((?:file://)?[^'"\n]+?\.(?:png|jpe?g|webp|gif))\1"""
+    r"""|(?<![^\s(])((?:[^\s\\'"(]|\\ )+?\.(?:png|jpe?g|webp|gif))(?=[\s,;:!?)\]]|\.(?:\s|$)|$)""",
+    re.IGNORECASE,
+)
 PROJECT_FILES = ("AGENTS.md", "LCODE.md", "CLAUDE.md")
 
 SYSTEM_PROMPT = """You are lcode, an autonomous software-engineering agent running in the user's terminal on their own machine, powered by the local model {model}. You help the user understand codebases, answer questions about code, write scripts (Python by default), fix bugs, refactor, and run commands.
@@ -965,30 +975,68 @@ class Agent:
         )
 
     def expand_mentions(self, text: str) -> str:
-        """Inline files referenced as @path in the user's message; @name of an agent asks for that agent."""
-        attached = []
-        for ref in re.findall(r"(?<!\S)@([\w./~\-]+)", text):
+        """Attach what the user's message points to: files and folders written as @path, image paths (with or
+        without @), and @name of an agent asks for that agent. An image path that doesn't exist is reported to
+        the user and the model, so the model doesn't guess what the image shows."""
+        attached: list[str] = []
+        seen: set[Path] = set()
+        question = MENTION.sub("", text)
+
+        def attach_image(p: Path) -> None:
+            try:
+                description = self.look(p, question)
+                who = f' described_by="{self.vision_model()}"'
+            except ToolError as e:
+                description, who = f"(lcode couldn't look at this image: {e})", ""
+                self.console.print(Text(f"  ⎿ {e}", style="yellow"))
+            else:
+                self.console.print(Text(f"  ⎿ looked at {self.tools.rel(p)}", style="dim"))
+            attached.append(f'<image path="{self.tools.rel(p)}"{who}>\n{description}\n</image>')
+
+        def missing_image(shown: str) -> None:
+            self.console.print(
+                Text(f"  ⎿ {shown} doesn't exist, so the model can't see it. Paste images with Ctrl+V.", style="yellow")
+            )
+            attached.append(
+                f"[lcode: the user's message mentions the image {shown}, but there's no such file, so it wasn't "
+                "attached and you can't see it. Don't guess what it shows: ask the user to paste it again (Ctrl+V "
+                "in lcode's prompt) or to describe it.]"
+            )
+
+        for match in MENTION.finditer(text):
+            ref = next(g for g in match.groups() if g)
             p = self.tools.resolve(ref)
+            seen.add(p)
             name = ref.removeprefix("agent-")
             if not p.exists() and self.settings.subagents and name in self.agent_types():
                 attached.append(f'[The user wants the {name} agent for this: call the agent tool with type "{name}".]')
                 continue
             if p.is_file() and vision.is_image(p):
-                try:
-                    description = self.look(p, re.sub(r"(?<!\S)@[\w./~\-]+", "", text))
-                    who = f' described_by="{self.vision_model()}"'
-                except ToolError as e:
-                    description, who = f"(lcode couldn't look at this image: {e})", ""
-                    self.console.print(Text(f"  ⎿ {e}", style="yellow"))
-                else:
-                    self.console.print(Text(f"  ⎿ looked at {self.tools.rel(p)}", style="dim"))
-                attached.append(f'<image path="{self.tools.rel(p)}"{who}>\n{description}\n</image>')
+                attach_image(p)
             elif p.is_file() and not is_binary(p) and p.stat().st_size < 200_000:
                 attached.append(f'<file path="{self.tools.rel(p)}">\n{p.read_text(errors="replace")}\n</file>')
                 self.tools.read_mtimes[str(p)] = p.stat().st_mtime
                 self.console.print(Text(f"  ⎿ attached {self.tools.rel(p)}", style="dim"))
             elif p.is_dir():
                 attached.append(f'<directory path="{self.tools.rel(p)}">\n{tree(p, 2)}\n</directory>')
+            elif not p.exists() and vision.is_image(p):
+                missing_image(ref)
+        for match in IMAGE_PATH.finditer(text):
+            quoted, raw = bool(match.group(2)), match.group(2) or match.group(3)
+            if raw.startswith("@") or "://" in raw.removeprefix("file://"):
+                continue  # attached above, or a web address
+            if raw.startswith("file://"):
+                shown = urllib.parse.unquote(raw.removeprefix("file://"))
+            else:
+                shown = raw.replace("\\ ", " ")
+            p = self.tools.resolve(shown)
+            if p in seen:
+                continue
+            seen.add(p)
+            if p.is_file():
+                attach_image(p)
+            elif quoted or raw.startswith(("/", "~", "./", "../", "file://")):
+                missing_image(shown)  # a name without a folder may be a file to create: no warning
         return text + ("\n\n" + "\n\n".join(attached) if attached else "")
 
     # -- context management
