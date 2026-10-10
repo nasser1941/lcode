@@ -90,6 +90,8 @@ with Session("path/to/repo", permission_mode="auto-edit") as session:
 - **Events while it runs:** `session.stream(prompt)` yields the events above, ending with the result.
 - **Permissions:** pass `approve` to decide permission requests. It gets
   `{"kind": "bash", "title": "…", "target": "pytest -q"}`; without it, every request is refused.
+  A `git commit` or `git push` that would add [what looks like a secret](usage.md#secrets-in-commits)
+  comes as `{"kind": "secret", …}` in `ask` mode, and doesn't run in the other modes.
 - **Options:** `model`, `context`, `permission_mode`, `allowed_tools`, `max_steps`, `think`,
   `web`, `memory`, `mcp` and `sandbox`. Leave one out to use your
   [configuration](configuration.md).

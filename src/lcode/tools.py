@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import fnmatch
+import hashlib
 import inspect
 import json
 import os
@@ -19,11 +20,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from lcode import web
+from lcode import secretscan, web
 from lcode.context import shorten
 from lcode.jobs import JobError, describe, stop_leftovers
 from lcode.permissions import bash_key, is_read_only
@@ -823,7 +825,28 @@ class Toolbox:
         verdict = self.agent.perms.rule("bash", command)
         if verdict is not None and not verdict[0]:  # deny rules apply to read-only commands too
             return verdict[1]
-        if not is_read_only(command) and not (sandbox and self.agent.perms.mode == "auto-edit") and verdict is None:
+        approved = False
+        if self.agent.settings.secret_check and not is_read_only(command):
+            action, found = secretscan.check(self.agent.cwd, command)
+            if found:
+                text = secretscan.report(action, found)
+                if self.agent.perms.mode != "ask":  # nobody looks at each command: it doesn't run
+                    self.console.print(Text(f"  ⎿ {text}", style="red"))
+                    return f"Error: lcode's secret check stopped this command. {text}\n\n{secretscan.ADVICE}"
+                body = Group(Text(text + "\n", style="red"), Syntax(command, "bash", theme="monokai", word_wrap=True))
+                key = "secret:" + hashlib.sha256(text.encode()).hexdigest()[:16]
+                ok, feedback = self.agent.perms.request(
+                    key, "secret", f"This {action} looks like it holds a secret", body, command
+                )
+                if not ok:
+                    return f"{feedback}\n\n{text}\n{secretscan.ADVICE}"
+                approved = True
+        if (
+            not approved
+            and not is_read_only(command)
+            and not (sandbox and self.agent.perms.mode == "auto-edit")
+            and verdict is None
+        ):
             body = Syntax(command, "bash", theme="monokai", word_wrap=True)
             where = "in the sandbox" if sandbox else f"in {self.agent.cwd}"
             ok, feedback = self.agent.perms.request(bash_key(command), "bash", f"Run command ({where})", body, command)

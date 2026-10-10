@@ -60,6 +60,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "notify": (True, bool, "desktop notification when a long request is done or waits for you"),
     "notify_after": (30, int, "seconds a request runs before it notifies (with notify on)"),
     "repeat_limit": (3, int, "identical tool calls with identical results before lcode steps in (0: never)"),
+    "secret_check": (True, bool, "before git commit and git push, look for passwords, keys and tokens they'd add"),
     "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),
 }
 ENV_OVERRIDES = {

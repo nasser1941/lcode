@@ -213,6 +213,39 @@ deny lists, per user or per repository; deny always wins, even in `yolo`. Text a
 With the [sandbox](sandbox.md) on, `auto-edit` mode runs shell commands without asking too: they can
 only reach the project, and `/undo` can take their changes back.
 
+### Secrets in commits
+
+Before the model runs `git commit` or `git push`, lcode checks what would go into the repository's
+history: the lines a commit adds (including files a `git add` in the same command stages), or every
+commit a push would send. It looks for:
+
+- passwords, keys and tokens written as values in code or configuration, like
+  `"password": "…"` or `API_KEY=…`;
+- credentials in addresses, like `rtsp://admin:…@192.168.1.10`;
+- private keys and tokens with a known form (GitHub, GitLab, AWS, Slack, OpenAI, Anthropic, xAI,
+  Google, Hugging Face, Stripe);
+- `.env` files.
+
+Placeholders such as `CHANGE_ME`, `your_password`, `${PASSWORD}` or `os.environ["PASSWORD"]` don't
+count.
+
+```text
+This commit would add what looks like a secret to the repository's history:
+- camera_wall.py:42: a password or key: "password": "Xk…"
+```
+
+- **In `ask` mode,** you decide: lcode shows the findings and the command.
+- **In `auto-edit` and `yolo`,** the command doesn't run. The model is told to read the secret from
+  an environment variable or a configuration file that git ignores, and to ask you if it isn't one.
+- **`/commit` and `/pr`** show the same findings before you confirm.
+- **The [GitHub Action](automation.md#github-action)** doesn't commit or push at all when it finds
+  one.
+
+If a line only looks like a secret, add `lcode: allow-secret` (or `gitleaks:allow`) in a comment
+on it. `lcode config set secret_check false` turns the check off. It's a safety net, not a full
+scanner: for a public repository, also run a tool such as [gitleaks](https://github.com/gitleaks/gitleaks)
+before you push.
+
 ## Plan mode
 
 Local models are slower than cloud models and make more mistakes, so on a bigger change it pays to

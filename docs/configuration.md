@@ -43,6 +43,7 @@ lcode config path                      # print the file location
 | `notify` | `true` | A desktop [notification](usage.md#notifications) when a long request is done or waits for your answer |
 | `notify_after` | `30` | Seconds a request runs before it notifies |
 | `repeat_limit` | `3` | Identical tool calls with identical results before lcode [steps in](how-it-works.md#when-the-model-repeats-itself); `0` turns it off |
+| `secret_check` | `true` | Before `git commit` and `git push`, look for passwords, keys and tokens they'd add ([details](usage.md#secrets-in-commits)) |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
 
 Besides these settings, `config.toml` can hold [hooks](hooks.md) (`[[hooks]]`) and

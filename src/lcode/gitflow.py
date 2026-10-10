@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from rich.markup import escape
 from rich.panel import Panel
+from rich.text import Text
 
 if TYPE_CHECKING:
     from lcode.agent import Agent
@@ -316,6 +317,9 @@ def commit_command(agent: Agent, hint: str = "") -> None:
         chosen = [f for f in answer.get("files") or [] if f in paths]
         files = chosen or paths
     left_out = [p for p in paths if p not in files]
+    from lcode import secretscan
+
+    secrets_found = secretscan.in_files(root, files, bool(staged)) if agent.settings.secret_check else []
     while True:
         c.print(Panel(escape(message), title="Commit message", title_align="left", border_style="cyan"))
         c.print(f"  [bold]Files[/] {escape(', '.join(files))}")
@@ -323,6 +327,9 @@ def commit_command(agent: Agent, hint: str = "") -> None:
             c.print(f"  [dim]Left out (unrelated, the model thinks): {escape(', '.join(left_out))}[/]")
         if risky:
             c.print(f"  [dim]Left out (may hold secrets; stage them yourself if needed): {escape(', '.join(risky))}[/]")
+        if secrets_found:
+            c.print(Text(secretscan.report("commit", secrets_found), style="red"))
+            c.print("  [dim]Commit them only if they aren't secrets; otherwise move them out of the code first.[/]")
         choice = confirm(agent, "  [y] commit · [e] edit the message · [n] cancel: ", message)
         if choice == "e":
             from lcode.planning import edit_text
@@ -552,6 +559,14 @@ def pr_command(agent: Agent, arg: str = "") -> None:
 
 
 def push(agent: Agent, root: Path, remote: str, branch: str) -> bool:
+    from lcode import secretscan
+
+    found = secretscan.outgoing(root, branch) if agent.settings.secret_check else []
+    if found:
+        agent.console.print(Text(secretscan.report("push", found), style="red"))
+        if confirm(agent, "  Push anyway? [y]es / [n]o: ") != "y":
+            agent.console.print("Not pushed.")
+            return False
     try:
         with agent.console.status(f"Pushing {escape(branch)}…", spinner="dots"):
             git(root, "push", "-q", "-u", remote, branch, timeout=300)
