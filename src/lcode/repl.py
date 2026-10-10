@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
@@ -26,7 +27,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, backends, catalog, extensions, gitflow, limits, sessions, web
+from lcode import __version__, backends, catalog, clipboard, extensions, gitflow, limits, sessions, web
 from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
@@ -101,6 +102,13 @@ class InputCompleter(Completer):
                 yield Completion(completion, start_position=-len(fragment))
 
 
+def mention(path: Path) -> str:
+    """How a file goes into the prompt: @path, with ~ for the home folder, in quotes if it has spaces."""
+    home = Path.home()
+    shown = f"~/{path.relative_to(home)}" if path.is_relative_to(home) else str(path)
+    return f'@"{shown}"' if " " in shown else f"@{shown}"
+
+
 def build_session(agent: Agent) -> PromptSession:
     kb = KeyBindings()
 
@@ -118,6 +126,19 @@ def build_session(agent: Agent) -> PromptSession:
     @kb.add("escape", "enter")
     def _newline(event):
         event.current_buffer.insert_text("\n")
+
+    @kb.add("c-v")
+    def _paste(event):
+        """Paste the clipboard: an image becomes @path (terminals can't paste images), anything else is text."""
+        got = clipboard.paste()
+        buf = event.current_buffer
+        if got.image:
+            before = buf.document.char_before_cursor
+            buf.insert_text(("" if not before or before.isspace() else " ") + mention(got.image) + " ")
+        elif got.text:
+            buf.insert_text(got.text.replace("\r\n", "\n"))
+        else:
+            run_in_terminal(lambda: agent.console.print(Text(f"  {got.problem}", style="yellow")))
 
     @kb.add("s-tab")
     def _cycle_mode(event):

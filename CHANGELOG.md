@@ -6,6 +6,20 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Ctrl+V in lcode's prompt pastes a screenshot: lcode reads the clipboard (with `wl-paste` on
+  Wayland, `xclip` on X11, `pngpaste` or `osascript` on macOS), saves the image and attaches it as
+  `@path`. Other clipboard content is pasted as text. `lcode doctor` shows whether it works here.
+- Image paths in a message are attached without `@`: absolute and `~` paths, quoted paths with
+  spaces, and `file://` paths dragged into the terminal. `@"path with spaces"` works for any file.
+
+### Fixed
+
+- An image path that doesn't exist is no longer ignored: lcode says so, and tells the model it can't
+  see that image, so it asks instead of guessing what the picture shows. See
+  [Images](https://nasser1941.github.io/lcode/usage/#images).
+
 ## [0.23.0] - 2026-10-10
 
 ### Added
