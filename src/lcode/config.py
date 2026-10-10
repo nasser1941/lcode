@@ -59,6 +59,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "subagents": (True, bool, "let the model hand tasks to subagents that have their own context"),
     "notify": (True, bool, "desktop notification when a long request is done or waits for you"),
     "notify_after": (30, int, "seconds a request runs before it notifies (with notify on)"),
+    "repeat_limit": (3, int, "identical tool calls with identical results before lcode steps in (0: never)"),
     "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),
 }
 ENV_OVERRIDES = {

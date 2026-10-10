@@ -48,7 +48,12 @@ KINDS = {
     "bash": "execute", "web_search": "fetch", "web_fetch": "fetch", "agent": "think", "todo_write": "think",
     "present_plan": "switch_mode", "bash_output": "read", "bash_stop": "execute",
 }  # fmt: skip
-STOP = {"success": "end_turn", "max_steps": "max_turn_requests", "interrupted": "cancelled"}
+STOP = {
+    "success": "end_turn",
+    "max_steps": "max_turn_requests",
+    "loop": "max_turn_requests",
+    "interrupted": "cancelled",
+}
 MAX_INLINE = 200_000  # bytes of a file the editor attaches that go into the prompt
 METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR, NOT_FOUND = -32601, -32602, -32603, -32002
 

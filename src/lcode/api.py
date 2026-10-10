@@ -35,8 +35,8 @@ if TYPE_CHECKING:
     from lcode.hardware import Hardware
 
 SCHEMA_VERSION = 1
-STATUSES = ("success", "error", "max_steps", "interrupted")
-EXIT_CODES = {"success": 0, "error": 1, "max_steps": 3, "interrupted": 130}
+STATUSES = ("success", "error", "max_steps", "loop", "interrupted")
+EXIT_CODES = {"success": 0, "error": 1, "max_steps": 3, "loop": 4, "interrupted": 130}
 OLLAMA_INSTALL = {
     "linux": "curl -fsSL https://ollama.com/install.sh | sh",
     "darwin": "brew install ollama   (or download it from https://ollama.com/download)",
@@ -69,7 +69,7 @@ class Options:
 class Result:
     """How a request went. `to_json()` is what `lcode -p --output json` prints."""
 
-    status: str  # success, error, max_steps or interrupted
+    status: str  # success, error, max_steps, loop (stopped: the model kept repeating itself) or interrupted
     text: str  # the model's final answer
     session_id: str
     model: str
@@ -194,6 +194,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         embed_model=cfg["embed_model"],
         notify=cfg["notify"],
         notify_after=cfg["notify_after"],
+        repeat_limit=cfg["repeat_limit"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.interactive = options.interactive
@@ -272,7 +273,7 @@ def run_request(agent: Agent, prompt: str) -> Result:
 
     try:
         agent.run_turn(prompt)
-        status = "max_steps" if agent.turn_status == "max_steps" else "success"
+        status = agent.turn_status if agent.turn_status in ("max_steps", "loop") else "success"
     except KeyboardInterrupt:
         status, error = "interrupted", "interrupted before the request was done"
     except ModelError as e:
