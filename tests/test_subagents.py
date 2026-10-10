@@ -384,3 +384,17 @@ def test_agents_command_lists_types_and_runs(make_agent):
     handle_command(agent, "/agents 1", HW)
     assert "task: Find where add is defined" in output(agent)
     assert "● glob" in output(agent)
+
+
+def test_a_subagent_that_repeats_itself_still_gives_a_report(make_agent):
+    agent = make_agent(
+        [reply(tool_calls=[delegate()])]
+        + [reply(tool_calls=[tool("list_dir")]) for _ in range(5)]
+        + [reply("I kept listing the top level and found nothing."), reply("ok")],
+        subagents=True,
+    )
+    agent.run_turn("go")
+    report = agent.ollama.payloads[6]
+    assert "You kept making the same call, so lcode stopped you." in report["messages"][-2]["content"]
+    assert "tools" not in report
+    assert "I kept listing the top level" in agent.messages[3]["content"] and agent.turn_status == "success"

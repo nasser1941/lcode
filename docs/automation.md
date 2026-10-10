@@ -23,7 +23,8 @@ lcode -p "Explain the retry logic" --output stream-json --max-steps 20
 | `--allowed-tools LIST` | Only these tools, e.g. `"read_file,grep,glob,bash"` |
 
 lcode's usual output goes to stderr, so stdout holds only the JSON. The exit code says how it
-went: `0` success, `1` an error, `3` stopped at `--max-steps`, `130` interrupted.
+went: `0` success, `1` an error, `3` stopped at `--max-steps`, `4` stopped because the model
+[kept repeating itself](how-it-works.md#when-the-model-repeats-itself), `130` interrupted.
 
 ### The result
 
@@ -49,7 +50,7 @@ went: `0` success, `1` an error, `3` stopped at `--max-steps`, `130` interrupted
 
 | Field | |
 |---|---|
-| `status` | `success`, `error`, `max_steps` or `interrupted` |
+| `status` | `success`, `error`, `max_steps`, `loop` (the model kept repeating the same call) or `interrupted` |
 | `text` | The model's final answer |
 | `tool_calls` | Every tool call, with its arguments and output (the first 4,000 characters). `error` is true when the call failed or wasn't allowed |
 | `files_changed` | Files the request added (`A`), modified (`M`) or deleted (`D`), shell commands included |

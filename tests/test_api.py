@@ -68,6 +68,14 @@ def test_permission_requests_go_to_approve(server, repo):
         assert session.run("write x").tool_calls[0]["output"] == NOT_ASKED and not (repo / "x.txt").exists()
 
 
+def test_a_model_that_repeats_itself_is_stopped(server, repo):
+    server.scripts = [reply(tool_calls=[call("read_file", path="README.md")]) for _ in range(6)]
+    with api.Session(repo) as session:
+        result = session.run("is the title right?")
+    assert result.status == "loop" and result.exit_code == 4 and len(result.tool_calls) == 5
+    assert "lcode stopped the request here" in result.tool_calls[-1]["output"]
+
+
 def test_limits_and_failures(server, repo):
     server.scripts = [reply(tool_calls=[call("read_file", path="README.md")]) for _ in range(3)]
     with api.Session(repo, max_steps=2, allowed_tools=["read_file", "grep"]) as session:

@@ -29,6 +29,25 @@ All tools return text, and failures come back to the model as `Error: …` messa
 crashing the session, so the model can correct itself (for example re-read a file when an edit
 didn't match).
 
+### When the model repeats itself
+
+Small models sometimes fall into a loop: they make a call, get a result, and make the very same call
+again, and again. lcode counts, within a request, the calls that repeat an earlier one exactly: the
+same tool, the same arguments and the same result.
+
+- **At the third one** (the second, when the call failed) the result gets a note: the call returned
+  the same thing several times, so the model should use what it got, try something different, or
+  tell you what's blocking it.
+- **Two more,** and lcode ends the request with
+  `Stopped: the model kept making the same call with the same result`. The JSON output's status is
+  `loop`.
+
+A result that changes isn't a repeat, so a test that's run again after a fix, or a background job
+that's checked while it runs, never adds up. A call that may have changed something, like an edit or
+a shell command that isn't read-only, starts the count again for the other calls: checking the build
+after each edit is fine. Change the threshold with `lcode config set repeat_limit 5`, or turn it off
+with `0`.
+
 ## Subagents
 
 The `agent` tool starts a [subagent](agents.md): another agent loop with its own conversation, the

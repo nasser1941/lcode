@@ -486,12 +486,17 @@ class Run:
             child._run_turn(self.task)
             last = child.messages[-1]
             if last.get("role") != "assistant" or last.get("tool_calls") or not last.get("content", "").strip():
-                # It ran out of steps: ask for what it has so far, without tools.
+                # It ran out of steps, or went round in circles: ask for what it has so far, without tools.
+                why = (
+                    "You kept making the same call, so lcode stopped you."
+                    if child.turn_status == "loop"
+                    else "You've used all your steps."
+                )
                 child.messages.append(
                     {
                         "role": "user",
-                        "content": "[lcode] You've used all your steps. Stop here and write your report: what "
-                        "you found or did so far, and what's left.",
+                        "content": f"[lcode] {why} Stop here and write your report: what you found or did so "
+                        "far, and what's left.",
                     }
                 )
                 child.allowed_tools = set()

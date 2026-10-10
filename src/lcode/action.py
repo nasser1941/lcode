@@ -297,7 +297,7 @@ def answer(hub: GitHub, task: Task, inputs: Inputs, cwd: Path) -> None:
     )
     with open_session(inputs, cwd) as session:
         result = session.run(prompt)
-        if result.status not in ("success", "max_steps"):
+        if result.status not in ("success", "max_steps", "loop"):
             raise ActionError(result.error or result.status)
         reply = result.text.strip() or "(no answer)"
         changed = git(cwd, "status", "--porcelain").strip()
@@ -336,6 +336,8 @@ def answer(hub: GitHub, task: Task, inputs: Inputs, cwd: Path) -> None:
             reply += f"\n\n{link}"
         if result.status == "max_steps":
             reply += f"\n\n(Stopped after {inputs.max_steps} steps.)"
+        elif result.status == "loop":
+            reply += "\n\n(Stopped: the model kept repeating the same call.)"
         hub.comment(task.number, reply[:MAX_COMMENT] + footer(result))
 
 
@@ -349,7 +351,7 @@ def review(hub: GitHub, task: Task, inputs: Inputs, cwd: Path) -> None:
         prompt = gitflow.review_prompt(session.agent, base)
         session.agent.no_changes = "This is a review, so nothing can be changed: report what should change instead."
         result = session.run(prompt)
-    if result.status not in ("success", "max_steps"):
+    if result.status not in ("success", "max_steps", "loop"):
         raise ActionError(result.error or result.status)
     hub.comment(task.number, f"**lcode review**\n\n{result.text.strip()[:MAX_COMMENT]}{footer(result)}")
 

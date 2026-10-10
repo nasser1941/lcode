@@ -32,6 +32,7 @@ from lcode.mcp import McpManager
 from lcode.ollama import Ollama, OllamaError
 from lcode.permissions import Permissions
 from lcode.render import MarkdownStreamer
+from lcode.repeats import Repeats
 from lcode.sandbox import Sandbox, SandboxError, project_root
 from lcode.tools import (
     LSP_SCHEMA,
@@ -57,7 +58,9 @@ MAX_STEPS_PER_TURN = 150
 EVENT_OUTPUT = 4000  # characters of a tool's output in an event
 # How a tool result starts when the call failed or wasn't allowed (an "error" in events and results).
 REFUSED = ("Error:", "A deny rule", "The user denied", "This needs the user's permission")
-MAX_MALFORMED_CALL_RETRIES = 2  # Ollama rejects tool calls whose arguments aren't valid JSON  # safety cap on tool-call iterations for one request
+MAX_MALFORMED_CALL_RETRIES = 2  # Ollama rejects tool calls whose arguments aren't valid JSON
+# How Ollama reports a tool call it couldn't parse (Qwen3.6's calls are XML)
+MALFORMED_CALL = ("error parsing tool call", "XML syntax error")
 AUTO_COMPACT_RATIO = 0.85  # summarize the history when the context is this full
 PRUNED_ENOUGH = 0.6  # after pruning old tool output, summarize only if the context is still this full
 PROJECT_FILES = ("AGENTS.md", "LCODE.md", "CLAUDE.md")
@@ -216,6 +219,7 @@ class Settings:
     notify: bool = False  # desktop notifications after long requests (lcode.notify)
     notify_after: int = 30  # seconds: a request this long notifies when it's done or waits for an answer
     max_parallel_agents: int = 1
+    repeat_limit: int = 3  # identical calls with identical results before the model is told (lcode.repeats)
 
 
 class Agent:
@@ -267,7 +271,8 @@ class Agent:
         # Decides on a presented plan instead of asking in the terminal: "ask", "auto-edit", or why not.
         self.plan_review: Callable[[str, str], str] | None = None
         self.max_steps = MAX_STEPS_PER_TURN
-        self.turn_status = ""  # how the last request ended: success, max_steps
+        self.turn_status = ""  # how the last request ended: success, max_steps, loop
+        self.repeats = Repeats(settings.repeat_limit)  # notices when the model repeats itself
         self.response = None  # the streaming response, so another thread can abort it
         self.ctx_used = 0
         self.last_speed = 0.0
@@ -809,7 +814,9 @@ class Agent:
         self.turn_status = "running"
         note = planning.NOTE if self.planning() and self.allowed_tools is None else ""
         self.messages.append({"role": "user", "content": self.expand_mentions(user_text) + note})
+        self.repeats.reset()
         malformed = 0
+        looping = ""  # the call the model kept repeating, when lcode stopped the request for it
         for step in range(self.max_steps):
             if self.cancel is not None and self.cancel.is_set():
                 raise KeyboardInterrupt
@@ -834,17 +841,22 @@ class Agent:
                     }
                 )
             except OllamaError as e:
-                if "error parsing tool call" not in str(e) or malformed >= MAX_MALFORMED_CALL_RETRIES:
+                if not any(m in str(e) for m in MALFORMED_CALL) or malformed >= MAX_MALFORMED_CALL_RETRIES:
                     raise
                 malformed += 1
-                reason = str(e).rsplit("err=", 1)[-1].strip() if "err=" in str(e) else "invalid JSON"
+                if "err=" in str(e):
+                    reason = str(e).rsplit("err=", 1)[-1].strip()
+                elif "XML syntax error" in str(e):
+                    reason = str(e).split("XML syntax error", 1)[1].strip(" :") or "invalid XML"
+                else:
+                    reason = "invalid JSON"
                 self.console.print("[yellow]The model wrote a malformed tool call; asking it to try again.[/]")
                 self.messages.append(
                     {
                         "role": "user",
-                        "content": f"[lcode] Your last tool call could not be parsed ({reason}): its arguments "
-                        "must be one complete, valid JSON object. Make the call again. If it writes a file, "
-                        "make sure the whole content is included and properly escaped.",
+                        "content": f"[lcode] Your last tool call could not be parsed ({reason}): it must be "
+                        "complete and well-formed, with every argument closed. Make the call again. If it writes "
+                        "a file, make sure the whole content is included and properly escaped.",
                     }
                 )
                 continue
@@ -892,6 +904,15 @@ class Agent:
                     self.console.print(Text(f"  {result[:300]}", style="red"))
                 elif name in ("read_file", "grep", "glob", "list_dir"):
                     self.console.print(Text(f"  ⎿ {result.count(chr(10)) + 1} line(s)", style="dim"))
+                verdict = self.repeats.check(name, args, result)
+                if verdict.note:
+                    result += verdict.note
+                    what = "stopping the request" if verdict.stop else "told the model"
+                    self.console.print(
+                        Text(f"  ⎿ same call, same result, {verdict.count} times: {what}", style="yellow")
+                    )
+                    if verdict.stop:
+                        looping = self.describe_call(name, args)
                 tool_msg = {"role": "tool", "tool_name": name, "content": result}
                 if call.get("id"):
                     tool_msg["tool_call_id"] = call["id"]
@@ -905,6 +926,27 @@ class Agent:
                         "output": result[:EVENT_OUTPUT] + ("…" if len(result) > EVENT_OUTPUT else ""),
                     }
                 )
+                if looping:
+                    for rest in calls[i + 1 :]:
+                        skipped = {
+                            "role": "tool",
+                            "tool_name": rest.get("function", {}).get("name", ""),
+                            "content": "Not run: lcode stopped the request before this call.",
+                        }
+                        if rest.get("id"):
+                            skipped["tool_call_id"] = rest["id"]
+                        self.messages.append(skipped)
+                    break
+            if looping:
+                self.turn_status = "loop"
+                self.console.print(
+                    Text(
+                        f"Stopped: the model kept making the same call with the same result: {looping}. Tell it "
+                        "what to do differently, or try again.",
+                        style="yellow",
+                    )
+                )
+                return
         else:
             self.turn_status = "max_steps"
             self.console.print(f"[yellow]Stopped after {self.max_steps} steps.[/]")
