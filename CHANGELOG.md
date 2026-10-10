@@ -6,12 +6,15 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-10
+
 ### Added
 
 - lcode notices when the model goes round in circles, making the same tool call with the same result
   again and again, as small models sometimes do. The third time in a request (the second, for a call
   that failed) the result tells the model so; two more, and lcode ends the request (status `loop`,
-  exit code `4` with `lcode -p`). Results that change, and checks run after an edit, don't count. `repeat_limit` changes the threshold; `0` turns it off. See
+  exit code `4` with `lcode -p`). Results that change, and checks run after an edit, don't count.
+  `repeat_limit` changes the threshold; `0` turns it off. See
   [When the model repeats itself](https://nasser1941.github.io/lcode/how-it-works/#when-the-model-repeats-itself).
 
 ### Fixed
@@ -505,7 +508,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/nasser1941/lcode/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/nasser1941/lcode/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/nasser1941/lcode/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/nasser1941/lcode/compare/v0.19.0...v0.20.0
