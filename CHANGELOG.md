@@ -6,6 +6,20 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The model is told what counts as checking its work: run what it changed the way it will be used,
+  reproduce each reported problem before fixing it, check what it can't see (GUIs, web pages,
+  layouts) without a screen, for example with Qt's `offscreen` platform, a headless browser or a
+  rendered image, and never call something tested or done without having run it. See
+  [Checking its own work](https://nasser1941.github.io/lcode/how-it-works/#checking-its-own-work).
+
+### Added
+
+- `lcode bench --tasks runtime-bug`: a bug that shows only when the code runs, a camera wall whose
+  window grows with every video frame. Reading the code suggests band-aids that fail its hidden
+  test. It isn't in the default set.
+
 ## [0.24.0] - 2026-10-10
 
 ### Added

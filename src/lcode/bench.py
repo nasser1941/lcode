@@ -746,7 +746,7 @@ TASKS = [
 
 def extra_tasks() -> list[Task]:
     """Tasks that only run when asked for with --tasks (they're slower, or test optional features)."""
-    from lcode import bench_backend
+    from lcode import bench_backend, bench_runtime
 
     return [
         Task(
@@ -755,7 +755,14 @@ def extra_tasks() -> list[Task]:
             bench_backend.PROMPT,
             bench_backend.FILES,
             bench_backend.check,
-        )
+        ),
+        Task(
+            "runtime-bug",
+            "Fix a bug that shows only when it runs",
+            bench_runtime.PROMPT,
+            bench_runtime.FILES,
+            bench_runtime.check,
+        ),
     ]
 
 

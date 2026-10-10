@@ -310,3 +310,28 @@ def test_rounds_get_one_row_per_task_with_a_mark_per_run(monkeypatch, tmp_path):
     rows = dict(bench.summary_rows([run], tasks))
     assert rows["find-code: Answer with file:line"][0].startswith("✓✗ ")
     assert rows["Passed"] == ["1/2"]
+
+
+def test_runtime_bug_needs_the_real_cause(tmp_path):
+    from lcode import bench_runtime
+
+    task = bench.select_tasks("runtime-bug")[0]
+    scaled = bench_runtime.WALL.replace(
+        "min(cell_width / frame_width, cell_height / frame_height)",
+        "min(cell_width / frame_width, (cell_height - STATUS_BAR) / frame_height)",
+    )
+    fixed = scaled.replace(
+        "self.min_width, self.min_height = self.video[0], self.video[1] + STATUS_BAR",
+        "self.min_width, self.min_height = 1, STATUS_BAR + 1",
+    )
+    for wall, passed, detail in [
+        (bench_runtime.WALL, False, "the window still grows"),
+        (scaled, False, "the window can't be made smaller"),
+        (fixed, True, "keeps its size"),
+    ]:
+        folder = tmp_path / str(len(detail))
+        folder.mkdir()
+        for name, content in {**task.files, "wall.py": wall}.items():
+            (folder / name).write_text(content)
+        result = task.check(folder, "")
+        assert result.passed is passed and detail in result.detail

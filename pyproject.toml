@@ -82,6 +82,7 @@ ignore = [
 "src/lcode/context.py" = ["E501"]
 "src/lcode/lsp.py" = ["E501"]
 "src/lcode/repomap.py" = ["E501"]
+"src/lcode/bench_runtime.py" = ["E501"] # the task's files and hidden test
 "src/lcode/codesearch.py" = ["E501"]
 "src/lcode/bench_backend.py" = ["E501"]
 "src/lcode/backends.py" = ["E501"]
