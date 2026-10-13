@@ -224,11 +224,14 @@ image support off with `lcode config set vision_model off`.
 `--yolo` start in one.
 
 Read-only commands run without asking: `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `find`, `tree`,
-`wc`, `diff`, `git status/log/diff/show/branch/blame` and similar, as long as they don't redirect
-output, chain commands or run subshells. A `cd <folder> &&` in front is fine.
+`wc`, `diff`, `git status/log/diff/show/branch/blame` and similar. Their arguments count too:
+`sort -o file`, `git branch -D`, `git log --output=file`, `rg --pre` or `find -delete` change
+things, so they ask. Pipes between read-only commands are fine, and so are `cd <folder> &&` in front
+and `2>&1` or `>/dev/null`; anything else (`&&`, `;`, redirecting to a file, `$(…)`) asks.
 
 When asked, answer ++y++ (once), ++a++ (always, for this command or for all edits, until you quit)
-or ++n++. For lasting answers, write [permission rules](hooks.md#permission-rules): allow lists and
+or ++n++. "Always" covers the same program, or for a chain the same programs in the same order:
+allowing `npm test` doesn't allow `npm test && rm -rf build`. For lasting answers, write [permission rules](hooks.md#permission-rules): allow lists and
 deny lists, per user or per repository; deny always wins, even in `yolo`. Text after ++n++ goes to the model as instructions: `n run the tests with -x first`.
 
 !!! warning "yolo mode"

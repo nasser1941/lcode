@@ -6,6 +6,7 @@ import base64
 import contextlib
 import datetime as dt
 import json
+import os
 import platform
 import re
 import shutil
@@ -81,6 +82,8 @@ REFUSED = ("Error:", "A deny rule", "The user denied", "This needs the user's pe
 MAX_MALFORMED_CALL_RETRIES = 2  # Ollama rejects tool calls whose arguments aren't valid JSON
 # How Ollama reports a tool call it couldn't parse (Qwen3.6's calls are XML)
 MALFORMED_CALL = ("error parsing tool call", "XML syntax error")
+RESULT_SHARE = 0.25  # of the context window, at most, for one tool result
+MIN_RESULT_CHARS = 8000
 READING_NOTE_TOKENS = 4000  # new input this large gets "Reading … new tokens" in the status line
 AUTO_COMPACT_RATIO = 0.85  # summarize the history when the context is this full
 PRUNED_ENOUGH = 0.6  # after pruning old tool output, summarize only if the context is still this full
@@ -320,7 +323,9 @@ class Agent:
         self.hardware = None  # an lcode.hardware.Hardware, set by the CLI: for what fits on the GPU
         self.made_room_for = ""  # why the model was unloaded (the vision model, an MCP tool), for the reload line
         self.load_state = ""  # "loading" while the model loads in the background at startup (lcode.repl)
+        self.autosave = False  # save the session after every step (sessions people resume; not the bench's)
         self.sent_chars = 0  # characters of the conversation the model had already read
+        self.counted_chars: int | None = None  # characters that ctx_used covers (None: all of them)
         self.turn_status = ""  # how the last request ended: success, max_steps, loop
         self.repeats = Repeats(settings.repeat_limit)  # notices when the model repeats itself
         self.response = None  # the streaming response, so another thread can abort it
@@ -576,6 +581,7 @@ class Agent:
         self.tools.read_mtimes.clear()
         self.reflected = len(self.messages)
         self.ctx_used = len(self.messages[0]["content"]) // 3
+        self.counted_chars = None
 
     def session_file(self) -> Path:
         return sessions.sessions_dir() / f"{self.session_id}.json"
@@ -597,7 +603,10 @@ class Agent:
             "messages": self.messages,
             "checkpoints": self.checkpoints.to_json(),
         }
-        f.write_text(json.dumps(data))
+        # Written next to it and then renamed: a crash halfway leaves the previous version, not a broken file.
+        partial = f.with_name(f".{f.name}.partial")
+        partial.write_text(json.dumps(data))
+        os.replace(partial, f)
 
     def new_session(self) -> None:
         self.reset()
@@ -634,6 +643,7 @@ class Agent:
         self.tools.read_mtimes.clear()  # files may have changed since; the model must read them again
         self.reflected = len(self.messages)  # checked for notes to remember when that session ended
         self.ctx_used = sum(len(json.dumps(m)) for m in self.messages) // 3
+        self.counted_chars = None
         return note
 
     def load_latest(self) -> bool:
@@ -797,7 +807,7 @@ class Agent:
             self.usage["output_tokens"] += final.get("eval_count", 0)
             self.usage["output_ns"] += final.get("eval_duration", 0)
             self.ctx_used = final.get("prompt_eval_count", 0) + final.get("eval_count", 0)
-            self.sent_chars = conversation_chars(self.messages)
+            self.sent_chars = self.counted_chars = conversation_chars(self.messages)
             seconds = final.get("eval_duration", 0) / 1e9
             self.last_speed = final.get("eval_count", 0) / seconds if seconds else 0.0
         return message
@@ -943,6 +953,8 @@ class Agent:
         for step in range(self.max_steps):
             if self.cancel is not None and self.cancel.is_set():
                 raise KeyboardInterrupt
+            if step and self.autosave:
+                self.save()  # a crash or a closed terminal loses at most this step
             self.maybe_compact()
             try:
                 reply = self.assistant_step()
@@ -1027,6 +1039,9 @@ class Agent:
                     self.console.print(Text(f"  {result[:300]}", style="red"))
                 elif name in ("read_file", "grep", "glob", "list_dir"):
                     self.console.print(Text(f"  ⎿ {result.count(chr(10)) + 1} line(s)", style="dim"))
+                budget = self.result_budget()
+                if len(result) > budget and name not in ("agent", "skill"):
+                    result = context_tools.shorten(result, budget, f"{name} result")
                 verdict = self.repeats.check(name, args, result)
                 if verdict.note:
                     result += verdict.note
@@ -1161,8 +1176,21 @@ class Agent:
             limit = min(limit, self.settings.compact_at)
         return limit
 
+    def next_request_tokens(self) -> int:
+        """The size of the next request: what the model last counted, plus what was added since (tool output,
+        attachments). Deciding on the last count alone let one large tool result overflow the window."""
+        if self.counted_chars is None:
+            return self.ctx_used
+        return self.ctx_used + max(0, conversation_chars(self.messages) - self.counted_chars) // 3
+
+    def result_budget(self) -> int:
+        """Characters one tool result may take: a share of the window, so one large result can't fill it."""
+        return max(MIN_RESULT_CHARS, int(self.settings.context * 3 * RESULT_SHARE))
+
     def maybe_compact(self) -> None:
         limit = self.compact_limit()
+        if self.next_request_tokens() > limit:
+            self.ctx_used, self.counted_chars = self.next_request_tokens(), None
         if self.ctx_used <= limit:
             return
         enough = int(limit * PRUNED_ENOUGH / AUTO_COMPACT_RATIO)  # after pruning, a summary isn't needed below this
@@ -1231,6 +1259,7 @@ class Agent:
             )
             self.skills_loaded.clear()
         self.ctx_used = sum(len(m["content"]) for m in self.messages) // 3
+        self.counted_chars = None
         self.summarized_size = self.ctx_used
         self.sent_chars = 0
         self.reflected = len(self.messages)

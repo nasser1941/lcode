@@ -6,6 +6,7 @@ import difflib
 import fnmatch
 import hashlib
 import inspect
+import itertools
 import json
 import os
 import queue
@@ -16,7 +17,9 @@ import signal
 import subprocess
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,7 +29,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from lcode import secretscan, web
-from lcode.context import shorten
+from lcode.context import OutputSpool, shorten
 from lcode.jobs import JobError, describe, stop_leftovers
 from lcode.permissions import bash_key, is_read_only
 from lcode.planning import BLOCKED, PLAN_MODE_TOOLS
@@ -41,6 +44,7 @@ NO_NETWORK = re.compile(
     r"EAI_AGAIN|Name or service not known|network is unreachable|No route to host"
 )
 MAX_TOOL_OUTPUT = 30_000  # characters returned to the model per tool call
+PENDING_LINES = 5000  # output lines waiting to be read, at most
 LEFTOVER_GRACE = 0.5  # seconds to wait for output after a command ends, before stopping what it left running
 IGNORE_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env", ".mypy_cache", ".pytest_cache",
@@ -289,6 +293,48 @@ def truncate(text: str, limit: int = MAX_TOOL_OUTPUT) -> str:
     return f"{head}\n\n... [{len(text) - len(head) - len(tail)} characters truncated] ...\n\n{tail}"
 
 
+@dataclass
+class TextFormat:
+    """How a file stores its text, so an edit writes it back the same way."""
+
+    encoding: str = "utf-8"
+    crlf: bool = False  # Windows line endings
+    bom: bool = False  # a UTF-8 byte order mark
+
+
+def decode(raw: bytes) -> tuple[str, TextFormat]:
+    """A file's text with \n line endings, and its format: UTF-8, else Windows-1252 or Latin-1 (which always
+    decode), never with characters replaced. Writing a replaced character back used to corrupt the whole file."""
+    fmt = TextFormat(bom=raw.startswith(b"\xef\xbb\xbf"))
+    text = ""
+    for encoding in ("utf-8-sig" if fmt.bom else "utf-8", "cp1252", "latin-1"):
+        try:
+            text = raw.decode(encoding)
+            fmt.encoding = "utf-8" if encoding == "utf-8-sig" else encoding
+            break
+        except UnicodeDecodeError:
+            continue
+    crlf = text.count("\r\n")
+    if crlf and crlf == text.count("\n"):  # only CRLF: mixed files are left as they are
+        fmt.crlf = True
+        text = text.replace("\r\n", "\n")
+    return text, fmt
+
+
+def encode(text: str, fmt: TextFormat) -> bytes:
+    if fmt.crlf:
+        text = text.replace("\r\n", "\n").replace("\n", "\r\n")
+    try:
+        data = text.encode(fmt.encoding)
+    except UnicodeEncodeError as e:
+        bad = text[e.start : e.end]
+        raise ToolError(
+            f"the file is in {fmt.encoding}, which can't hold {bad!r}: write it without that character, or ask the "
+            "user to convert the file to UTF-8"
+        ) from e
+    return (b"\xef\xbb\xbf" if fmt.bom else b"") + data
+
+
 def is_binary(path: Path) -> bool:
     try:
         with open(path, "rb") as f:
@@ -362,15 +408,28 @@ def parse_text_tool_calls(content: str) -> list[dict]:
             pass
     if calls:
         return calls
-    # Bare JSON objects such as {"name": "grep", "arguments": {...}}, possibly inside ``` fences.
+    # A message that is nothing but JSON calls such as {"name": "grep", "arguments": {...}}, possibly in a ```
+    # fence. JSON inside an answer is an example, not a call: running it once ran a command the model was only
+    # explaining.
+    body = content.strip()
+    lead = re.match(r"([^\n{`]{0,50})\n+(?=```|\{)", body)  # a short lead-in such as "Sure:" is fine
+    if lead:
+        body = body[lead.end() :]
+    body = re.sub(r"^```(?:json)?\s*|\s*```$", "", body)
     decoder = json.JSONDecoder()
-    for m in re.finditer(r"\{", content):
+    position = 0
+    while position < len(body):
+        while position < len(body) and body[position].isspace():
+            position += 1
+        if position == len(body):
+            break
         try:
-            obj, _ = decoder.raw_decode(content, m.start())
+            obj, position = decoder.raw_decode(body, position)
         except json.JSONDecodeError:
-            continue
-        if isinstance(obj, dict) and obj.get("name") in TOOL_NAMES and isinstance(obj.get("arguments", {}), dict):
-            calls.append({"function": {"name": obj["name"], "arguments": obj.get("arguments", {})}})
+            return []  # something else in the message: not a call
+        if not (isinstance(obj, dict) and obj.get("name") in TOOL_NAMES and isinstance(obj.get("arguments", {}), dict)):
+            return []
+        calls.append({"function": {"name": obj["name"], "arguments": obj.get("arguments", {})}})
     return calls
 
 
@@ -385,6 +444,7 @@ class Toolbox:
     def __init__(self, agent: Agent):
         self.agent = agent
         self.read_mtimes: dict[str, float] = {}
+        self.formats: dict[str, TextFormat] = {}  # encoding and line endings of the files read
         self.todos: list[dict] = []
         # An editor's buffers (lcode acp): read unsaved changes and write through the editor.
         self.reader: Callable[[Path], str | None] | None = None
@@ -476,13 +536,30 @@ class Toolbox:
         if problem:
             return f"Error: bad arguments for {name}: {problem}"
         try:
-            return fn(**args)
+            return fn(**self._typed(fn, args))
         except ToolError as e:
             return f"Error: {e}"
         except TypeError as e:
             return f"Error: bad arguments for {name}: {e}"
         except Exception as e:  # surface every failure to the model instead of crashing the session
             return f"Error: {type(e).__name__}: {e}"
+
+    @staticmethod
+    def _typed(fn, args: dict) -> dict:
+        """Arguments with text turned into the declared type: some servers and the text fallback send every value
+        as a string, and "false" is true in Python."""
+        params = inspect.signature(fn).parameters
+        typed = dict(args)
+        for name, value in args.items():
+            if not isinstance(value, str) or name not in params:
+                continue
+            kind = str(params[name].annotation).split("|")[0].strip()
+            text = value.strip().lower()
+            if kind == "bool" and text in ("true", "false", "1", "0", "yes", "no"):
+                typed[name] = text in ("true", "1", "yes")
+            elif kind == "int" and re.fullmatch(r"-?\d+", text):
+                typed[name] = int(text)
+        return typed
 
     @staticmethod
     def _argument_problem(fn, args: dict) -> str:
@@ -639,9 +716,21 @@ class Toolbox:
         self.read_mtimes[str(p)] = p.stat().st_mtime
         if not lines:
             return "(empty file)"
-        out = "\n".join(f"{i:6}\t{line[:2000]}" for i, line in enumerate(chunk, start=offset))
-        end = offset - 1 + len(chunk)
-        if end < len(lines) or offset > 1:
+        budget, shown, size = self.agent.result_budget() - 300, [], 0
+        for i, line in enumerate(chunk, start=offset):
+            numbered = f"{i:6}\t{line[:2000]}"
+            if shown and size + len(numbered) + 1 > budget:
+                break  # the rest wouldn't fit in the context at once
+            shown.append(numbered)
+            size += len(numbered) + 1
+        out = "\n".join(shown)
+        end = offset - 1 + len(shown)
+        if end < offset - 1 + len(chunk):
+            out += (
+                f"\n\n[Showing lines {offset}-{end} of {len(lines)}: more doesn't fit in the context at once. "
+                f"Read on with offset={end + 1}.]"
+            )
+        elif end < len(lines) or offset > 1:
             out += f"\n\n[Showing lines {offset}-{end} of {len(lines)}. Use offset/limit to read more.]"
         return truncate(out, 120_000)
 
@@ -732,14 +821,17 @@ class Toolbox:
             text = self.reader(p)
             if text is not None:
                 return text
-        return p.read_text(errors="replace")
+        text, self.formats[str(p)] = decode(p.read_bytes())
+        return text
 
     def _write(self, p: Path, content: str) -> None:
         p.parent.mkdir(parents=True, exist_ok=True)
+        fmt = self.formats.get(str(p)) or (decode(p.read_bytes())[1] if p.exists() else TextFormat())
+        data = encode(content, fmt)  # before anything is written: it may not be possible
         if self.writer is not None:
             self.writer(p, content)  # the editor updates its buffer (and the file)
-        if not p.exists() or p.read_text(errors="replace") != content:
-            p.write_text(content)  # the file on disk must match, for checkpoints and the tools
+        if not p.exists() or p.read_bytes() != data:
+            p.write_bytes(data)  # the file on disk must match, for checkpoints and the tools
         self.read_mtimes[str(p)] = p.stat().st_mtime
 
     def t_write_file(self, path: str, content: str) -> str:
@@ -749,8 +841,10 @@ class Toolbox:
             if p.is_dir():
                 raise ToolError(f"{path} is a directory")
             self._check_fresh(p)
-            body = self._diff(p, self.read_text(p), content)
+            shown = self.read_text(p)
+            body = self._diff(p, shown, content)
         else:
+            shown = None
             lines = content.splitlines()
             preview = "\n".join(lines[:60]) + (f"\n... ({len(lines) - 60} more lines)" if len(lines) > 60 else "")
             body = Syntax(preview, Syntax.guess_lexer(str(p), content), theme="monokai", line_numbers=True)
@@ -758,12 +852,26 @@ class Toolbox:
         ok, feedback = self.agent.perms.request("edit", "edit", f"{verb} {self.rel(p)}", body, self.project_rel(p))
         if not ok:
             return feedback
-        before = self.read_text(p) if exists else None
+        before = self.read_text(p) if p.exists() else None
+        if before != shown:
+            return self._changed_meanwhile(p)
         self.agent.checkpoint()
         self._write(p, content)
         n = len(content.splitlines())
         self.console.print(f"  [green]✓[/] {'Updated' if exists else 'Created'} {self.rel(p)} ({n} lines)")
         return f"{'Overwrote' if exists else 'Created'} {self.rel(p)} ({n} lines)." + self._check(p, before, content)
+
+    def _changed_meanwhile(self, p: Path) -> str:
+        """The file changed while the user was asked (they edited it): writing now would undo their change."""
+        self.read_mtimes.pop(str(p), None)
+        self.console.print(
+            Text(f"  ⎿ {self.rel(p)} changed while you were asked; the edit wasn't applied", style="yellow")
+        )
+        return (
+            f"Error: {self.rel(p)} changed while the user was being asked (they or another program edited it), so "
+            "lcode didn't apply this change: it would have undone theirs. Read the file again and redo the change "
+            "on its current content."
+        )
 
     def t_edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
         p = self.path(path)
@@ -795,6 +903,8 @@ class Toolbox:
         ok, feedback = self.agent.perms.request("edit", "edit", f"Edit {self.rel(p)}", diff, self.project_rel(p))
         if not ok:
             return feedback
+        if not p.exists() or self.read_text(p) != text:
+            return self._changed_meanwhile(p)
         self.agent.checkpoint()
         self._write(p, new_text)
         self.console.print(f"  [green]✓[/] Edited {self.rel(p)}")
@@ -879,13 +989,22 @@ class Toolbox:
             start_new_session=True,
             bufsize=1,
         )
-        lines: queue.Queue[str | None] = queue.Queue()
+        # Bounded, so a command that prints faster than lcode reads waits instead of filling memory.
+        lines: queue.Queue[str | None] = queue.Queue(maxsize=PENDING_LINES)
+        reading = threading.Event()  # cleared when lcode stops reading
+        reading.set()
 
         def pump() -> None:
             assert proc.stdout is not None
-            for line in proc.stdout:
-                lines.put(line)
-            lines.put(None)
+            for line in itertools.chain(proc.stdout, [None]):  # streamed: never the whole output
+                while reading.is_set():
+                    try:
+                        lines.put(line, timeout=0.5)
+                        break
+                    except queue.Full:
+                        continue
+                else:
+                    return
 
         def stop() -> None:
             if sandbox and token:
@@ -893,7 +1012,9 @@ class Toolbox:
             os.killpg(proc.pid, signal.SIGKILL)
 
         threading.Thread(target=pump, daemon=True).start()
-        out: list[str] = []
+        out = OutputSpool(MAX_TOOL_OUTPUT, "output")
+        last = ""  # the latest line, for the end-of-output checks below
+        recent: deque[str] = deque(maxlen=40)
         shown, status, recorded = 0, "", ""
         deadline = time.time() + int(timeout or 180)
         finished = 0.0  # when the command itself ended (its marker arrived)
@@ -902,16 +1023,16 @@ class Toolbox:
             while True:
                 if self.agent.cancel is not None and self.agent.cancel.is_set():
                     raise KeyboardInterrupt
+                if finished and time.time() - finished > LEFTOVER_GRACE:
+                    held_open = True  # also when what it left running keeps printing
+                    break
+                if time.time() > deadline and not finished:  # also while it keeps printing
+                    stop()
+                    status = f"\n[Command timed out after {timeout}s and was killed]"
+                    break
                 try:
                     line = lines.get(timeout=0.2)
                 except queue.Empty:
-                    if finished and time.time() - finished > LEFTOVER_GRACE:
-                        held_open = True
-                        break
-                    if time.time() > deadline:
-                        stop()
-                        status = f"\n[Command timed out after {timeout}s and was killed]"
-                        break
                     continue
                 if line is None:
                     break
@@ -919,14 +1040,19 @@ class Toolbox:
                     recorded = line[len(marker) :].strip()
                     finished = time.time()
                     continue
-                out.append(line)
+                if last:
+                    out.add(last)
+                    recent.append(last)
+                last = line
                 if shown <= 40:
                     msg = "    ... (more output hidden)" if shown == 40 else "    " + line.rstrip("\n")[:300]
                     self.console.print(Text(msg, style="dim"))
                     shown += 1
         except KeyboardInterrupt:
+            reading.clear()
             stop()
             raise
+        reading.clear()
         code = proc.wait()
         if held_open and sandbox and token:
             sandbox.kill(token)  # what it left running in the container
@@ -935,21 +1061,22 @@ class Toolbox:
                 "\n[lcode stopped what this command left running (started with &). To keep a process running, "
                 "start it with background=true: then bash_output reads its output and bash_stop stops it]"
             )
-        if out and out[-1] == "\n":
-            out.pop()  # the blank line printed before the marker
+        if last and last != "\n":  # the blank line printed before the marker isn't output
+            out.add(last)
+            recent.append(last)
         if recorded and Path(recorded).is_dir() and Path(recorded).resolve() != self.agent.cwd:
             if sandbox and not sandbox.contains(Path(recorded).resolve()):
                 status += "\n[That directory is outside the project; the working directory stays the same]"
             else:
                 self.agent.cwd = Path(recorded).resolve()
                 status += f"\n[Working directory is now {self.agent.cwd}]"
-        if sandbox and code != 0 and not sandbox.network and NO_NETWORK.search("".join(out[-40:])):
+        if sandbox and code != 0 and not sandbox.network and NO_NETWORK.search("".join(recent)):
             status += (
                 "\n[The sandbox has no network access. If this needs the network, ask the user to allow it "
                 "with /sandbox network on]"
             )
         self.console.print(Text(f"  exit code {code}", style="green" if code == 0 else "red"))
-        return shorten("".join(out), MAX_TOOL_OUTPUT, "output") + status + f"\n[exit code: {code}]"
+        return out.text() + status + f"\n[exit code: {code}]"
 
     # -- web
     def _web_allowed(self, key: str, title: str, detail: str) -> tuple[bool, str]:

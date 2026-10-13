@@ -14,8 +14,10 @@ full output is saved to a file the model can read if it needs more.
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -251,6 +253,72 @@ def shorten(text: str, limit: int, label: str = "output") -> str:
         else ""
     )
     return f"{head}{note}{tail}{where}"
+
+
+class OutputSpool:
+    """Output collected line by line with bounded memory: once it's long, everything goes to a file, and only the
+    start, the end and the error-looking lines stay in memory. What `shorten` returns comes out the same."""
+
+    def __init__(self, limit: int, label: str = "output") -> None:
+        self.limit, self.label = limit, label
+        self.head: list[str] = []  # everything, until the output gets long; then its start
+        self.tail: deque[str] = deque()
+        self.tail_chars = 0
+        self.errors: list[str] = []
+        self.chars = 0
+        self.file = None
+        self.path: Path | None = None
+
+    def add(self, line: str) -> None:
+        self.chars += len(line)
+        if self.file is None:
+            self.head.append(line)
+            if self.chars > self.limit * 2:
+                self._spool()
+            return
+        try:
+            self.file.write(line)
+        except OSError:
+            pass
+        if ERROR_LINE.search(line) and len(self.errors) < MAX_ERROR_LINES:
+            self.errors.append(line.strip()[:300])
+        self.tail.append(line)
+        self.tail_chars += len(line)
+        while self.tail_chars > self.limit // 4 and len(self.tail) > 1:
+            self.tail_chars -= len(self.tail.popleft())
+
+    def _spool(self) -> None:
+        text = "".join(self.head)
+        self.path = save_output(text, self.label)
+        if self.path is not None:
+            try:
+                self.file = self.path.open("a")
+            except OSError:
+                self.file = None
+        if self.file is None:  # nowhere to keep it: keep only the start and carry on counting
+            self.file = open(os.devnull, "w")  # noqa: SIM115
+        head = text[: self.limit * 3 // 5]
+        self.head = [head]
+
+    def text(self) -> str:
+        if self.file is None:
+            return shorten("".join(self.head), self.limit, self.label)
+        self.file.close()
+        head, tail = "".join(self.head), "".join(self.tail)
+        cut = self.chars - len(head) - len(tail)
+        note = f"\n\n... [{cut} characters cut"
+        if self.errors:
+            note += f"; {len(self.errors)} line(s) from them that look like errors:]\n" + "\n".join(self.errors)
+            note += "\n[...]\n\n"
+        else:
+            note += "] ...\n\n"
+        where = (
+            f"\n[The full {self.label} ({self.chars} characters) is in {self.path}: read parts of it with read_file "
+            "if you need them.]"
+            if self.path
+            else ""
+        )
+        return f"{head}{note}{tail}{where}"
 
 
 # ----------------------------------------------------------------------------- what uses the context

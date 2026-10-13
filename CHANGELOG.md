@@ -6,6 +6,37 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+Found by testing lcode's tools on real files and commands (#118):
+
+- Some commands that change things ran without asking, because they were taken for read-only:
+  `sort -o`, `uniq in out`, `tree -o`, `git branch -D` and other branch changes, `git remote
+  add/remove`, `git log/diff --output`, `rg --pre` (which runs a program), `find -fls`, `date -s`,
+  and `nvidia-smi` settings. Arguments are now checked. `2>&1` and `>/dev/null` no longer make a
+  read-only command ask.
+- "Always allow" for a command also covered chains that started with it: allowing `npm test` let
+  `npm test && rm -rf build` run without asking. Now a chain needs its own "always".
+- A JSON tool call that the model only showed as an example in its answer was run. Text is now
+  taken as a call only when the whole message is one.
+- A change you made to a file while lcode asked to edit it was overwritten. lcode now notices and
+  doesn't apply the edit, and the model redoes it on the current content.
+- `replace_all: "false"`, and other values sent as text, were taken as true. They now get the
+  type the tool declares.
+- The shell timeout wasn't enforced while a command kept printing, so a watcher started without
+  `background` hung the request. Long output is no longer held in memory either: 400 MB of output
+  used to cost 2.5 GB, and now it goes to a file, keeping its start, end and error lines.
+- One tool result could overflow the context window: `read_file` returned up to ~40K tokens,
+  however small the window, and compaction only looked at the previous request. A result now takes
+  at most a quarter of the window (`read_file` says where to read on), and lcode makes room based on
+  the size of the next request.
+- Sessions were saved only when a request ended, so a crash lost the whole request. They're now
+  saved after every step, and atomically, so a crash while writing can't corrupt them.
+- Editing a file with Windows line endings turned the whole file to Unix line endings, and editing a
+  file that isn't UTF-8 (Windows-1252 or Latin-1) replaced every accented letter in it with `�`,
+  not only in the edited line. Files now keep their encoding, line endings and byte order mark. A
+  character the encoding can't hold is refused instead of written wrong.
+
 ## [0.28.0] - 2026-10-13
 
 ### Added

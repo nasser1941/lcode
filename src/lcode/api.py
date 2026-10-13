@@ -200,6 +200,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.hardware = hw
+    agent.autosave = True
     agent.interactive = options.interactive
     if options.max_steps:
         agent.max_steps = options.max_steps
