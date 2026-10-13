@@ -44,7 +44,7 @@ MODES = [
 ]
 KINDS = {
     "read_file": "read", "view_image": "read", "list_dir": "search", "glob": "search", "grep": "search",
-    "repo_map": "search", "search_code": "search", "lsp": "search", "edit_file": "edit", "write_file": "edit",
+    "repo_map": "search", "search_code": "search", "lsp": "search", "edit_file": "edit", "write_file": "edit", "apply_patch": "edit",
     "bash": "execute", "web_search": "fetch", "web_fetch": "fetch", "agent": "think", "todo_write": "think",
     "present_plan": "switch_mode", "bash_output": "read", "bash_stop": "execute",
 }  # fmt: skip

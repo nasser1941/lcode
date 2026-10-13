@@ -92,7 +92,8 @@ reasoning is on.
 |---|---|
 | `read_file` | Read a file with line numbers (paged for large files) |
 | `write_file` | Create or overwrite a file (shows a preview or diff) |
-| `edit_file` | Replace an exact snippet in a file (shows a diff); tolerates trailing-whitespace differences |
+| `edit_file` | Replace a snippet in a file (shows a diff); [forgiving](#imperfect-edits) when the model copies it imperfectly |
+| `apply_patch` | Apply a unified diff (as `git diff` writes it) to one or more files; hunks are found by their text |
 | `list_dir` | Directory tree, skipping `.git`, `node_modules`, virtualenvs and caches |
 | `glob` | Find files by pattern, newest first |
 | `grep` | Regex search with ripgrep (falls back to Python if ripgrep is missing) |
@@ -112,6 +113,34 @@ reasoning is on.
 
 lcode refuses to edit a file the model hasn't read in the session, or one that changed on disk since
 it was read, so the model always edits the current version.
+
+### Imperfect edits
+
+Small models copy text imperfectly, and an edit that doesn't match exactly used to fail, often again
+and again. When the text isn't in the file exactly, lcode tries, in order:
+
+- **Copying slips:** removing the line numbers `read_file` shows, and undoing stray escapes such
+  as `\"`.
+- **Looser line matches:** comparing lines without trailing spaces, then without indentation (a block
+  at the wrong level, or spaces where the file has tabs). The new text is re-indented to fit.
+- **Blank lines:** ignoring blank lines the model dropped or added.
+- **A very close match:** at least 90% alike, and clearly better than any other place. Only the lines
+  the model meant to change are changed, so an earlier edit that the model's copy doesn't show is
+  kept. If a changed line differs in the file by more than a typo, the edit is refused.
+
+The result says how it matched (`Edited config.py (1 replacement(s), ignoring indentation)`), and the
+diff shows the change as usual. A match that's ambiguous or too weak is never applied. Instead, the
+model gets the closest lines with their numbers, so it can copy them exactly. `apply_patch` places
+each hunk the same way, so wrong `@@` line numbers don't matter, and it changes a file only if every
+hunk fits.
+
+Other common slips get a useful answer instead of a bare error:
+
+- **A pattern that isn't a valid regex** (`grep "def add("`) is searched as plain text, and the result
+  says so.
+- **A path that doesn't exist** comes back with the closest existing ones: the same file name
+  elsewhere in the project, or a near name in the folder (`Did you mean: src/pkg/math_utils.py?`).
+- **`read_file` on a folder** lists it, and **`list_dir` on a file** says to read it.
 
 ## Checks before done
 

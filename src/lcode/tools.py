@@ -28,7 +28,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from lcode import secretscan, web
+from lcode import matching, secretscan, web
 from lcode.context import OutputSpool, shorten
 from lcode.jobs import JobError, describe, stop_leftovers
 from lcode.permissions import bash_key, is_read_only
@@ -95,6 +95,15 @@ SCHEMAS = [
             "replace_all": {"type": "boolean", "description": "Replace every occurrence (default false)"},
         },
         ["path", "old_string", "new_string"],
+    ),
+    _fn(
+        "apply_patch",
+        "Apply a unified diff to one or more files, as `git diff` writes it: `--- a/path` and `+++ b/path` "
+        "headers, then `@@` hunks of context lines (starting with a space), removed lines (-) and added lines (+). "
+        "Hunks are found by their text, so the @@ line numbers may be off; include 2-3 context lines around each "
+        "change. Use `--- /dev/null` for a new file. For a single change, edit_file is simpler.",
+        {"patch": {"type": "string", "description": "The unified diff"}},
+        ["patch"],
     ),
     _fn(
         "list_dir",
@@ -373,22 +382,6 @@ def tree(base: Path, depth: int = 2, limit: int = 400) -> str:
 
     walk(base, "", 1)
     return "\n".join(lines)
-
-
-def fuzzy_replace(text: str, old: str, new: str) -> str | None:
-    """Replace `old` with `new` matching lines while ignoring trailing whitespace. None unless exactly one match."""
-    t_lines = text.splitlines(keepends=True)
-    o_lines = [line.rstrip() for line in old.strip("\n").splitlines()]
-    if not o_lines:
-        return None
-    n = len(o_lines)
-    matches = [i for i in range(len(t_lines) - n + 1) if [ln.rstrip() for ln in t_lines[i : i + n]] == o_lines]
-    if len(matches) != 1:
-        return None
-    i = matches[0]
-    tail = "\n" if t_lines[i + n - 1].endswith("\n") else ""
-    replacement = new.strip("\n") + tail if new.strip("\n") else ""
-    return "".join(t_lines[:i]) + replacement + "".join(t_lines[i + n :])
 
 
 def parse_text_tool_calls(content: str) -> list[dict]:
@@ -703,9 +696,10 @@ class Toolbox:
     def t_read_file(self, path: str, offset: int = 1, limit: int = 2000) -> str:
         p = self.path(path, read=True)
         if not p.exists():
-            raise ToolError(f"{path} does not exist")
+            raise ToolError(f"{path} does not exist.{self._did_you_mean(path)}")
         if p.is_dir():
-            raise ToolError(f"{path} is a directory; use list_dir")
+            listing = tree(p, depth=1)
+            return f"{self.rel(p)} is a directory, so here's what's in it (read a file with read_file):\n{listing}"
         if is_image(p):
             raise ToolError(f"{path} is an image; look at it with view_image")
         if is_binary(p):
@@ -736,8 +730,10 @@ class Toolbox:
 
     def t_list_dir(self, path: str = ".", depth: int = 2) -> str:
         p = self.path(path, read=True)
+        if p.is_file():
+            return f"{self.rel(p)} is a file, not a directory: read it with read_file."
         if not p.is_dir():
-            raise ToolError(f"{path} is not a directory")
+            raise ToolError(f"{path} does not exist.{self._did_you_mean(path)}")
         return tree(p, depth=max(1, min(int(depth or 2), 6)))
 
     def t_glob(self, pattern: str, path: str = ".") -> str:
@@ -749,6 +745,8 @@ class Toolbox:
         ]
         hits.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         if not hits:
+            if not base.is_dir():
+                return f"No files found: {path} does not exist.{self._did_you_mean(path)}"
             return "No files found."
         more = f"\n... and {len(hits) - 200} more" if len(hits) > 200 else ""
         return "\n".join(self.rel(p) for p in hits[:200]) + more
@@ -757,6 +755,7 @@ class Toolbox:
         self, pattern: str, path: str = ".", glob: str | None = None, ignore_case: bool = False, context: int = 0
     ) -> str:
         p = self.path(path)
+        literal = False  # the pattern wasn't a valid regex, so it was searched as plain text
         if shutil.which("rg"):
             cmd = ["rg", "--line-number", "--no-heading", "--with-filename", "--hidden", "--color", "never"]
             cmd += ["--max-columns", "400"]
@@ -768,16 +767,24 @@ class Toolbox:
                 cmd += ["-g", glob]
             for d in IGNORE_DIRS:
                 cmd += ["-g", f"!{d}/"]
-            cmd += ["-e", pattern, str(p)]
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if not p.exists():
+                raise ToolError(f"{path} does not exist.{self._did_you_mean(path)}")
+            r = subprocess.run([*cmd, "-e", pattern, str(p)], capture_output=True, text=True, timeout=60)
+            if r.returncode == 2 and "regex parse error" in r.stderr:
+                # "def add(" is meant literally: search for the text instead of failing
+                r = subprocess.run([*cmd, "-F", "-e", pattern, str(p)], capture_output=True, text=True, timeout=60)
+                literal = True
             if r.returncode == 2:
                 raise ToolError(r.stderr.strip())
             out = r.stdout
         else:
+            if not p.exists():
+                raise ToolError(f"{path} does not exist.{self._did_you_mean(path)}")
             try:
                 rx = re.compile(pattern, re.I if ignore_case else 0)
-            except re.error as e:
-                raise ToolError(f"invalid regex: {e}") from e
+            except re.error:
+                rx = re.compile(re.escape(pattern), re.I if ignore_case else 0)  # meant literally
+                literal = True
             results = []
             for f in [p] if p.is_file() else walk_files(p):
                 if (glob and not fnmatch.fnmatch(f.name, glob)) or is_binary(f):
@@ -791,13 +798,38 @@ class Toolbox:
             out = "\n".join(results)
         out = out.replace(str(self.agent.cwd) + os.sep, "")
         lines = out.splitlines()
+        note = "[The pattern isn't a valid regular expression, so it was searched as plain text.]\n" if literal else ""
         if not lines:
-            return "No matches."
+            return note + "No matches."
         if len(lines) > 400:
-            return "\n".join(lines[:400]) + f"\n... [{len(lines) - 400} more lines; narrow the search]"
-        return out
+            return note + "\n".join(lines[:400]) + f"\n... [{len(lines) - 400} more lines; narrow the search]"
+        return note + out
 
     # -- file changes
+    def _did_you_mean(self, path: str) -> str:
+        """Existing paths close to one that doesn't exist: the same name elsewhere in the project, or a near name
+        in the nearest folder that exists. Saves the model a search, or a guess."""
+        wanted = self.resolve(path)
+        found: list[Path] = []
+        from lcode.checkpoints import work_tree_for
+
+        for i, candidate in enumerate(walk_files(work_tree_for(self.agent.cwd))):
+            if i > 20_000 or len(found) >= 3:
+                break
+            if candidate.name == wanted.name:
+                found.append(candidate)
+        folder = wanted.parent
+        while not folder.is_dir() and folder != folder.parent:
+            folder = folder.parent
+        try:
+            names = [e.name + ("/" if e.is_dir() else "") for e in folder.iterdir() if e.name not in IGNORE_DIRS]
+        except OSError:
+            names = []
+        for name in difflib.get_close_matches(wanted.name, names, n=3, cutoff=0.6):
+            found.append(folder / name.rstrip("/"))
+        shown = list(dict.fromkeys(self.rel(p) + ("/" if p.is_dir() else "") for p in found))[:3]
+        return f" Did you mean: {', '.join(shown)}?" if shown else ""
+
     def _check_fresh(self, p: Path) -> None:
         key = str(p)
         if key not in self.read_mtimes:
@@ -873,6 +905,63 @@ class Toolbox:
             "on its current content."
         )
 
+    def t_apply_patch(self, patch: str) -> str:
+        try:
+            files = matching.parse_patch(patch)
+        except ValueError as e:
+            raise ToolError(str(e)) from e
+        planned: list[tuple[Path, str | None, str, list[str]]] = []  # path, before, after, notes
+        for fp in files:
+            p = self.path(fp.path)
+            if fp.deleted:
+                raise ToolError(f"{fp.path}: deleting files isn't something apply_patch does; use bash (rm)")
+            if fp.new_file:
+                if p.exists():
+                    raise ToolError(f"{fp.path} already exists; the patch creates it from /dev/null")
+                planned.append((p, None, "\n".join(h.new for h in fp.hunks) + "\n", []))
+                continue
+            if not p.is_file():
+                raise ToolError(f"{fp.path} does not exist (use --- /dev/null to create it)")
+            self._check_fresh(p)
+            before = self.read_text(p)
+            try:
+                after, notes = matching.apply_hunks(before, fp.hunks)
+            except ValueError as e:
+                raise ToolError(f"{fp.path}: {e}") from e
+            planned.append((p, before, after, notes))
+        done = []
+        for p, before, after, notes in planned:
+            body = self._diff(p, before or "", after)
+            verb = "Create" if before is None else "Patch"
+            ok, feedback = self.agent.perms.request("edit", "edit", f"{verb} {self.rel(p)}", body, self.project_rel(p))
+            if not ok:
+                return feedback + (f" (already patched: {', '.join(done)})" if done else "")
+            if (self.read_text(p) if p.exists() else None) != before:
+                return self._changed_meanwhile(p)
+            self.agent.checkpoint()
+            self._write(p, after)
+            self.console.print(f"  [green]✓[/] {'Created' if before is None else 'Patched'} {self.rel(p)}")
+            done.append(self.rel(p) + (f" ({'; '.join(notes)})" if notes else ""))
+            problems = self._check(p, before, after)
+            if problems:
+                done[-1] += problems
+        return "Patched " + ", ".join(done) + "."
+
+    def _edit_miss(self, p: Path, miss: matching.Miss) -> str:
+        """Why an edit can't be placed, with the closest lines so the model can copy them exactly."""
+        if miss.reason == "ambiguous":
+            return (
+                f"old_string isn't in {self.rel(p)} exactly, and it's close to more than one place:\n{miss.hint}\n"
+                "Add surrounding lines to old_string so it matches only one, copied exactly."
+            )
+        message = f"old_string not found in {self.rel(p)}. It must match the file exactly, including indentation."
+        if miss.hint:
+            return (
+                message
+                + f" The closest text is:\n{miss.hint}\nCopy what you mean from it exactly (without the line numbers)."
+            )
+        return message + " Re-read the file and copy the text precisely (without line-number prefixes)."
+
     def t_edit_file(self, path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
         p = self.path(path)
         if not p.exists():
@@ -884,14 +973,12 @@ class Toolbox:
             raise ToolError("old_string is empty; use write_file to create or overwrite files")
         text = self.read_text(p)
         count = text.count(old_string)
+        how, start_line = "", 0
         if count == 0:
-            new_text = fuzzy_replace(text, old_string, new_string)
-            if new_text is None:
-                raise ToolError(
-                    f"old_string not found in {self.rel(p)}. It must match exactly, including indentation. "
-                    "Re-read the file and copy the text precisely (without line-number prefixes)."
-                )
-            count = 1
+            found = matching.locate(text, old_string, new_string)
+            if isinstance(found, matching.Miss):
+                raise ToolError(self._edit_miss(p, found))
+            new_text, how, start_line, count = found.text, found.how, found.start_line, 1
         elif count > 1 and not replace_all:
             raise ToolError(
                 f"old_string occurs {count} times in {self.rel(p)}. Add surrounding lines to make it unique, "
@@ -909,15 +996,16 @@ class Toolbox:
         self._write(p, new_text)
         self.console.print(f"  [green]✓[/] Edited {self.rel(p)}")
         problems = self._check(p, text, new_text)
-        idx = new_text.find(new_string) if new_string else -1
-        if idx < 0:
-            return f"Edited {self.rel(p)} ({count} replacement(s))." + problems
+        done = f"Edited {self.rel(p)} ({count} replacement(s)" + (f", {how}" if how else "") + ")."
+        idx = new_text.find(new_string) if new_string and not how else -1
+        if idx < 0 and not start_line:
+            return done + problems
         # Show the model the edited region so it can verify the result.
-        start = new_text.count("\n", 0, idx) + 1
+        start = new_text.count("\n", 0, idx) + 1 if idx >= 0 else start_line
         lines = new_text.splitlines()
         lo, hi = max(1, start - 3), min(len(lines), start + new_string.count("\n") + 3)
         snippet = "\n".join(f"{i:6}\t{lines[i - 1]}" for i in range(lo, hi + 1))
-        return f"Edited {self.rel(p)} ({count} replacement(s)). Result:\n{snippet}" + problems
+        return f"{done} Result:\n{snippet}" + problems
 
     # -- shell
     def t_bash(self, command: str, timeout: int = 180, background: bool = False) -> str:

@@ -789,6 +789,7 @@ class TaskResult:
     steps: int = 0  # model responses
     tool_errors: int = 0  # failed tool calls, including malformed ones
     error: str | None = None  # why the run stopped early: a timeout or an Ollama error
+    errors_by_tool: dict[str, int] = field(default_factory=dict)  # which tools failed, "malformed" for unreadable calls
 
 
 @dataclass
@@ -861,14 +862,20 @@ class Elapsed:
         return Text(f"{self.label}  {time.monotonic() - self.start:.0f}s", style="dim")
 
 
+def errors_by_tool(messages: list[dict]) -> dict[str, int]:
+    """Failed tool calls by tool, and "malformed" for calls the model wrote unreadably."""
+    counts: dict[str, int] = {}
+    for m in messages:
+        if m.get("role") == "tool" and m.get("content", "").startswith("Error:"):
+            name = m.get("tool_name") or "?"
+            counts[name] = counts.get(name, 0) + 1
+        elif m.get("role") == "user" and m.get("content", "").startswith("[lcode] Your last tool call"):
+            counts["malformed"] = counts.get("malformed", 0) + 1
+    return counts
+
+
 def count_tool_errors(messages: list[dict]) -> int:
-    failed = sum(1 for m in messages if m.get("role") == "tool" and m.get("content", "").startswith("Error:"))
-    malformed = sum(
-        1
-        for m in messages
-        if m.get("role") == "user" and m.get("content", "").startswith("[lcode] Your last tool call")
-    )
-    return failed + malformed
+    return sum(errors_by_tool(messages).values())
 
 
 def run_task(
@@ -933,6 +940,7 @@ def run_task(
         detail=error or check.detail,
         steps=agent.usage["requests"] - before.get("requests", 0),
         tool_errors=count_tool_errors(agent.messages[first:] if len(agent.messages) > first else agent.messages),
+        errors_by_tool=errors_by_tool(agent.messages[first:] if len(agent.messages) > first else agent.messages),
         error=error,
     )
 
