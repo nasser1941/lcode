@@ -27,7 +27,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, backends, catalog, clipboard, extensions, gitflow, limits, sessions, web
+from lcode import __version__, backends, catalog, clipboard, extensions, gitflow, limits, residency, sessions, web
 from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
@@ -153,6 +153,7 @@ def build_session(agent: Agent) -> PromptSession:
             f" <b>{html.escape(s.model)}</b> · ctx {format_tokens(agent.ctx_used)}/{format_tokens(s.context)} "
             f"({pct:.0f}%) · mode <{color}>{agent.perms.mode}</{color}> (shift+tab) · "
             f"think {'on' if s.think else 'off'} · {html.escape(agent.cwd.name)}/"
+            + (" · <ansiyellow>loading the model into memory…</ansiyellow>" if agent.load_state == "loading" else "")
             + (f" · <b>{html.escape(agent.session_name)}</b>" if agent.session_name else "")
         )
 
@@ -935,8 +936,12 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
                 s.context = limits.cap(name, spec.fit(hardware)[0] or MIN_USEFUL_CONTEXT)
             elif backends.is_openai(agent.ollama):
                 s.context = backends.context_for(agent.ollama, name, None)[0]  # the server's window
+            agent._vision = False  # the model that looks at images goes with the model: decide again
             agent.messages[0]["content"] = agent.system_prompt()
             c.print(f"[green]Switched to {name}[/] (context {format_tokens(s.context)}).")
+            warning = residency.dense_warning(agent.ollama, name, s.context, hardware)
+            if warning:
+                agent.say(warning, warning=True)
     elif cmd == "/think":
         s.think = (arg == "on") if arg in ("on", "off") else not s.think
         c.print(f"Reasoning {'on' if s.think else 'off'}.")
@@ -1110,9 +1115,12 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
     if prompt:
         run_safely(agent, prompt)
         return
-    preload(agent)
     banner(agent)
+    warning = residency.dense_warning(agent.ollama, agent.settings.model, agent.settings.context, hardware)
+    if warning:
+        agent.say(warning, warning=True)
     session = build_session(agent)
+    preload(agent, session)
     while True:
         try:
             agent.console.print()
@@ -1135,13 +1143,25 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
     agent.console.print("[dim]Bye.[/]")
 
 
-def preload(agent: Agent) -> None:
-    """Start loading the model in the background so the first answer comes sooner."""
+def preload(agent: Agent, session: PromptSession | None = None) -> None:
+    """Start loading the model in the background so the first answer comes sooner; the status bar says so."""
+    where = residency.placement(agent.ollama, agent.settings.model)
+    if where is not None and (not where.context or where.context == agent.settings.context):
+        return  # already in memory
 
     def load() -> None:
+        agent.load_state = "loading"
+        refresh()
         try:
             agent.ollama.load(agent.settings.model, agent.options(), agent.settings.keep_alive)
         except OllamaError:
             pass
+        finally:
+            agent.load_state = ""
+            refresh()
+
+    def refresh() -> None:
+        if session is not None and session.app.is_running:
+            session.app.invalidate()
 
     threading.Thread(target=load, daemon=True).start()

@@ -614,9 +614,8 @@ class Toolbox:
                 arguments = {**arguments, "wait": True}
             freed = self.agent.free_gpu()
             if freed:
-                self.console.print(
-                    Text(f"  ⎿ freed the GPU for {state.name} ({', '.join(freed)} reloads afterwards)", style="dim")
-                )
+                self.agent.made_room_for = state.name
+                self.agent.say(f"Unloaded {', '.join(freed)} so {state.name} can use the GPU; it reloads afterwards.")
         result = mcp.call(state, tool, arguments, image_text=self.agent.describe_image_data)
         if result.startswith("Error:"):
             return result
