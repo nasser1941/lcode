@@ -77,6 +77,7 @@ class Result:
     files_changed: list[dict] = field(default_factory=list)  # {"status": "A" | "M" | "D", "path"}
     usage: dict = field(default_factory=dict)  # requests, prompt_tokens, output_tokens
     checks: list[dict] = field(default_factory=list)  # {"command", "exit_code", "by": "lcode" | "model"}
+    review: list[str] | None = None  # problems the review sent back ([] when it found none; None: no review)
     seconds: float = 0.0
     error: str = ""
 
@@ -198,6 +199,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         secret_check=cfg["secret_check"],
         repeat_limit=cfg["repeat_limit"],
         checks=cfg["checks"],
+        review=cfg["review"],
         compact_at=cfg["compact_at"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
@@ -306,6 +308,7 @@ def run_request(agent: Agent, prompt: str) -> Result:
         files_changed=files,
         usage=usage,
         checks=list(agent.check_results),
+        review=agent.review_results,
         seconds=round(time.monotonic() - started, 2),
         error=error,
     )

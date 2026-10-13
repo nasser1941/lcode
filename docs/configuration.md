@@ -43,6 +43,7 @@ lcode config path                      # print the file location
 | `max_parallel_agents` | `1` | Subagents that run at the same time; more needs `OLLAMA_NUM_PARALLEL` on the Ollama server ([details](agents.md#several-at-once)) |
 | `notify` | `true` | A desktop [notification](usage.md#notifications) when a long request is done or waits for your answer |
 | `notify_after` | `30` | Seconds a request runs before it notifies |
+| `review` | `off` | Before the answer, [review a change](usage.md#a-review-before-the-answer) against the request and send problems back to the model: `auto` or `off` |
 | `checks` | `auto` | Run the project's [checks](usage.md#checks-before-done) after a request changed files: `auto` (found from the project), `off`, or a command |
 | `repeat_limit` | `3` | Identical tool calls with identical results before lcode [steps in](how-it-works.md#when-the-model-repeats-itself); `0` turns it off |
 | `secret_check` | `true` | Before `git commit` and `git push`, look for passwords, keys and tokens they'd add ([details](usage.md#secrets-in-commits)) |

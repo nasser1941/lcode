@@ -59,6 +59,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "subagents": (True, bool, "let the model hand tasks to subagents that have their own context"),
     "notify": (True, bool, "desktop notification when a long request is done or waits for you"),
     "notify_after": (30, int, "seconds a request runs before it notifies (with notify on)"),
+    "review": ("off", str, "before the answer, check a change against the request and send problems back: auto | off"),
     "checks": ("auto", str, "run the project's checks before calling work done: auto | off | a command"),
     "repeat_limit": (3, int, "identical tool calls with identical results before lcode steps in (0: never)"),
     "secret_check": (True, bool, "before git commit and git push, look for passwords, keys and tokens they'd add"),

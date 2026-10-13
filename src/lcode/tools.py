@@ -448,6 +448,7 @@ class Toolbox:
         self.formats: dict[str, TextFormat] = {}  # encoding and line endings of the files read
         self.notes: list[str] = []  # the model's notes on the task (todo_write): decisions, findings, questions
         self.changed: dict[str, None] = {}  # files lcode wrote in this session, in order
+        self.before: dict[str, str | None] = {}  # files changed in this request: their text before (None: new)
         self.todos: list[dict] = []
         # An editor's buffers (lcode acp): read unsaved changes and write through the editor.
         self.reader: Callable[[Path], str | None] | None = None
@@ -870,6 +871,8 @@ class Toolbox:
         p.parent.mkdir(parents=True, exist_ok=True)
         fmt = self.formats.get(str(p)) or (decode(p.read_bytes())[1] if p.exists() else TextFormat())
         data = encode(content, fmt)  # before anything is written: it may not be possible
+        if self.rel(p) not in self.before:
+            self.before[self.rel(p)] = decode(p.read_bytes())[0] if p.exists() else None
         if self.writer is not None:
             self.writer(p, content)  # the editor updates its buffer (and the file)
         if not p.exists() or p.read_bytes() != data:

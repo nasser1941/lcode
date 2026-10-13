@@ -35,6 +35,7 @@ from lcode import (
     planning,
     repomap,
     residency,
+    review,
     sessions,
     subagents,
     vision,
@@ -276,6 +277,7 @@ class Settings:
     compact_at: int = 0  # tokens: make room at this size even when the window is larger (0: only at 85%)
     repeat_limit: int = 3  # identical calls with identical results before the model is told (lcode.repeats)
     checks: str = "off"  # the project's checks after a change (lcode.checks): auto, off or a command
+    review: str = "off"  # check a change against the request before the answer (lcode.review): auto or off
 
 
 class Agent:
@@ -334,6 +336,7 @@ class Agent:
         self.autosave = False  # save the session after every step (sessions people resume; not the bench's)
         self._check: tuple[Path, checks.Check | None] | None = None
         self.check_results: list[dict] = []  # the checks of the last request: command, exit code, who ran them
+        self.review_results: list[str] | None = None  # what the last request's review found (None: no review)
         self.sent_chars = 0  # characters of the conversation the model had already read
         self.counted_chars: int | None = None  # characters that ctx_used covers (None: all of them)
         self.turn_status = ""  # how the last request ended: success, max_steps, loop
@@ -831,6 +834,48 @@ class Agent:
             self.last_speed = final.get("eval_count", 0) / seconds if seconds else 0.0
         return message
 
+    def reviewing(self) -> bool:
+        return (
+            self.settings.review != "off" and self.allowed_tools is None and not self.planning() and not self.no_changes
+        )
+
+    def self_review(self, answer: str) -> list[str]:
+        """Check the request's change against the request before the answer counts; the problems found."""
+        budget = int(self.settings.context * 3 * 0.25)
+        diff, changed = review.diff_of(self.tools.before, self.current_text, budget)
+        if changed < review.MIN_CHANGED_LINES:
+            return []
+        request = next(
+            (
+                context_tools.request_text(str(m.get("content", "")))
+                for m in reversed(self.messages)
+                if m.get("role") == "user"
+                and not str(m.get("content", "")).startswith(("[lcode]", sessions.SUMMARY_PREFIX))
+            ),
+            "",
+        )
+        try:
+            with self.console.status("Reviewing the change against your request…", spinner="dots"):
+                problems = review.run(self, request, answer, diff)
+        except OllamaError as e:
+            self.say(f"The review didn't run: {e}", warning=True)
+            return []
+        self.review_results = problems
+        if problems:
+            self.say(
+                f"Review: {len(problems)} point(s) sent back to the model. First: {problems[0][:160]}", warning=True
+            )
+        else:
+            self.say("Review: the change does what was asked.")
+        return problems
+
+    def current_text(self, path: str) -> str | None:
+        p = self.tools.resolve(path)
+        try:
+            return self.tools.read_text(p) if p.is_file() else None
+        except OSError:
+            return None
+
     def checks_prompt(self) -> str:
         check = self.project_check()
         if check is None:
@@ -1026,6 +1071,9 @@ class Agent:
         self.messages.append({"role": "user", "content": self.expand_mentions(user_text) + note})
         self.repeats.reset()
         self.check_results = []
+        self.review_results = None
+        self.tools.before = {}
+        reviewed = False
         changed = verified = False  # files changed in this request; the checks passed since
         check_rounds = 0
         malformed = 0
@@ -1087,6 +1135,12 @@ class Agent:
                         changed = False  # run them again only if the model changes something more
                         continue
                     verified = True
+                if not reviewed and self.tools.before and self.reviewing():
+                    reviewed = True
+                    problems = self.self_review(reply.get("content") or "")
+                    if problems:
+                        self.messages.append({"role": "user", "content": review.feedback(problems)})
+                        continue
                 break
             done: dict[int, str] = {}  # results of subagents that ran together
             together = [
