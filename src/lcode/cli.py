@@ -580,6 +580,7 @@ def cmd_bench(args) -> None:
             checkpoints=False,
             prune=not args.no_prune,
             compact_at=cfg["compact_at"] if args.compact_at is None else args.compact_at,
+            checks=cfg["checks"] if args.checks is None else args.checks,
             repo_map=args.repo_map,
             embed_model=cfg["embed_model"] if args.code_search else "off",
         )
@@ -774,6 +775,11 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument("--repo-map", action="store_true", help="give the model the repository map (off by default)")
     p.add_argument("--code-search", action="store_true", help="index each task's folder and offer semantic code search")
     p.add_argument("--no-prune", action="store_true", help="don't remove old tool output (to compare, with --session)")
+    p.add_argument(
+        "--checks",
+        metavar="auto|off|COMMAND",
+        help="run each task's checks before it counts as done (default: the checks setting)",
+    )
     p.add_argument(
         "--compact-at",
         type=compact_tokens,

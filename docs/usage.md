@@ -113,6 +113,42 @@ reasoning is on.
 lcode refuses to edit a file the model hasn't read in the session, or one that changed on disk since
 it was read, so the model always edits the current version.
 
+## Checks before done
+
+Small models like to call work done after a syntax check. So after a request that changed files, lcode
+runs the project's checks itself before the answer is final:
+
+```text
+◆ Checking the work: python -m unittest (from test files)
+⚠ Checks fail (python -m unittest, exit code 1): the model gets the output to fix it.
+◆ Checking the work: python -m unittest (from test files)
+◆ Checks pass: python -m unittest
+```
+
+- **When they fail,** the model gets the output and keeps working, twice at most. After that its answer
+  says what still fails instead of claiming success. A failure that the change didn't cause is
+  reported, not chased, and the checks run again only if the model changes something more.
+- **When nothing could run** (no tests collected, or the test runner isn't installed), lcode says so
+  and doesn't send it to the model.
+- **When the model already ran them** after its last change and they passed, they aren't run again.
+- **Permission:** they run like any other command, so in `ask` mode the first run asks (++a++ allows
+  them for the session).
+- **Programs** using `lcode -p --output json` see the runs in the result's `checks`.
+
+**Which checks.** lcode looks at the project: pytest when the configuration mentions it (`uv run
+pytest -q` with a `uv.lock`), otherwise `python -m unittest` for `test_*.py` files. Then
+`npm test` (or pnpm, yarn, bun) when `package.json` has a test script, `cargo test`, `go test ./...`
+and `make test`. To choose the command yourself, set it for the repository in
+`.lcode/settings.toml`. That file is used once you trust the repository, like its hooks:
+
+```toml
+[checks]
+command = "uv run pytest -q && uv run ruff check ."
+```
+
+Or set it for yourself with `lcode config set checks "make check"`; `lcode config set checks off`
+turns checks off.
+
 ## Background commands
 
 Some commands keep running: a dev server, a test watcher, a build in watch mode. The model starts
