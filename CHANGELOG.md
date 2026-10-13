@@ -6,6 +6,16 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A review before the answer. After a request that changed files, the model checks its change
+  against your request, from the diff and its own answer, and real problems (part of the request
+  not done, an untested claim, a leftover debug print) go back to it once. One line says what the
+  review found. It's off by default: measured with qwen3.6-35b on a 12 GB laptop, it made requests
+  73% slower for one real catch. Turn it on with `lcode config set review auto`. `lcode -p --output
+  json` reports it in `review`, and `lcode bench --review` compares. See
+  [A review before the answer](https://nasser1941.github.io/lcode/usage/#a-review-before-the-answer).
+
 ## [0.31.0] - 2026-10-14
 
 ### Added

@@ -179,6 +179,32 @@ command = "uv run pytest -q && uv run ruff check ."
 Or set it for yourself with `lcode config set checks "make check"`; `lcode config set checks off`
 turns checks off.
 
+## A review before the answer
+
+Models claim more than they did: half of a two-part request done, "it works now" without having
+checked, a debug print left behind. So after a request that changed files (and after the
+[checks](#checks-before-done)), lcode asks the model to step back and review its change against your
+request. It's told to judge only from what you asked, the diff, and its own answer:
+
+```text
+◆ Review: the change does what was asked.
+⚠ Review: 1 point(s) sent back to the model. First: README.md isn't changed, though …
+```
+
+Problems it can point to go back to the model once; it fixes them, or says why a point is wrong.
+`lcode -p --output json` reports what the review found in `review`.
+
+**It's off by default,** because it's an extra model answer after every change. On the 12 GB laptop
+with qwen3.6-35b, the 8 `lcode bench` tasks took 416 s with the review against 240 s without
+(8/8 against 7/8, within run-to-run noise). It found a real gap in one run of `runtime-bug` ("it can't
+be made smaller" left undone), which the model then argued away. Without reasoning, the review was
+no faster and missed that gap every time, so it reasons like the model does. Turn it on with
+`lcode config set review auto` when a stronger or faster model makes the extra look worth it.
+
+The review is asked on top of the conversation rather than in a fresh one. The model server keeps
+the processed conversation cached, and a separate review would push it out, so the next request
+would have to read the whole conversation again. On a small GPU that's tens of seconds.
+
 ## Background commands
 
 Some commands keep running: a dev server, a test watcher, a build in watch mode. The model starts
