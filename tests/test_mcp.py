@@ -537,7 +537,8 @@ def test_gpu_hungry_tools_get_the_gpu(make_agent, tmp_path, monkeypatch):
     agent.mcp = ready_manager(tmp_path, server_config("img", free_gpu=["add"]))
     agent.run_turn("make an image")
     assert agent.ollama.unloaded == ["lcode-qwen3.6-35b:latest"]
-    assert "freed the GPU for img (lcode-qwen3.6-35b reloads afterwards)" in output(agent)
+    assert "Unloaded lcode-qwen3.6-35b so img can use the GPU; it reloads afterwards." in output(agent)
+    assert agent.made_room_for == "img"
     assert mcp_config.parse("x", {"command": "y", "free_gpu": True}).free_gpu is True
     agent.mcp.close()
 

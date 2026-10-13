@@ -118,13 +118,14 @@ def test_image_paths_are_attached_without_an_at(make_agent, repo):
     assert '<image path="shots/My Shot.png"' in quoted
 
 
-def test_a_missing_image_is_reported_not_guessed(make_agent):
+def test_a_missing_image_is_reported_not_guessed(make_agent, tmp_path):
+    gone = tmp_path / "pasted-image-.png"  # a terminal pasted a path, but no file
     agent = seeing(make_agent([reply("Please paste it again.")]), "qwen3.6:35b-a3b-coding")
-    agent.run_turn("now we see something like /tmp/pasted-image-.png")
+    agent.run_turn(f"now we see something like {gone}")
     sent = agent.messages[1]["content"]
-    assert "[lcode: the user's message mentions the image /tmp/pasted-image-.png, but there's no such file" in sent
+    assert f"[lcode: the user's message mentions the image {gone}, but there's no such file" in sent
     assert "Don't guess what it shows" in sent and "<image" not in sent
-    assert "/tmp/pasted-image-.png doesn't exist, so the model can't see it" in output(agent)
+    assert "doesn't exist" in output(agent) and "Paste images with Ctrl+V" in " ".join(output(agent).split())
     assert agent.ollama.chats == []  # nothing to look at
     assert "no such file" in agent.expand_mentions("look at @gone.png")
 

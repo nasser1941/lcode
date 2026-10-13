@@ -199,6 +199,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         compact_at=cfg["compact_at"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
+    agent.hardware = hw
     agent.interactive = options.interactive
     if options.max_steps:
         agent.max_steps = options.max_steps

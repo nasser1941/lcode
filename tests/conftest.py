@@ -70,6 +70,12 @@ def call(name: str, **arguments) -> dict:
     return {"function": {"name": name, "arguments": arguments}}
 
 
+@pytest.fixture(autouse=True)
+def isolated_state(tmp_path_factory, monkeypatch):
+    """Every test gets its own state folder, so none writes into the user's (approvals, sessions…)."""
+    monkeypatch.setattr("lcode.config.STATE_DIR", tmp_path_factory.mktemp("lcode-state"))
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     (tmp_path / "src" / "pkg").mkdir(parents=True)

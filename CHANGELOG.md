@@ -6,6 +6,28 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- lcode says what's happening under the hood, in a line, only when it happens:
+  - loading the model and then reading the conversation are named in the status line instead of
+    "Thinking";
+  - after a load, how long it took and how much of the model is on the GPU, with a warning when less
+    is than usual;
+  - at startup and on `/model`, a warning when a dense model won't fit on the GPU and will be slow,
+    with what to use instead;
+  - the vision model making the main model step aside, and the reload after it;
+  - an image tool taking the GPU;
+  - clearer explanations when Ollama runs out of memory.
+
+  The status bar shows when the model is still loading at startup. See
+  [What's happening under the hood](https://nasser1941.github.io/lcode/usage/#whats-happening-under-the-hood).
+
+### Fixed
+
+- After `/model`, images were still described by the vision model chosen for the previous model.
+- The tests no longer write into your lcode state folder; one of them had left about a hundred
+  entries in `extensions-approved.json`.
+
 ## [0.27.0] - 2026-10-10
 
 ### Changed

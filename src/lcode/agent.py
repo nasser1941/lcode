@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import datetime as dt
 import json
 import platform
@@ -23,7 +24,20 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
-from lcode import catalog, codesearch, extensions, limits, notify, planning, repomap, sessions, subagents, vision, web
+from lcode import (
+    catalog,
+    codesearch,
+    extensions,
+    limits,
+    notify,
+    planning,
+    repomap,
+    residency,
+    sessions,
+    subagents,
+    vision,
+    web,
+)
 from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.checkpoints import Checkpoints
@@ -53,7 +67,12 @@ from lcode.tools import (
     truncate,
 )
 
-GPU_MEMORY_ERRORS = ("out of memory", "illegal memory access", "cudamalloc failed")
+GPU_MEMORY_ERRORS = (
+    "out of memory",
+    "illegal memory access",
+    "cudamalloc failed",
+    "requires more system memory",  # Ollama: the model and its context don't fit in RAM either
+)
 SAFE_NUM_BATCH = 512  # Ollama's default prompt batch
 MAX_STEPS_PER_TURN = 150
 EVENT_OUTPUT = 4000  # characters of a tool's output in an event
@@ -62,6 +81,7 @@ REFUSED = ("Error:", "A deny rule", "The user denied", "This needs the user's pe
 MAX_MALFORMED_CALL_RETRIES = 2  # Ollama rejects tool calls whose arguments aren't valid JSON
 # How Ollama reports a tool call it couldn't parse (Qwen3.6's calls are XML)
 MALFORMED_CALL = ("error parsing tool call", "XML syntax error")
+READING_NOTE_TOKENS = 4000  # new input this large gets "Reading … new tokens" in the status line
 AUTO_COMPACT_RATIO = 0.85  # summarize the history when the context is this full
 PRUNED_ENOUGH = 0.6  # after pruning old tool output, summarize only if the context is still this full
 # @path, @"path with spaces" or @'path'
@@ -171,6 +191,10 @@ def project_root_or_cwd(cwd: Path) -> Path:
     return work_tree_for(cwd)
 
 
+def conversation_chars(messages: list[dict]) -> int:
+    return sum(len(str(m.get("content") or "")) + len(str(m.get("thinking") or "")) for m in messages)
+
+
 def call_arguments(call: dict) -> dict:
     """A tool call's arguments as a dict (some models send them as a JSON string)."""
     args = call.get("function", {}).get("arguments") or {}
@@ -189,17 +213,22 @@ class Progress:
     arrives, for example while the model writes a long file into a tool call.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, phase: str = "Thinking") -> None:
         self.started = self.last_chunk = time.time()
-        self.phase = "Thinking"
+        self.phase = phase
         self.chars = 0
 
     def update(self, phase: str, text: str) -> None:
         self.phase, self.chars, self.last_chunk = phase, self.chars + len(text), time.time()
 
+    def set_phase(self, phase: str) -> None:
+        """What happens before the first token: loading the model, reading the prompt."""
+        self.phase, self.last_chunk = phase, time.time()
+
     def __rich__(self) -> Text:
         now = time.time()
-        phase = self.phase if now - self.last_chunk < 3 else "Working"
+        streaming = self.phase in ("Thinking", "Writing")  # loading and reading say what they are throughout
+        phase = self.phase if now - self.last_chunk < 3 or not streaming else "Working"
         return Text.from_markup(
             f"[cyan]{phase}…[/] [dim]({self.chars // 4} tokens, {now - self.started:.0f}s · Ctrl+C to stop)[/]"
         )
@@ -288,6 +317,10 @@ class Agent:
         # Decides on a presented plan instead of asking in the terminal: "ask", "auto-edit", or why not.
         self.plan_review: Callable[[str, str], str] | None = None
         self.max_steps = MAX_STEPS_PER_TURN
+        self.hardware = None  # an lcode.hardware.Hardware, set by the CLI: for what fits on the GPU
+        self.made_room_for = ""  # why the model was unloaded (the vision model, an MCP tool), for the reload line
+        self.load_state = ""  # "loading" while the model loads in the background at startup (lcode.repl)
+        self.sent_chars = 0  # characters of the conversation the model had already read
         self.turn_status = ""  # how the last request ended: success, max_steps, loop
         self.repeats = Repeats(settings.repeat_limit)  # notices when the model repeats itself
         self.response = None  # the streaming response, so another thread can abort it
@@ -465,11 +498,32 @@ class Agent:
             image = vision.read_image(path)
             # The session's own model keeps its settings, so Ollama doesn't reload it.
             options = self.options() if model == self.settings.model else None
-            loading = "" if model == self.settings.model else " (loads it; the next request reloads the main model)"
-            with self.console.status(f"Looking at {path.name} with {model}{loading}…", spinner="dots"):
+            with self.vision_swap(model, path.name):
                 return vision.describe(self.ollama, model, image, question, options, self.settings.keep_alive)
         except vision.VisionError as e:
             raise ToolError(str(e)) from e
+
+    @contextlib.contextmanager
+    def vision_swap(self, model: str, what: str):
+        """Look at an image with `model`, saying when it has to load and when the main model made room for it."""
+        main = self.settings.model
+        own = model == main
+        main_was_loaded = not own and residency.placement(self.ollama, main) is not None
+        if own or residency.placement(self.ollama, model) is not None:
+            text = f"Looking at {what} with {model}…"
+        else:
+            text = f"Loading the vision model {model} to look at {what}" + (
+                f"; {main} makes room and reloads afterwards…" if main_was_loaded else "…"
+            )
+        with self.console.status(text, spinner="dots"):
+            yield
+        if main_was_loaded and residency.placement(self.ollama, main) is None:
+            self.made_room_for = f"the vision model {model}"
+            self.say(f"{main} was unloaded to make room for {model}; it reloads for the next step.")
+
+    def say(self, text: str, warning: bool = False) -> None:
+        """One line about what happens under the hood (loading, memory), not about the work itself."""
+        self.console.print(Text(f"{'⚠' if warning else '◆'} {text}", style="yellow" if warning else "dim cyan"))
 
     def describe_image_data(self, data: str, mime: str) -> str:
         """For images that tools return (e.g. an MCP browser's screenshots): a description, or a note."""
@@ -478,7 +532,7 @@ class Agent:
             return f"[{mime} image not shown: {vision.INSTALL_HINT}]"
         options = self.options() if model == self.settings.model else None
         try:
-            with self.console.status(f"Looking at the {mime} image with {model}…", spinner="dots"):
+            with self.vision_swap(model, f"the {mime} image"):
                 text = vision.describe(
                     self.ollama, model, base64.b64decode(data), "", options, self.settings.keep_alive
                 )
@@ -624,9 +678,11 @@ class Agent:
                 if not started and batch and batch > SAFE_NUM_BATCH:
                     # Larger batches read prompts faster but need extra VRAM that isn't always free.
                     self.settings.num_batch = SAFE_NUM_BATCH
-                    self.console.print(
-                        f"[yellow]The GPU ran out of memory with a prompt batch of {batch}; retrying with "
-                        f"{SAFE_NUM_BATCH}.[/] [dim]To skip this retry: lcode config set num_batch {SAFE_NUM_BATCH}[/]"
+                    self.say(
+                        f"The GPU ran out of memory reading the prompt in batches of {batch} tokens. Retrying with "
+                        f"batches of {SAFE_NUM_BATCH}: a little slower to read, but it needs less memory. To start "
+                        f"there next time: lcode config set num_batch {SAFE_NUM_BATCH}",
+                        warning=True,
                     )
                     yield from self.chat(messages, tools, think)
                     return
@@ -636,16 +692,19 @@ class Agent:
                     smaller = max(catalog.MIN_USEFUL_CONTEXT, context // 2)
                     self.settings.context = smaller
                     limits.record(self.settings.model, smaller)
-                    self.console.print(
-                        f"[yellow]{self.settings.model} didn't fit in GPU memory with a {format_tokens(context)} "
-                        f"context; retrying with {format_tokens(smaller)}.[/] [dim]lcode will start there next "
-                        "time on this machine.[/]"
+                    self.say(
+                        f"{self.settings.model} didn't fit in memory with a {format_tokens(context)} context: the "
+                        "context needs its own memory next to the model. Reloading it with "
+                        f"{format_tokens(smaller)}; lcode will start there next time on this machine.",
+                        warning=True,
                     )
                     yield from self.chat(messages, tools, think)
                     return
                 raise OllamaError(
-                    f"{e}\nThe model ran out of GPU memory. Try a smaller context (/ctx 128k), close other programs "
-                    "using the GPU, or pick a smaller model (/models)."
+                    f"{e}\n{self.settings.model} ran out of memory. Close other programs that use the GPU (another "
+                    "model, a game, an image generator), use a smaller context (/ctx "
+                    f"{format_tokens(max(catalog.MIN_USEFUL_CONTEXT // 2, context // 2)).lower()}), or pick a smaller "
+                    "model (/models)."
                 ) from e
             raise
 
@@ -659,6 +718,7 @@ class Agent:
         content, thinking, tool_calls, final = "", "", [], {}
         md = MarkdownStreamer(self.console)
         progress = Progress()
+        watch = self.before_request(progress)
         status = None
         printed_thinking = False
 
@@ -680,6 +740,9 @@ class Agent:
                 if self.cancel is not None and self.cancel.is_set():
                     raise KeyboardInterrupt
                 msg = chunk.get("message", {})
+                if watch is not None:
+                    self.after_load(watch)
+                    watch = None
                 if msg.get("thinking"):
                     thinking += msg["thinking"]
                     if self.on_delta:
@@ -714,6 +777,8 @@ class Agent:
             raise
         finally:
             stop_spinner()
+            if watch is not None:
+                watch.stop()
         if printed_thinking:
             self.console.print()
         md.flush()
@@ -732,9 +797,48 @@ class Agent:
             self.usage["output_tokens"] += final.get("eval_count", 0)
             self.usage["output_ns"] += final.get("eval_duration", 0)
             self.ctx_used = final.get("prompt_eval_count", 0) + final.get("eval_count", 0)
+            self.sent_chars = conversation_chars(self.messages)
             seconds = final.get("eval_duration", 0) / 1e9
             self.last_speed = final.get("eval_count", 0) / seconds if seconds else 0.0
         return message
+
+    def before_request(self, progress: Progress) -> residency.LoadWatch | None:
+        """Set the status line for what comes before the first token: loading the model if it isn't in memory
+        (watched until it is), then reading the prompt. Returns the watch while the model loads."""
+        if getattr(self.ollama, "kind", "ollama") != "ollama":
+            return None
+        model, context = self.settings.model, self.settings.context
+        fresh = max(0, conversation_chars(self.messages) - self.sent_chars) // 3
+        where = residency.placement(self.ollama, model)
+        if where is not None and (not where.context or where.context == context):
+            if fresh >= READING_NOTE_TOKENS:
+                progress.set_phase(f"Reading {format_tokens(fresh)} new tokens")
+            return None
+        total = conversation_chars(self.messages) // 3
+        if where is not None:
+            phase = f"Reloading {model} with a {format_tokens(context)} context"
+        elif self.made_room_for:
+            phase = f"Reloading {model} into memory (it made room for {self.made_room_for})"
+        else:
+            phase = f"Loading {model} into memory"
+        progress.set_phase(phase)
+        watch = residency.LoadWatch(
+            self.ollama, model, context, progress, f"Reading the conversation ({format_tokens(total)} tokens)"
+        )
+        watch.reload = where is not None or bool(self.made_room_for)
+        return watch
+
+    def after_load(self, watch: residency.LoadWatch) -> None:
+        """The first token after a load: one line on how long it took and how the model fits."""
+        seconds = watch.stop()
+        self.made_room_for = ""
+        self.load_state = ""
+        where = residency.placement(self.ollama, self.settings.model)
+        dense = residency.is_moe(self.ollama, self.settings.model) is False
+        report = residency.load_report(
+            self.settings.model, seconds, where, self.settings.context, self.hardware, dense, watch.reload
+        )
+        self.say(report, warning=report.endswith(("closed.", "slow.")))
 
     def describe_call(self, name: str, args: dict) -> str:
         if name in ("read_file", "write_file", "edit_file"):
@@ -1071,6 +1175,7 @@ class Agent:
                 )  # not enough: before the last request
             context_tools.note_removed(self.messages, removed)
             if saved:
+                self.sent_chars = 0  # the conversation changed: the model reads it again
                 self.pruned += 1
                 self.ctx_used = max(len(self.messages[0]["content"]) // 3, self.ctx_used - saved // 3)
                 self.console.print(
@@ -1127,6 +1232,7 @@ class Agent:
             self.skills_loaded.clear()
         self.ctx_used = sum(len(m["content"]) for m in self.messages) // 3
         self.summarized_size = self.ctx_used
+        self.sent_chars = 0
         self.reflected = len(self.messages)
         self.console.print(Panel(Markdown(summary), title="Compacted summary", border_style="blue"))
 

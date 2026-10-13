@@ -64,7 +64,7 @@ def test_out_of_memory_gets_a_hint(make_agent):
         yield
 
     agent.ollama.chat_stream = chat_stream
-    with pytest.raises(OllamaError, match="/ctx 128k"):
+    with pytest.raises(OllamaError, match=r"smaller context \(/ctx 16k\)"):
         agent.run_turn("hi")
 
 
@@ -81,7 +81,7 @@ def test_gpu_memory_error_retries_with_a_smaller_batch(make_agent):
     agent.run_turn("hi")
     assert agent.settings.num_batch == 512
     assert agent.messages[-1]["content"] == "recovered"
-    assert "retrying with 512" in output(agent)
+    assert "Retrying with batches of 512: a little slower" in " ".join(output(agent).split())
 
 
 def test_context_is_halved_until_the_model_fits(make_agent):
@@ -100,7 +100,8 @@ def test_context_is_halved_until_the_model_fits(make_agent):
     assert [p["options"]["num_ctx"] for p in agent.ollama.payloads] == [524288, 262144, 131072]
     assert agent.settings.context == 131072
     assert limits.get(agent.settings.model) == 131072
-    assert "didn't fit in GPU memory" in output(agent)
+    text = " ".join(output(agent).split())
+    assert "didn't fit in memory with a 512K context" in text and "Reloading it with 256K" in text
 
 
 def test_errors_after_output_are_not_retried(make_agent):
