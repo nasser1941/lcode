@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-10-13
+
 ### Fixed
 
 Found by testing lcode's tools on real files and commands (#118):
@@ -630,7 +632,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.28.1...HEAD
+[0.28.1]: https://github.com/nasser1941/lcode/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/nasser1941/lcode/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/nasser1941/lcode/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/nasser1941/lcode/compare/v0.25.0...v0.26.0
