@@ -49,7 +49,9 @@ REQUESTS_HEADER = "[The user's requests in this conversation, word for word, old
 MAX_REQUESTS = 8  # the most recent ones are kept through a summary
 MAX_REQUEST_CHARS = 1500
 # What lcode appends to the user's words: attached files, images and folders, and its own notes.
-ATTACHED = re.compile(r"\n\n(?:<file path=|<image path=|<directory path=|\[lcode[:\]] |\[The user wants the )")
+ATTACHED = re.compile(
+    r"\n\n(?:<file path=|<image path=|<directory path=|\[lcode[:\]] |\[The user wants the )"
+)  # also the sheet
 
 
 def request_text(content: str) -> str:
@@ -185,6 +187,51 @@ def prune(messages: list[dict], keep: int = KEEP_RECENT_REQUESTS, removed: list[
         messages[i]["content"] = new
         saved += len(content) - len(new)
     return saved
+
+
+SHEET_HEADER = "[lcode] Task sheet: the plan, notes and changes so far, kept when old messages are removed"
+MAX_SHEET = 3000  # characters
+
+
+def task_sheet(agent: Agent) -> str:
+    """The state of the work, from lcode's own records: the todo list and the model's notes (todo_write), the
+    files changed in the session and the last check. Pinned where old messages go: in summaries and next to the
+    request when tool output is removed."""
+    tools = agent.tools
+    parts = []
+    if tools.todos:
+        marks = {"completed": "[x]", "in_progress": "[>]", "pending": "[ ]"}
+        plan = "\n".join(f"{marks.get(t.get('status', ''), '[ ]')} {t.get('content', '')}" for t in tools.todos)
+        parts.append(f"Plan:\n{plan}")
+    if tools.notes:
+        parts.append("Notes:\n" + "\n".join(f"- {note}" for note in tools.notes))
+    if tools.changed:
+        files = list(tools.changed)
+        more = f" and {len(files) - 30} more" if len(files) > 30 else ""
+        parts.append("Files changed in this session: " + ", ".join(files[-30:]) + more)
+    if agent.check_results:
+        last = agent.check_results[-1]
+        code = last.get("exit_code")
+        state = "passed" if code == 0 else "didn't run" if code is None else f"failed (exit code {code})"
+        parts.append(f"Last check: `{last.get('command')}` {state}")
+    if not parts:
+        return ""
+    sheet = "\n\n".join(parts)
+    if len(sheet) > MAX_SHEET:
+        sheet = sheet[: MAX_SHEET - 20] + "\n[…cut]"
+    return f"{SHEET_HEADER}\n{sheet}"
+
+
+def pin(messages: list[dict], text: str) -> None:
+    """Put a note next to the request the model is working on, replacing an earlier sheet there."""
+    if not text:
+        return
+    for message in reversed(messages):
+        content = str(message.get("content", ""))
+        if message.get("role") == "user" and not content.startswith(("[lcode]", SUMMARY_PREFIX)):
+            content = content.split("\n\n" + SHEET_HEADER, 1)[0]
+            message["content"] = f"{content}\n\n{text}"
+            return
 
 
 def note_removed(messages: list[dict], removed: list[str]) -> None:
