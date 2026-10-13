@@ -27,6 +27,7 @@ from rich.text import Text
 
 from lcode import (
     catalog,
+    checks,
     codesearch,
     extensions,
     limits,
@@ -81,7 +82,13 @@ EVENT_OUTPUT = 4000  # characters of a tool's output in an event
 REFUSED = ("Error:", "A deny rule", "The user denied", "This needs the user's permission")
 MAX_MALFORMED_CALL_RETRIES = 2  # Ollama rejects tool calls whose arguments aren't valid JSON
 # How Ollama reports a tool call it couldn't parse (Qwen3.6's calls are XML)
-MALFORMED_CALL = ("error parsing tool call", "XML syntax error")
+MALFORMED_CALL = (
+    "error parsing tool call",
+    # Go's XML decoder, for models that write calls as XML (Qwen3.6): a cut-off or misordered call
+    "XML syntax error",
+    "expected element type",
+    "closed by </",
+)
 RESULT_SHARE = 0.25  # of the context window, at most, for one tool result
 MIN_RESULT_CHARS = 8000
 READING_NOTE_TOKENS = 4000  # new input this large gets "Reading … new tokens" in the status line
@@ -114,7 +121,7 @@ SYSTEM_PROMPT = """You are lcode, an autonomous software-engineering agent runni
 - A syntax check or an import only shows that code loads. Run what you changed the way it will be used (the script, the tests, the app) and fix what fails.
 - To fix a bug, first reproduce each problem the user reports with a test, a command or a short script, then run the same checks to show they're gone.
 - For what you can't see, like a GUI, a web page or a layout, check it without a screen where you can: `QT_QPA_PLATFORM=offscreen` for Qt, a headless browser, or a script that prints sizes and positions or renders to an image{look}. Measure instead of assuming.
-- Never claim something works, mark a todo done, or call it tested unless you ran it. If you couldn't check something, say so and tell the user exactly what to look for. If something fails, say so and show the relevant error.
+- Never claim something works, mark a todo done, or call it tested unless you ran it. If you couldn't check something, say so and tell the user exactly what to look for. If something fails, say so and show the relevant error.{checks}
 
 # Communication
 - Be concise and direct; no filler. Use GitHub-flavored markdown.
@@ -268,6 +275,7 @@ class Settings:
     secret_check: bool = True  # scan what git commit and git push would add (lcode.secretscan)
     compact_at: int = 0  # tokens: make room at this size even when the window is larger (0: only at 85%)
     repeat_limit: int = 3  # identical calls with identical results before the model is told (lcode.repeats)
+    checks: str = "off"  # the project's checks after a change (lcode.checks): auto, off or a command
 
 
 class Agent:
@@ -324,6 +332,8 @@ class Agent:
         self.made_room_for = ""  # why the model was unloaded (the vision model, an MCP tool), for the reload line
         self.load_state = ""  # "loading" while the model loads in the background at startup (lcode.repl)
         self.autosave = False  # save the session after every step (sessions people resume; not the bench's)
+        self._check: tuple[Path, checks.Check | None] | None = None
+        self.check_results: list[dict] = []  # the checks of the last request: command, exit code, who ran them
         self.sent_chars = 0  # characters of the conversation the model had already read
         self.counted_chars: int | None = None  # characters that ctx_used covers (None: all of them)
         self.turn_status = ""  # how the last request ended: success, max_steps, loop
@@ -363,6 +373,7 @@ class Agent:
             code=self.code_prompt(),
             map=self.map_prompt(),
             look=" you look at with view_image" if self.vision_model() else "",
+            checks=self.checks_prompt(),
         )
 
     def repo_map(self) -> repomap.RepoMap | None:
@@ -812,6 +823,64 @@ class Agent:
             self.last_speed = final.get("eval_count", 0) / seconds if seconds else 0.0
         return message
 
+    def checks_prompt(self) -> str:
+        check = self.project_check()
+        if check is None:
+            return ""
+        return (
+            f"\n- When you've changed files, lcode runs the project's checks (`{check.command}`) before your answer "
+            "is final, and gives you the failures to fix. Run them yourself while you work, too."
+        )
+
+    def project_check(self) -> checks.Check | None:
+        """The project's check command, for the main agent outside plan mode and reviews (None otherwise)."""
+        if self.allowed_tools is not None or self.planning() or self.no_changes or self.settings.checks == "off":
+            return None
+        root = project_root_or_cwd(self.cwd)
+        if self._check is None or self._check[0] != root or self._check[1] is None:  # tests may appear meanwhile
+            self._check = (root, checks.find(root, self.settings.checks, self.settings.trust_project))
+        return self._check[1]
+
+    def model_ran_checks(self, command: str, result: str) -> bool:
+        """Whether a command the model ran was the project's checks, and they passed."""
+        check = self.project_check()
+        if check is None or not checks.covers(check, command) or checks.exit_code(result) != 0:
+            return False
+        self.check_results.append({"command": check.command, "exit_code": 0, "by": "model"})
+        return True
+
+    def run_check(self, check: checks.Check, round_: int) -> str | None:
+        """Run the checks after a change. Returns what to tell the model when they fail, else None."""
+        self.say(f"Checking the work: {check.command} (from {check.source})")
+        result = self.tools.run("bash", {"command": check.command, "timeout": checks.TIMEOUT})
+        code = checks.exit_code(result)
+        self.check_results.append({"command": check.command, "exit_code": code, "by": "lcode"})
+        if code is None:
+            self.say(f"The checks didn't run: {result.splitlines()[0][:200]}", warning=True)
+            return None
+        if code == 0:
+            self.say(f"Checks pass: {check.command}")
+            return None
+        if checks.no_tests(check, result):
+            self.say(f"The checks found no tests to run ({check.command}).")
+            return None
+        if checks.missing(check, result):
+            self.say(
+                f"The checks couldn't run ({check.command}): {result.splitlines()[0][:160]}. Install what they need, "
+                'or set the command: lcode config set checks "…" (or checks off).',
+                warning=True,
+            )
+            return None
+        if round_ >= checks.MAX_ROUNDS:
+            self.say(
+                f"Checks still fail ({check.command}, exit code {code}): the model will say what's left.", warning=True
+            )
+        else:
+            self.say(
+                f"Checks fail ({check.command}, exit code {code}): the model gets the output to fix it.", warning=True
+            )
+        return checks.failure_note(check, result, round_)
+
     def before_request(self, progress: Progress) -> residency.LoadWatch | None:
         """Set the status line for what comes before the first token: loading the model if it isn't in memory
         (watched until it is), then reading the prompt. Returns the watch while the model loads."""
@@ -948,6 +1017,9 @@ class Agent:
         note = planning.NOTE if self.planning() and self.allowed_tools is None else ""
         self.messages.append({"role": "user", "content": self.expand_mentions(user_text) + note})
         self.repeats.reset()
+        self.check_results = []
+        changed = verified = False  # files changed in this request; the checks passed since
+        check_rounds = 0
         malformed = 0
         looping = ""  # the call the model kept repeating, when lcode stopped the request for it
         for step in range(self.max_steps):
@@ -983,6 +1055,8 @@ class Agent:
                     reason = str(e).rsplit("err=", 1)[-1].strip()
                 elif "XML syntax error" in str(e):
                     reason = str(e).split("XML syntax error", 1)[1].strip(" :") or "invalid XML"
+                elif "expected element type" in str(e) or "closed by </" in str(e):
+                    reason = str(e).split("Ollama error:", 1)[-1].strip() or "invalid XML"
                 else:
                     reason = "invalid JSON"
                 self.console.print("[yellow]The model wrote a malformed tool call; asking it to try again.[/]")
@@ -996,6 +1070,15 @@ class Agent:
                 )
                 continue
             if not calls:
+                check = self.project_check() if changed and not verified else None
+                if check is not None and check_rounds < checks.MAX_ROUNDS:
+                    check_rounds += 1
+                    feedback = self.run_check(check, check_rounds)
+                    if feedback:
+                        self.messages.append({"role": "user", "content": feedback})
+                        changed = False  # run them again only if the model changes something more
+                        continue
+                    verified = True
                 break
             done: dict[int, str] = {}  # results of subagents that ran together
             together = [
@@ -1051,6 +1134,10 @@ class Agent:
                     )
                     if verdict.stop:
                         looping = self.describe_call(name, args)
+                if name in ("edit_file", "write_file") and not result.startswith(REFUSED):
+                    changed, verified = True, False
+                elif name == "bash" and changed and self.model_ran_checks(str(args.get("command", "")), result):
+                    verified = True  # the model ran the checks itself, after its last change
                 tool_msg = {"role": "tool", "tool_name": name, "content": result}
                 if call.get("id"):
                     tool_msg["tool_call_id"] = call["id"]

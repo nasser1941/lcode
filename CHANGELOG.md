@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- lcode runs the project's checks before calling work done. After a request that changed files, it
+  runs the tests (pytest, unittest, npm/pnpm/yarn/bun test, cargo test, go test or make test, found
+  from the project, or the command in `.lcode/settings.toml` or the `checks` setting). When they
+  fail, the model gets the output and keeps working, twice at most, and then says what still fails.
+  Checks the model already ran after its last change aren't repeated. `lcode -p --output json`
+  reports them in `checks`, and `lcode bench --checks off` compares. See
+  [Checks before done](https://nasser1941.github.io/lcode/usage/#checks-before-done).
+
+### Fixed
+
+- A tool call that Ollama couldn't read because its XML was out of order (`expected element type
+  <function> but have <parameter>`) ended the request with an error. Like other malformed calls,
+  it's now sent back to the model to make again.
+
 ## [0.28.1] - 2026-10-13
 
 ### Fixed
