@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from lcode.tools import fuzzy_replace, truncate
+from lcode.matching import Found, locate
+from lcode.tools import truncate
 
 
 def test_read_file_numbers_lines_and_pages(agent):
@@ -49,12 +50,11 @@ def test_edit_detects_external_changes(agent, repo: Path):
     assert "changed on disk" in out
 
 
-def test_fuzzy_replace_ignores_trailing_whitespace():
+def test_trailing_whitespace_doesnt_stop_an_edit():
     text = "class A:\n    def f(self):   \n        return 1\n"
-    assert fuzzy_replace(text, "    def f(self):\n        return 1", "    def f(self):\n        return 2") == (
-        "class A:\n    def f(self):\n        return 2\n"
-    )
-    assert fuzzy_replace(text, "not there", "x") is None
+    found = locate(text, "    def f(self):\n        return 1", "    def f(self):\n        return 2")
+    assert isinstance(found, Found) and found.text == "class A:\n    def f(self):\n        return 2\n"
+    assert not isinstance(locate(text, "not there", "x"), Found)
 
 
 def test_write_file_create_and_overwrite(agent, repo: Path):

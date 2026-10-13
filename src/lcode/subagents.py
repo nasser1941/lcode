@@ -69,7 +69,7 @@ READ_ONLY_TOOLS = frozenset(
         "search_code",
     }
 )
-EDIT_TOOLS = frozenset({"write_file", "edit_file"})
+EDIT_TOOLS = frozenset({"write_file", "edit_file", "apply_patch"})
 NOT_FOR_SUBAGENTS = frozenset({"agent", "memory"})  # no agents inside agents; only the main session remembers
 MAX_STEPS = 200
 MAX_UNTRACKED_BYTES = 10 * 1024 * 1024  # larger untracked files aren't copied into a worker's worktree

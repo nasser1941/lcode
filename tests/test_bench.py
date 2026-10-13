@@ -239,7 +239,16 @@ def test_report_and_markdown(tmp_path):
     first = data["runs"][0]
     assert (first["passed"], first["total"], first["generation_tps"], first["context"]) == (1, 2, 50.0, 32768)
     assert first["prompt_tps"] == 2000.0
-    assert set(first["tasks"][0]) == {"id", "passed", "seconds", "detail", "steps", "tool_errors", "error"}
+    assert set(first["tasks"][0]) == {
+        "id",
+        "passed",
+        "seconds",
+        "detail",
+        "steps",
+        "tool_errors",
+        "error",
+        "errors_by_tool",
+    }
     assert data["runs"][1]["error"] == "not installed"
 
     md = bench.markdown([run, skipped], tasks, LAPTOP, "0.32.15")

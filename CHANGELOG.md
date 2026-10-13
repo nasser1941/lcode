@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Edits that the model copied imperfectly land where they belong instead of failing: line numbers
+  copied from `read_file`, stray escapes, a block at the wrong indentation or spaces for tabs (the new
+  text is re-indented), dropped blank lines, and very close matches. A close match changes only the
+  lines the model meant to change, so an earlier edit its copy doesn't show survives. Ambiguous or
+  weak matches are refused, and the model is shown the closest lines with their numbers. See
+  [Imperfect edits](https://nasser1941.github.io/lcode/usage/#imperfect-edits).
+- `apply_patch`: the model can apply a unified diff to several files at once. Hunks are found by
+  their text, so wrong `@@` line numbers don't matter, and a file changes only if every hunk fits.
+- Common tool slips get a useful answer instead of an error: a `grep` pattern that isn't a valid regex
+  (`def add(`) is searched as plain text, a path that doesn't exist comes back with the closest
+  existing ones (`Did you mean: src/pkg/math_utils.py?`), `read_file` on a folder lists it, and
+  `list_dir` on a file says to read it.
+- `lcode bench --json` breaks failed tool calls down by tool (`errors_by_tool`).
+
 ## [0.29.0] - 2026-10-13
 
 ### Added

@@ -82,7 +82,7 @@ class Repeats:
             )
         hint = (
             "If it's an edit, read the file again and copy the text exactly. "
-            if failed and name in ("edit_file", "write_file")
+            if failed and name in ("edit_file", "write_file", "apply_patch")
             else ""
         )
         return Verdict(
@@ -97,7 +97,7 @@ def changes_things(name: str, args: dict, result: str) -> bool:
     """Whether the call may have changed files (or anything else a later call could see)."""
     if name in UNCHANGING:
         return False
-    if name in ("edit_file", "write_file"):
+    if name in ("edit_file", "write_file", "apply_patch"):
         return not result.startswith(FAILED)
     if name == "bash":
         return not is_read_only(str(args.get("command", "")))

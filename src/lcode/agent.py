@@ -1134,7 +1134,7 @@ class Agent:
                     )
                     if verdict.stop:
                         looping = self.describe_call(name, args)
-                if name in ("edit_file", "write_file") and not result.startswith(REFUSED):
+                if name in ("edit_file", "write_file", "apply_patch") and not result.startswith(REFUSED):
                     changed, verified = True, False
                 elif name == "bash" and changed and self.model_ran_checks(str(args.get("command", "")), result):
                     verified = True  # the model ran the checks itself, after its last change
