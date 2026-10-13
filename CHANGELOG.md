@@ -6,6 +6,15 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A task sheet that survives long sessions. The plan (the todo list), the model's notes (decisions,
+  findings, open questions, kept in `todo_write`'s new `notes`, or inside a todo item, where small
+  models tend to put them), the files changed and the last check are pinned next to the summary and
+  next to your request when old output is removed. It's saved with the session, so `lcode -c`
+  brings it back (the todo list used to be lost), and `/status` shows it. See
+  [Context management](https://nasser1941.github.io/lcode/how-it-works/#context-management).
+
 ## [0.30.0] - 2026-10-13
 
 ### Added

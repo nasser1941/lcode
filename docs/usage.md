@@ -80,6 +80,7 @@ reasoning is on.
 | `/mode [ask\|plan\|auto-edit\|yolo]` | Set the permission mode |
 | `/cd DIR` | Change the working directory |
 | `/todos` | Show the model's task list |
+| `/status` | The task sheet: your latest requests, the plan and the model's notes, files changed, the last check |
 | `/jobs [stop ID]` | The [background commands](#background-commands) the model started; stop one |
 | `/commit [notes]` | [Commit](git.md#commit) the changes with a message in the repository's style, once you approve it |
 | `/review [base]` | [Review](git.md#review) the uncommitted changes, or the branch against a base |
@@ -99,7 +100,7 @@ reasoning is on.
 | `grep` | Regex search with ripgrep (falls back to Python if ripgrep is missing) |
 | `bash` | Run a shell command with live output, a timeout and a persistent working directory; with `background`, keep it running ([details](#background-commands)) |
 | `bash_output`, `bash_stop` | Read what a background command printed since last time; stop it |
-| `todo_write` | Keep a visible task list for multi-step work |
+| `todo_write` | Keep a visible task list for multi-step work, with notes (decisions, findings) that survive when old messages are removed; `/status` shows them |
 | `web_search` | Search the web for current information (needs a [search provider](#web-search)) |
 | `web_fetch` | Read a web page or text file by URL as clean text |
 | `view_image` | Look at an image: a model that can see describes it ([Images](#images)) |

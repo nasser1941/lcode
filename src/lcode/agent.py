@@ -112,7 +112,7 @@ SYSTEM_PROMPT = """You are lcode, an autonomous software-engineering agent runni
 - To understand a repository: look at the layout, README/docs, entry points and config, then grep and read the relevant files. Cite code as `path:line`.
 - Read a file before editing it. Use edit_file for targeted changes and write_file for new files or full rewrites. old_string must be copied exactly from the file (without the line-number prefixes).
 - Match the existing code style, naming and structure. Don't add unrequested features.
-- For multi-step tasks, plan with todo_write and keep it updated.
+- For multi-step tasks, plan with todo_write and keep it updated; put decisions and findings you must not lose in its notes.
 - Work autonomously until the task is done. Only stop to ask the user when you are genuinely blocked or the decision is theirs.
 - Don't run destructive or irreversible commands (rm -rf, git reset --hard, git push --force, dropping data) unless the user explicitly asked.
 - If the user denies a tool call, don't retry the same thing; adjust or ask.
@@ -613,6 +613,9 @@ class Agent:
             "title": self.session_title,
             "messages": self.messages,
             "checkpoints": self.checkpoints.to_json(),
+            "todos": self.tools.todos,
+            "notes": self.tools.notes,
+            "changed": list(self.tools.changed),
         }
         # Written next to it and then renamed: a crash halfway leaves the previous version, not a broken file.
         partial = f.with_name(f".{f.name}.partial")
@@ -626,6 +629,8 @@ class Agent:
         self.session_name = ""
         self.session_title = ""
         self.checkpoints.reset(self.session_id)
+        self.tools.todos, self.tools.notes, self.tools.changed = [], [], {}
+        self.check_results = []
 
     def rename(self, name: str) -> None:
         self.session_name = " ".join(name.split())
@@ -652,6 +657,9 @@ class Agent:
         self.session_name = data.get("name", "")
         self.session_title = data.get("title") or sessions.title_from(self.messages)
         self.tools.read_mtimes.clear()  # files may have changed since; the model must read them again
+        self.tools.todos = list(data.get("todos") or [])
+        self.tools.notes = [str(n) for n in data.get("notes") or []]
+        self.tools.changed = dict.fromkeys(str(f) for f in data.get("changed") or [])
         self.reflected = len(self.messages)  # checked for notes to remember when that session ended
         self.ctx_used = sum(len(json.dumps(m)) for m in self.messages) // 3
         self.counted_chars = None
@@ -1290,6 +1298,8 @@ class Agent:
                 )  # not enough: before the last request
             context_tools.note_removed(self.messages, removed)
             if saved:
+                context_tools.pin(self.messages, context_tools.task_sheet(self))
+            if saved:
                 self.sent_chars = 0  # the conversation changed: the model reads it again
                 self.pruned += 1
                 self.ctx_used = max(len(self.messages[0]["content"]) // 3, self.ctx_used - saved // 3)
@@ -1333,7 +1343,9 @@ class Agent:
             {"role": "system", "content": self.system_prompt()},
             {
                 "role": "user",
-                "content": f"{sessions.SUMMARY_PREFIX}\n\n{summary}" + context_tools.requests_block(requests),
+                "content": f"{sessions.SUMMARY_PREFIX}\n\n{summary}"
+                + context_tools.requests_block(requests)
+                + (f"\n\n{sheet}" if (sheet := context_tools.task_sheet(self)) else ""),
             },
             {"role": "assistant", "content": "Got it — I have the context from the summary and will continue."},
         ]

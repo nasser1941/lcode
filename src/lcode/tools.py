@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.console import Group
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
@@ -45,6 +46,7 @@ NO_NETWORK = re.compile(
 )
 MAX_TOOL_OUTPUT = 30_000  # characters returned to the model per tool call
 PENDING_LINES = 5000  # output lines waiting to be read, at most
+MAX_NOTES, MAX_NOTE = 12, 300  # the model's task notes: how many, how long each
 LEFTOVER_GRACE = 0.5  # seconds to wait for output after a command ends, before stopping what it left running
 IGNORE_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env", ".mypy_cache", ".pytest_cache",
@@ -161,7 +163,8 @@ SCHEMAS = [
     _fn(
         "todo_write",
         "Create or update your task list for multi-step work. Pass the full list every time. Keep exactly one "
-        "item in_progress while working.",
+        "item in_progress while working. In `notes`, keep what you must not forget: decisions and why, findings, "
+        "open questions. The list and the notes stay with you even when old messages are removed.",
         {
             "todos": {
                 "type": "array",
@@ -173,7 +176,12 @@ SCHEMAS = [
                     },
                     "required": ["content", "status"],
                 },
-            }
+            },
+            "notes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Short notes, the full list each time (omit to keep the current ones)",
+            },
         },
         ["todos"],
     ),
@@ -438,6 +446,8 @@ class Toolbox:
         self.agent = agent
         self.read_mtimes: dict[str, float] = {}
         self.formats: dict[str, TextFormat] = {}  # encoding and line endings of the files read
+        self.notes: list[str] = []  # the model's notes on the task (todo_write): decisions, findings, questions
+        self.changed: dict[str, None] = {}  # files lcode wrote in this session, in order
         self.todos: list[dict] = []
         # An editor's buffers (lcode acp): read unsaved changes and write through the editor.
         self.reader: Callable[[Path], str | None] | None = None
@@ -865,6 +875,7 @@ class Toolbox:
         if not p.exists() or p.read_bytes() != data:
             p.write_bytes(data)  # the file on disk must match, for checkpoints and the tools
         self.read_mtimes[str(p)] = p.stat().st_mtime
+        self.changed[self.rel(p)] = None
 
     def t_write_file(self, path: str, content: str) -> str:
         p = self.path(path)
@@ -1248,12 +1259,29 @@ class Toolbox:
         return f"[{describe(job)}]" + (f"\nIts last output:\n{last}" if last else "")
 
     # -- planning
-    def t_todo_write(self, todos: list | str) -> str:
+    def t_todo_write(self, todos: list | str, notes: list | str | None = None) -> str:
         if isinstance(todos, str):
             todos = json.loads(todos)
         self.todos = list(todos)
+        # Small models often put a note inside an item instead of in `notes`: keep it either way.
+        attached = [
+            str(todo.get(key)).strip()
+            for todo in self.todos
+            if isinstance(todo, dict)
+            for key in ("notes", "note", "details")
+            if str(todo.get(key) or "").strip()
+        ]
+        if attached:
+            notes = [*([] if notes is None else ([notes] if isinstance(notes, str) else list(notes))), *attached]
+        if notes is not None:
+            if isinstance(notes, str):
+                try:
+                    notes = json.loads(notes)
+                except ValueError:
+                    notes = [notes]
+            self.notes = [str(n).strip()[:MAX_NOTE] for n in notes if str(n).strip()][:MAX_NOTES]
         self.show_todos()
-        return "Todo list updated."
+        return "Todo list updated." + (f" {len(self.notes)} note(s) kept." if notes is not None else "")
 
     def show_todos(self) -> None:
         icons = {"completed": "[green]✔[/]", "in_progress": "[yellow]◐[/]", "pending": "[dim]○[/]"}
@@ -1265,4 +1293,6 @@ class Toolbox:
             elif status == "in_progress":
                 text = f"[bold]{text}[/]"
             rows.append(f"{icons.get(status, '○')} {text}")
+        if self.notes:
+            rows += ["", *(f"[dim]•[/] {escape(note)}" for note in self.notes)]
         self.console.print(Panel("\n".join(rows) or "(empty)", title="Todos", title_align="left", border_style="blue"))

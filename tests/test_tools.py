@@ -138,3 +138,11 @@ def test_edits_in_ask_mode(make_agent, repo: Path, monkeypatch):
     out = agent.tools.run("edit_file", {"path": "src/pkg/math.py", "old_string": "a - b", "new_string": "b - a"})
     assert out.startswith("Edited src/pkg/math.py")
     assert "return b - a" in (repo / "src/pkg/math.py").read_text()
+
+
+def test_notes_inside_a_todo_item_are_kept(agent):
+    todos = [{"content": "Add --format", "status": "completed", "notes": "Decision: JSON with sorted keys, indent 2"}]
+    assert agent.tools.run("todo_write", {"todos": todos}).endswith("1 note(s) kept.")
+    assert agent.tools.notes == ["Decision: JSON with sorted keys, indent 2"]
+    agent.tools.run("todo_write", {"todos": todos, "notes": ["Open: does --strict apply?"]})
+    assert agent.tools.notes == ["Open: does --strict apply?", "Decision: JSON with sorted keys, indent 2"]

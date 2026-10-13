@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import output, reply
+from conftest import call, output, reply
 from lcode import context
 from lcode.hardware import Hardware
 from lcode.repl import handle_command
@@ -245,3 +245,56 @@ def test_the_model_is_told_next_to_its_request_what_it_no_longer_has(make_agent)
         "conversation any more: read it again"
     )
     assert context.user_requests(agent.messages)[-1] == "third request"
+
+
+TODOS = [
+    {"content": "Port the parser", "status": "completed"},
+    {"content": "Keep the old flags", "status": "in_progress"},
+]
+
+
+def test_the_task_sheet_survives_a_summary_and_a_resume(make_agent, repo):
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("read_file", path="README.md")]),
+            reply(tool_calls=[call("edit_file", path="README.md", old_string="Demo", new_string="Demo app")]),
+            reply(tool_calls=[call("todo_write", todos=TODOS, notes=["Decided: keep --legacy as an alias"])]),
+            reply("Working on it."),
+            reply("Summary."),
+        ]
+    )
+    agent.run_turn("port the parser")
+    agent.save()
+    agent.compact()
+    summary = agent.messages[1]["content"]
+    assert context.SHEET_HEADER in summary and "[>] Keep the old flags" in summary
+    assert "- Decided: keep --legacy as an alias" in summary and "Files changed in this session: README.md" in summary
+    other = make_agent()
+    other.load_latest()
+    assert other.tools.todos == TODOS and other.tools.notes == ["Decided: keep --legacy as an alias"]
+    assert list(other.tools.changed) == ["README.md"]
+    other.new_session()
+    assert other.tools.todos == [] and other.tools.notes == [] and not other.tools.changed
+
+
+def test_the_sheet_is_pinned_next_to_the_request_when_output_is_removed(make_agent):
+    agent = make_agent([reply("ok")], context=16384)
+    agent.messages = conversation(BIG * 10)
+    agent.tools.todos = TODOS
+    agent.ctx_used = int(0.9 * 16384)
+    agent.maybe_compact()
+    agent.maybe_compact()  # pinned again: replaced, not added
+    latest = agent.messages[11]["content"]
+    assert latest.startswith("third request") and latest.count(context.SHEET_HEADER) == 1
+    assert context.user_requests(agent.messages)[-1] == "third request"  # the sheet isn't the user's words
+
+
+def test_status_shows_the_sheet(make_agent):
+    from lcode.repl import handle_command
+
+    agent = make_agent([reply(tool_calls=[call("todo_write", todos=TODOS, notes=["Open: --strict?"])]), reply("ok")])
+    agent.run_turn("port the parser")
+    handle_command(agent, "/status", HW)
+    text = output(agent)
+    assert "Requests (latest)" in text and "port the parser" in text and "Keep the old flags" in text
+    assert "Open: --strict?" in text

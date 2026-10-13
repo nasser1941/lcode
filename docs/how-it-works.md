@@ -97,6 +97,16 @@ context is old tool output, so:
    findings, files changed, next steps) and continues from it. Your latest requests (up to eight)
    are kept word for word under the summary, so the goal isn't lost in the retelling.
 
+**The task sheet.** Next to the summary, and next to your request when old tool output is removed,
+lcode pins a short sheet, so the state of the work survives:
+
+- the plan (the model's todo list);
+- the notes the model keeps with it (decisions and why, findings, open questions);
+- the files changed in the session;
+- the last check.
+
+It's saved with the session, so `lcode -c` brings it back, and `/status` shows it to you.
+
 `lcode config set compact_at 128k` moves the ceiling, and `0` turns it off, leaving only the 85%
 rule. `/context` shows where the current session makes room.
 

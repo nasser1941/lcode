@@ -63,6 +63,7 @@ COMMANDS = {
     "/mode": "Permission mode: ask | plan | auto-edit | yolo (Shift+Tab cycles)",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
+    "/status": "The task sheet: your requests, the plan and notes, files changed, the last check",
     "/jobs": "Background commands the model started: /jobs, /jobs stop <id>",
     "/commit": "Commit the changes with a message in the repository's style, after you approve it",
     "/review": "Review the uncommitted changes, or the branch against a base: /review [base]",
@@ -107,6 +108,31 @@ def mention(path: Path) -> str:
     home = Path.home()
     shown = f"~/{path.relative_to(home)}" if path.is_relative_to(home) else str(path)
     return f'@"{shown}"' if " " in shown else f"@{shown}"
+
+
+def status_command(agent: Agent) -> None:
+    """What the session is doing, as lcode keeps it for the model (the task sheet)."""
+    c = agent.console
+    requests = context_tools.user_requests(agent.messages)
+    if not requests and not agent.tools.todos and not agent.tools.changed:
+        c.print("Nothing yet: no requests in this session.")
+        return
+    if requests:
+        latest = requests[-3:]
+        lines = [f"[dim]{len(requests) - len(latest) + i + 1}.[/] {escape(r[:300])}" for i, r in enumerate(latest)]
+        c.print(Panel("\n".join(lines), title="Requests (latest)", title_align="left", border_style="cyan"))
+    if agent.tools.todos or agent.tools.notes:
+        agent.tools.show_todos()
+    if agent.tools.changed:
+        c.print(f"[bold]Files changed:[/] {escape(', '.join(agent.tools.changed))}")
+    if agent.check_results:
+        last = agent.check_results[-1]
+        code = last.get("exit_code")
+        state = (
+            "[green]passed[/]" if code == 0 else "didn't run" if code is None else f"[red]failed[/] (exit code {code})"
+        )
+        c.print(f"[bold]Last check:[/] {escape(str(last.get('command')))} {state}")
+    c.print("[dim]The model keeps this too, even when old messages are removed or summarized.[/]")
 
 
 def build_session(agent: Agent) -> PromptSession:
@@ -978,6 +1004,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
             c.print(f"Working directory: {p}")
         else:
             c.print(f"[red]Not a directory: {p}[/]")
+    elif cmd == "/status":
+        status_command(agent)
     elif cmd == "/todos":
         agent.tools.show_todos()
     elif cmd == "/jobs":
