@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-10-14
+
 ### Added
 
 - A task sheet that survives long sessions. The plan (the todo list), the model's notes (decisions,
@@ -677,7 +679,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.31.0...HEAD
+[0.31.0]: https://github.com/nasser1941/lcode/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/nasser1941/lcode/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/nasser1941/lcode/compare/v0.28.1...v0.29.0
 [0.28.1]: https://github.com/nasser1941/lcode/compare/v0.28.0...v0.28.1
