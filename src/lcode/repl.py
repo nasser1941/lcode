@@ -754,6 +754,7 @@ def restore_checkpoint(agent: Agent, target: Checkpoint, rewind: bool) -> None:
         agent.messages = agent.messages[:index]
         agent.reflected = min(agent.reflected, index)
         agent.ctx_used = sum(len(json.dumps(m)) for m in agent.messages) // 3
+        agent.counted_chars = None
         c.print(f"The conversation is back to before request {target.n} as well.")
     elif plan.restore or plan.remove:
         what = "undid the file changes from" if not rewind else "rolled the files back to before"
