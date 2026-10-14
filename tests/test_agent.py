@@ -227,3 +227,22 @@ def test_markdown_streamer_waits_for_complete_blocks():
     assert "y = 2" in console.file.getvalue()
     md.flush()
     assert "Done." in console.file.getvalue()
+
+
+def test_the_project_python_is_named(make_agent, tmp_path):
+    from lcode.agent import python_line
+
+    plain = make_agent()
+    assert "Python command: `python" in plain.system_prompt()
+    venv = plain.cwd / ".venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").write_text("")
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\n")
+    assert "Python command: `.venv/bin/python` (the project's virtual environment" in plain.system_prompt()
+    sub = plain.cwd / "src" / "pkg"
+    assert (
+        python_line(sub)
+        == f"`{venv / 'bin' / 'python'}` (the project's virtual environment: plain python lacks its packages)"
+    )
+    (tmp_path / "repo" / ".git").mkdir(parents=True)  # not looked for above the repository
+    assert python_line(tmp_path / "repo").startswith("`python")

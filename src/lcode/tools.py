@@ -29,7 +29,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from lcode import matching, secretscan, web
+from lcode import matching, screenshots, secretscan, web
 from lcode.context import OutputSpool, shorten
 from lcode.jobs import JobError, describe, stop_leftovers
 from lcode.permissions import bash_key, is_read_only
@@ -184,6 +184,31 @@ SCHEMAS = [
             },
         },
         ["todos"],
+    ),
+    _fn(
+        "screenshot",
+        "See a desktop program or web page as the user would, without a screen: it runs the program (or opens the "
+        "page), saves a screenshot in .lcode/screenshots/ and returns what it shows, with the sizes of windows and "
+        "widgets (Qt) or of the page, and the browser's console errors. Use it to check GUI and layout work instead "
+        "of guessing. Python Qt programs run offscreen; other desktop programs on a virtual display (Linux); web pages "
+        "in a headless browser. For a web app, give the command that starts its server and the url.",
+        {
+            "command": {"type": "string", "description": "Command that starts the program, or the web server"},
+            "url": {"type": "string", "description": "Page to open: a URL, localhost:PORT/path or an .html file"},
+            "question": {
+                "type": "string",
+                "description": "What to check, e.g. 'Are all six panels inside the window?'",
+            },
+            "screen": {"type": "string", "description": "Screen (or browser window) size, WxH (default 1920x1080)"},
+            "wait": {"type": "integer", "description": "Seconds to let it start and draw first (default 3)"},
+            "full_page": {"type": "boolean", "description": "Web pages: the whole page, not just the window"},
+            "mode": {
+                "type": "string",
+                "enum": ["auto", "qt", "xvfb"],
+                "description": "Desktop programs: auto (default), qt (Python Qt, offscreen), xvfb (virtual display)",
+            },
+        },
+        [],
     ),
 ]
 WEB_SEARCH_SCHEMA = _fn(
@@ -663,6 +688,92 @@ class Toolbox:
         return run_tool(self.agent, action, name, type, description, details, scope)
 
     # -- images
+    def t_screenshot(
+        self,
+        command: str = "",
+        url: str = "",
+        question: str = "",
+        screen: str = "",
+        wait: int = screenshots.DEFAULT_WAIT,
+        full_page: bool = False,
+        mode: str = "auto",
+    ) -> str:
+        command, url = (command or "").strip(), (url or "").strip()
+        if not command and not url:
+            raise ToolError("give command (the program to start), url (the page), or both (a server and its page)")
+        if mode not in ("auto", "qt", "xvfb"):
+            raise ToolError("mode must be auto, qt or xvfb")
+        try:
+            size = screenshots.parse_screen(screen)
+            if url:
+                url = screenshots.normalize_url(url, self.agent.cwd)
+        except screenshots.ShotError as e:
+            raise ToolError(str(e)) from e
+        if command:
+            if self.agent.sandbox:
+                raise ToolError(
+                    "with the sandbox on, programs don't run on this machine, so they can't be shown on a screen. Ask "
+                    "the user to turn it off (/sandbox off) for this, or take a screenshot of a url only"
+                )
+            if self.agent.planning() or self.agent.no_changes or self.agent.read_only:
+                raise ToolError("a screenshot runs the program, and only read-only commands run now")
+            verdict = self.agent.perms.rule("bash", command)
+            if verdict is not None and not verdict[0]:
+                return verdict[1]
+            body = Syntax(command, "bash", theme="monokai", word_wrap=True)
+            title = f"Run for a screenshot (in {self.agent.cwd})"
+            ok, feedback = self.agent.perms.request(bash_key(command), "bash", title, body, command)
+            if not ok:
+                return feedback
+            self.agent.checkpoint()  # the program may change files, like any command
+        if url and not screenshots.is_local(url):
+            domain = web.urlparse(url).netloc or url
+            ok, feedback = self._web_allowed(f"web:{domain}", "Open a web page for a screenshot", url)
+            if not ok:
+                return feedback
+
+        def cancelled() -> bool:
+            return self.agent.cancel is not None and self.agent.cancel.is_set()
+
+        try:
+            with self.agent.activity("Taking the screenshot"):
+                shot = screenshots.take(
+                    self.agent.cwd,
+                    screenshots.shots_dir(self.agent.cwd),
+                    command=command or None,
+                    url=url or None,
+                    screen=size,
+                    wait=wait,
+                    full_page=full_page,
+                    mode=mode,
+                    cancel=cancelled,
+                )
+        except screenshots.ShotError as e:
+            raise ToolError(f"no screenshot: {e}") from e
+        w, h = shot.screen
+        where = "window" if url else "screen"
+        self.console.print(Text(f"  ⎿ {self.rel(shot.image)} ({shot.how}, {w}x{h} {where})", style="dim"))
+        lines = [f"Screenshot ({shot.how}, {w}x{h} {where}): {self.rel(shot.image)}"]
+        if shot.windows:
+            lines.append("Each window on its own: " + ", ".join(self.rel(p) for p in shot.windows))
+        lines += shot.report
+        if shot.output:
+            lines.append(f"What the {'server' if url else 'program'} printed:\n{shot.output}")
+        if self.agent.vision_model():
+            what = f"the page {url}" if url else f"the program `{command}` on a {w}x{h} screen"
+            ask = f"This is a screenshot of {what}." + (f" {question.strip()}" if question.strip() else "")
+            try:
+                seen = self.agent.look(shot.image, ask)
+                lines.append(f"What it shows (described by {self.agent.vision_model()}):\n{seen}")
+            except ToolError as e:
+                lines.append(f"(Nobody could look at the picture: {e}. The sizes above are measured.)")
+        else:
+            lines.append(
+                "(No model that can see images is installed, so only the measurements above are known. "
+                "For descriptions too: ollama pull qwen3-vl:8b, then lcode config set vision_model qwen3-vl:8b)"
+            )
+        return "\n".join(lines)
+
     def t_view_image(self, path: str, question: str = "") -> str:
         p = self.path(path)
         return f"[{self.rel(p)}, as described by {self.agent.vision_model()}]\n" + self.agent.look(p, question)

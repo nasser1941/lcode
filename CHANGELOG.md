@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Screenshots without a screen: a `screenshot` tool runs a desktop program or opens a web page the
+  way you would see it, saves the shot in `.lcode/screenshots/`, and returns what it shows with the
+  sizes behind it. For a Python Qt program, that's each window against the screen, the size its
+  layout needs, and the widgets that stick out or overlap. For a web page or a local server
+  (headless Chrome), it's the page's size, what scrolls sideways, and the console errors and
+  failed requests. Other desktop programs run on a virtual display (Xvfb). See
+  [Screenshots](https://nasser1941.github.io/lcode/usage/#screenshots).
+
+### Fixed
+
+- In a project with a virtual environment (`.venv`, `venv` or `env`), the model is told to run its
+  Python (`.venv/bin/python`) rather than plain `python`, which lacks the project's packages. Found
+  when the model checked a PySide6 app with the system Python, failed, and stopped checking.
+
 ## [0.33.1] - 2026-10-14
 
 ### Changed

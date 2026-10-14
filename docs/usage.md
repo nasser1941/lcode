@@ -106,6 +106,7 @@ reasoning is on.
 | `web_search` | Search the web for current information (needs a [search provider](#web-search)) |
 | `web_fetch` | Read a web page or text file by URL as clean text |
 | `view_image` | Look at an image: a model that can see describes it ([Images](#images)) |
+| `screenshot` | Run a desktop program or open a web page without a screen, and see it with its sizes ([Screenshots](#screenshots)) |
 | `agent` | Hand a task to a [subagent](agents.md) with its own context; only its report comes back |
 | `memory` | Save, update or delete [notes](memory.md) that later sessions load |
 | `repo_map` | The [repository map](search.md): important files, classes and functions, ranked (larger repositories; small ones get it in the instructions) |
@@ -341,6 +342,43 @@ lcode config set vision_model qwen3-vl:8b
 Loading a second model takes a moment: on a 12 GB GPU, describing an image with the original
 `qwen3.6:35b-a3b-coding` takes about a minute, and the next request reloads the main model. Turn
 image support off with `lcode config set vision_model off`.
+
+## Screenshots
+
+Layout bugs are invisible in the code: a window bigger than the screen, panels cut off, a page that
+scrolls sideways. With the `screenshot` tool the model runs the program, or opens the page, without
+a screen and sees what you would, measured:
+
+```text
+● screenshot(python camera_wall.py)
+  ⎿ .lcode/screenshots/20261014-120211-camera-wall.png (Qt offscreen (PyQt6), 1366x768 screen)
+```
+
+```text
+- Window "Camera Wall" (CameraWall): 1362x764 at (0, 0)
+  Its layout needs at least 1950x984, more than the screen has
+  Sticks out of the window: Panel #panel-4: 640x480 at (9, 385)
+  Overlap (190x480): Panel #panel-1: 640x480 at (9, 9) and Panel #panel-2: 640x480 at (459, 9)
+```
+
+| What | How | Besides the picture |
+|---|---|---|
+| A Python Qt program (PyQt5/6, PySide2/6) | Qt's offscreen platform, on a screen of the size asked for (Qt 6) | Each window's size and position, the size its layout needs, widgets that stick out or overlap |
+| Any other desktop program (Linux) | A virtual display, Xvfb | The size and position of each window |
+| A web page, an `.html` file or a local server | Headless Chrome, Chromium or Edge (Firefox takes the picture only) | The page's size against the window and what sticks out sideways, console errors, failed requests |
+
+- For a web app, the model gives the command that starts the server and the page's URL: lcode
+  starts the server, waits for the page to answer, takes the shot and stops the server.
+- A model that can see describes the picture with the model's question in mind (see
+  [Which model looks](#images)). Without one, the measurements still come back.
+- Shots are saved in `.lcode/screenshots/` in the project, which keeps itself out of git, so you
+  can look too.
+- Running a program asks for permission like any command. A web page that isn't local follows the
+  `web` setting. With the [sandbox](sandbox.md) on, programs can't be shown, since they don't run on
+  your machine.
+- Needs: Xvfb for other desktop programs (`sudo apt install xvfb x11-apps`), and Chrome or
+  Chromium for web pages. On macOS only Qt programs and web pages work, since there's no virtual
+  display.
 
 ## Permissions
 
