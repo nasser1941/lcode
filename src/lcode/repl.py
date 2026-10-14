@@ -27,7 +27,19 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, backends, catalog, clipboard, extensions, gitflow, limits, residency, sessions, web
+from lcode import (
+    __version__,
+    backends,
+    catalog,
+    clipboard,
+    escalate,
+    extensions,
+    gitflow,
+    limits,
+    residency,
+    sessions,
+    web,
+)
 from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
@@ -65,6 +77,7 @@ COMMANDS = {
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
     "/status": "The task sheet: your requests, the plan and notes, files changed, the last check",
+    "/escalate": "Ask the stronger model (escalate_model) for advice, with your OK: /escalate [what's wrong]",
     "/jobs": "Background commands the model started: /jobs, /jobs stop <id>",
     "/commit": "Commit the changes with a message in the repository's style, after you approve it",
     "/review": "Review the uncommitted changes, or the branch against a base: /review [base]",
@@ -910,6 +923,28 @@ def stop_steering(agent: Agent, reader: KeyReader) -> None:
         agent.console.print(Text("✎ What you typed didn't reach the model; it's in the prompt below.", style="cyan"))
 
 
+def escalate_command(agent: Agent, arg: str) -> None:
+    """Ask the stronger model about the work so far, then let the model carry on with its advice."""
+    if agent.planning():
+        agent.console.print("[yellow]Leave plan mode first (Shift+Tab): the advice is for changing the code.[/]")
+        return
+    if not agent.can_escalate():
+        agent.console.print(
+            "[yellow]No stronger model is set.[/] Set one, for example:\n"
+            "  lcode config set escalate_model anthropic/<model>   (with ANTHROPIC_API_KEY in your environment)\n"
+            "  lcode config set escalate_model ollama/qwen3.8-27b  (a bigger local model)\n"
+            "See https://nasser1941.github.io/lcode/usage/#a-stronger-model-when-stuck"
+        )
+        return
+    if not context_tools.user_requests(agent.messages):
+        agent.console.print("[dim]Nothing to ask about yet: make a request first.[/]")
+        return
+    why = f"the user says: {arg}" if arg else "the user asked for a second opinion on the work so far"
+    advice = escalate.run(agent, why)
+    if advice:
+        run_safely(agent, f"{arg}\n\n{advice}" if arg else advice)
+
+
 def session_start(agent: Agent) -> None:
     """session_start hooks: their output is shown, and with feedback = true also given to the model."""
     for outcome in agent.hooks.run("session_start", {"cwd": str(agent.cwd), "session": agent.session_id}, agent.cwd):
@@ -1037,6 +1072,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         jobs_command(agent, arg)
     elif cmd == "/init":
         run_safely(agent, INIT_PROMPT)
+    elif cmd == "/escalate":
+        escalate_command(agent, arg)
     elif cmd in REPLACEABLE and cmd[1:] not in agent.extensions().commands:
         git_command(agent, cmd, arg)
     elif cmd[1:] in agent.extensions().commands:

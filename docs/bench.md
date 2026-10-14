@@ -45,6 +45,22 @@ cause. Neither is in the default set, so results stay comparable with earlier ve
 `--code-search` indexes each task's folder for [semantic search](search.md#semantic-code-search);
 both are off in `lcode bench` by default, for the same reason.
 
+### A second try, and a stronger model
+
+`--retry` gives a failed task one more try, as a user would ask: "That didn't fix it: it still
+doesn't work right. Look again." `--escalate MODEL` sets a [stronger model](usage.md#a-stronger-model-when-stuck)
+that's asked when the model is stuck and, with `--retry`, before the second try, as `/escalate`
+would: no questions asked, since the flag is your OK. Comparing the two shows what the stronger
+model's advice adds to the same second chance:
+
+```bash
+lcode bench --tasks runtime-bug --retry --rounds 3
+lcode bench --tasks runtime-bug --retry --rounds 3 --escalate ollama/qwen3.8-27b
+```
+
+The JSON report has, for each task, `first_passed` (with `--retry`, whether the first try passed)
+and `escalations`.
+
 ### Long sessions
 
 Each task normally starts a new conversation. `--session` runs them all in **one** conversation

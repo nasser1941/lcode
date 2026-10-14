@@ -83,6 +83,7 @@ reasoning is on.
 | `/cd DIR` | Change the working directory |
 | `/todos` | Show the model's task list |
 | `/status` | The task sheet: your latest requests, the plan and the model's notes, files changed, the last check |
+| `/escalate` | Ask the [stronger model](#a-stronger-model-when-stuck) for advice on the work, with your OK; `/escalate <what's wrong>` says what to look at |
 | `/jobs [stop ID]` | The [background commands](#background-commands) the model started; stop one |
 | `/commit [notes]` | [Commit](git.md#commit) the changes with a message in the repository's style, once you approve it |
 | `/review [base]` | [Review](git.md#review) the uncommitted changes, or the branch against a base |
@@ -207,6 +208,51 @@ no faster and missed that gap every time, so it reasons like the model does. Tur
 The review is asked on top of the conversation rather than in a fresh one. The model server keeps
 the processed conversation cached, and a separate review would push it out, so the next request
 would have to read the whole conversation again. On a small GPU that's tens of seconds.
+
+## A stronger model when stuck
+
+Some problems are beyond a local model. When it's stuck, lcode can ask a stronger one for
+advice: a cloud model with your API key, or a bigger local model. The local model gets the advice
+and carries on with its own tools. It's off until you choose the model:
+
+```bash
+lcode config set escalate_model anthropic/<model>   # with ANTHROPIC_API_KEY in your environment
+lcode config set escalate_model openai/<model>      # OPENAI_API_KEY
+lcode config set escalate_model xai/<model>         # XAI_API_KEY
+lcode config set escalate_model ollama/qwen3.8-27b  # a bigger local model: free, and nothing leaves
+lcode config set escalate_price 3/15                # dollars per million tokens in/out, for the cost
+```
+
+**When.** lcode offers it when the [loop breaker](how-it-works.md#when-the-model-repeats-itself)
+would stop the request, and when the project's [checks](#checks-before-done) fail twice in a row
+after the model's fixes, at most once per request. You can also ask at any time: `/escalate`, or
+`/escalate the window still grows` to say what's wrong.
+
+**Nothing is sent without asking**, in any permission mode:
+
+```text
+╭─ Ask claude-… for help? ──────────────────────────────────────────────────╮
+│ Why: the project's checks (`pytest -q`) failed 2 times in a row          │
+│ What goes: your requests, the task sheet, the failure, the last steps     │
+│ and these files: wall.py, simulate.py (3.1K tokens)                       │
+│ Where: claude-… (Anthropic), at api.anthropic.com                         │
+│ Cost: about $0.009 to $0.071 (3.1K tokens in at $3/M, up to 4.1K out …)  │
+╰───────────────────────────────────────────────────────────────────────────╯
+  Send it? [y]es / [n]o / [s]how what's sent:
+```
+
+- **What goes:** your last requests, the [task sheet](how-it-works.md#context-management), why
+  it's stuck (the failing check's output, the repeated call), the last few steps, and the files the
+  request changed or read: never the whole session or the rest of the repository. Press `s` to read
+  all of it before you decide.
+- **Keys** come from environment variables, are read when needed, and go only to their own
+  provider. lcode never stores them.
+- **Cost.** The token count is always shown; the price only when you set `escalate_price`, since
+  prices change. A local model is free.
+- **Another server:** `escalate_url` points at another Ollama (`ollama/<model>`) or any OpenAI
+  API (`custom/<model>`, key in `LCODE_ESCALATE_API_KEY`).
+- `lcode -p` can't ask, so it doesn't escalate unless you add `--escalate`, which is your OK for
+  that run. `--output json` lists what was asked in `escalations`.
 
 ## Background commands
 

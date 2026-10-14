@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A stronger model when stuck: with `escalate_model` set (a cloud model with your API key, such as
+  `anthropic/…`, `openai/…` or `xai/…`, or a bigger local one, `ollama/qwen3.8-27b`), lcode
+  offers to ask it for advice when the loop breaker would stop a request or the checks fail twice
+  in a row, and `/escalate` asks at any time. Nothing is sent without asking, in any permission
+  mode: you see why, what goes (your requests, the task sheet, the failure, the last steps and the
+  files in question, never the whole session), where, and the cost (`escalate_price`), and can
+  read it all first. Keys come only from environment variables and go only to their provider.
+  `lcode -p --escalate` allows it for one run, and `lcode bench --retry --escalate MODEL`
+  measures it. Measured on a 12 GB laptop with qwen3.6-35b and the bigger local qwen3.8-27b as
+  the advisor, on `runtime-bug` with a second try: 1 of 3 passed with its advice, as without it
+  (6 of 9 hidden-test problems fixed against 4), at about 9 minutes per question. A local advisor
+  helps a little; a cloud model is the one to try. See
+  [A stronger model when stuck](https://nasser1941.github.io/lcode/usage/#a-stronger-model-when-stuck).
+
 ### Fixed
 
 - Long command output can't fill the disk any more. lcode keeps the full text of long outputs so the

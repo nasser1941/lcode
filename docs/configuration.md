@@ -45,6 +45,9 @@ lcode config path                      # print the file location
 | `notify_after` | `30` | Seconds a request runs before it notifies |
 | `review` | `off` | Before the answer, [review a change](usage.md#a-review-before-the-answer) against the request and send problems back to the model: `auto` or `off` |
 | `checks` | `auto` | Run the project's [checks](usage.md#checks-before-done) after a request changed files: `auto` (found from the project), `off`, or a command |
+| `escalate_model` | — | A [stronger model](usage.md#a-stronger-model-when-stuck) to ask, with your OK, when the model is stuck: `anthropic/…`, `openai/…`, `xai/…` (keys from `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`), `ollama/<model>`, or `custom/<model>` with `escalate_url` |
+| `escalate_url` | — | Its server, when it isn't the provider's usual one: another Ollama, or any OpenAI-compatible API |
+| `escalate_price` | — | Its price in dollars per million tokens, input/output (e.g. `3/15`), for the cost shown before each use |
 | `repeat_limit` | `3` | Identical tool calls with identical results before lcode [steps in](how-it-works.md#when-the-model-repeats-itself); `0` turns it off |
 | `secret_check` | `true` | Before `git commit` and `git push`, look for passwords, keys and tokens they'd add ([details](usage.md#secrets-in-commits)) |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
