@@ -7,9 +7,10 @@ hide:
 
 <div class="hero" markdown>
 
-![lcode logo](assets/logo.svg){ .hero-logo }
+![lcode](assets/logo.png#only-light){ .hero-logo }
+![lcode](assets/logo-dark.png#only-dark){ .hero-logo }
 
-# lcode
+# lcode { .sr-only }
 
 **A coding agent that runs entirely on your own machine.**
 Open-weight models · up to 256K tokens of context · your NVIDIA GPU or Apple Silicon Mac · your code stays local.

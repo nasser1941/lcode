@@ -8,14 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=block" rel="stylesheet">
 <style>
-  :root { --cyan: #22d3ee; --violet: #a78bfa; --text: #e2e8f0; --muted: #94a3b8; }
+  :root { --cyan: #00e3fc; --cyan-light: #8ef4ff; --text: #e6edf3; --muted: #94a3b8; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 1280px; height: 640px; overflow: hidden; }
   body {
     font-family: Inter, system-ui, sans-serif; color: var(--text);
     background:
-      radial-gradient(900px 500px at 85% 20%, rgba(167, 139, 250, 0.22), transparent 60%),
-      radial-gradient(700px 500px at 10% 90%, rgba(34, 211, 238, 0.18), transparent 60%),
+      radial-gradient(900px 500px at 85% 20%, rgba(0, 227, 252, 0.14), transparent 60%),
+      radial-gradient(700px 500px at 10% 90%, rgba(0, 227, 252, 0.16), transparent 60%),
       linear-gradient(135deg, #0b1120 0%, #0f172a 55%, #111827 100%);
     display: flex; align-items: center; padding: 64px 72px; gap: 56px;
   }
@@ -25,12 +25,11 @@
     background-size: 40px 40px;
   }
   .left { flex: 1 1 0; position: relative; }
-  .brand { display: flex; align-items: center; gap: 22px; margin-bottom: 26px; }
-  .brand svg { width: 92px; height: 92px; filter: drop-shadow(0 10px 30px rgba(34, 211, 238, 0.25)); }
-  h1 { font-size: 104px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+  .brand { margin: 0 0 30px -10px; }
+  .brand img { height: 118px; display: block; filter: drop-shadow(0 10px 30px rgba(0, 227, 252, 0.22)); }
   .tagline { font-size: 34px; font-weight: 600; line-height: 1.25; margin-bottom: 30px; max-width: 560px; }
   .tagline span {
-    background: linear-gradient(90deg, var(--cyan), var(--violet)); -webkit-background-clip: text; color: transparent;
+    background: linear-gradient(90deg, var(--cyan), var(--cyan-light)); -webkit-background-clip: text; color: transparent;
   }
   .chips { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 34px; max-width: 580px; }
   .chip {
@@ -56,18 +55,7 @@
 </head>
 <body>
   <div class="left">
-    <div class="brand">
-      <svg viewBox="0 0 128 128" aria-hidden="true">
-        <defs>
-          <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/></linearGradient>
-          <linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#a78bfa"/></linearGradient>
-        </defs>
-        <rect width="128" height="128" rx="28" fill="url(#bg)" stroke="rgba(148,163,184,.35)" stroke-width="2"/>
-        <path d="M34 40 L62 64 L34 88" fill="none" stroke="url(#fg)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
-        <rect x="70" y="80" width="30" height="10" rx="5" fill="url(#fg)"/>
-      </svg>
-      <h1>lcode</h1>
-    </div>
+    <div class="brand"><img src="../docs/assets/logo-dark.png" alt="lcode"></div>
     <p class="tagline">A coding agent that runs <span>entirely on your own machine.</span></p>
     <div class="chips">
       <div class="chip">Open-weight models</div>

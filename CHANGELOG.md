@@ -6,6 +6,18 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- A new logo, on GitHub, PyPI and the docs site (header, favicon, home page and link previews),
+  with a light version for dark backgrounds. `scripts/make_logos.py` makes every size from the
+  original.
+
+### Fixed
+
+- The README's images and links work on PyPI: the logo, the demo and the links to the license
+  and contributing guide were relative, so PyPI showed them broken.
+- The source package is half the size (0.6 MB): it no longer carries the docs' images.
+
 ## [0.33.0] - 2026-10-14
 
 ### Added

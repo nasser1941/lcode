@@ -1,8 +1,9 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" width="96" alt="lcode logo">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/nasser1941/lcode/main/docs/assets/logo-dark.png">
+    <img src="https://raw.githubusercontent.com/nasser1941/lcode/main/docs/assets/logo.png" width="360" alt="lcode">
+  </picture>
 </p>
-
-<h1 align="center">lcode</h1>
 
 <p align="center">
   <b>A coding agent that runs entirely on your own machine.</b><br>
@@ -13,7 +14,7 @@
   <a href="https://github.com/nasser1941/lcode/actions/workflows/ci.yml"><img src="https://github.com/nasser1941/lcode/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://nasser1941.github.io/lcode/"><img src="https://github.com/nasser1941/lcode/actions/workflows/docs.yml/badge.svg" alt="Docs"></a>
   <a href="https://pypi.org/project/lcode-cli/"><img src="https://img.shields.io/pypi/v/lcode-cli.svg" alt="PyPI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+  <a href="https://github.com/nasser1941/lcode/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20(Apple%20Silicon)-lightgrey.svg" alt="Linux and macOS">
 </p>
@@ -22,11 +23,11 @@
   <a href="https://nasser1941.github.io/lcode/"><b>Documentation</b></a> ·
   <a href="https://nasser1941.github.io/lcode/installation/">Install</a> ·
   <a href="https://nasser1941.github.io/lcode/models/">Models</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="https://github.com/nasser1941/lcode/blob/main/CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
-  <img src="docs/assets/demo.svg" alt="lcode finding and fixing a bug, then running the tests" width="820">
+  <img src="https://raw.githubusercontent.com/nasser1941/lcode/main/docs/assets/demo.svg" alt="lcode finding and fixing a bug, then running the tests" width="820">
 </p>
 
 Point lcode at a repository and talk to it in your terminal. It explores the code, answers
@@ -186,8 +187,8 @@ See the pinned [Roadmap issue](https://github.com/nasser1941/lcode/issues/10). N
 ## Contributing
 
 Contributions are welcome: bug reports, model test results, docs and code. See
-[CONTRIBUTING.md](CONTRIBUTING.md). Please follow the [code of conduct](CODE_OF_CONDUCT.md), and
-report security issues privately as described in [SECURITY.md](SECURITY.md).
+[CONTRIBUTING.md](https://github.com/nasser1941/lcode/blob/main/CONTRIBUTING.md). Please follow the [code of conduct](https://github.com/nasser1941/lcode/blob/main/CODE_OF_CONDUCT.md), and
+report security issues privately as described in [SECURITY.md](https://github.com/nasser1941/lcode/blob/main/SECURITY.md).
 
 ## Acknowledgements
 
@@ -198,4 +199,4 @@ the open-weight models from Qwen, Poolside, NVIDIA and OpenAI,
 
 ## License
 
-[MIT](LICENSE) © 2026 Naser Derakhshan
+[MIT](https://github.com/nasser1941/lcode/blob/main/LICENSE) © 2026 Naser Derakhshan
