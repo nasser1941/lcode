@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-10-14
+
 ### Added
 
 - Screenshots without a screen: a `screenshot` tool runs a desktop program or opens a web page the
@@ -738,7 +740,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.33.1...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/nasser1941/lcode/compare/v0.33.1...v0.34.0
 [0.33.1]: https://github.com/nasser1941/lcode/compare/v0.33.0...v0.33.1
 [0.33.0]: https://github.com/nasser1941/lcode/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/nasser1941/lcode/compare/v0.31.0...v0.32.0
