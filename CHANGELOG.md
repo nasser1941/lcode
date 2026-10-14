@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-10-14
+
 ### Added
 
 - A stronger model when stuck: with `escalate_model` set (a cloud model with your API key, such as
@@ -767,7 +769,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.35.0...HEAD
+[0.35.0]: https://github.com/nasser1941/lcode/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/nasser1941/lcode/compare/v0.33.1...v0.34.0
 [0.33.1]: https://github.com/nasser1941/lcode/compare/v0.33.0...v0.33.1
 [0.33.0]: https://github.com/nasser1941/lcode/compare/v0.32.0...v0.33.0
