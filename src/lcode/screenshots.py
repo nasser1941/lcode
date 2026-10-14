@@ -786,23 +786,32 @@ def is_local(url: str) -> bool:
     )
 
 
+def answers(url: str) -> bool:
+    """Whether something answers at the URL (an HTTP error is an answer: the page shows it)."""
+    if url.startswith("file:"):
+        return True
+    try:
+        with urllib.request.urlopen(url, timeout=2):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
 def wait_for_server(url: str, proc: subprocess.Popen, timeout: int, log: Path, cancel=None) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
         if cancel is not None and cancel():
             raise KeyboardInterrupt
+        if answers(url):  # first: a command that hands off to a server and exits is fine too
+            return
         if proc.poll() is not None:
             raise ShotError(
                 f"the server command exited (exit code {proc.returncode}) before {url} answered"
                 + (f"\nWhat it printed:\n{printed(log)}" if printed(log) else "")
             )
-        try:
-            with urllib.request.urlopen(url, timeout=2):
-                return
-        except urllib.error.HTTPError:
-            return  # it answers, even if with an error: the page shows it
-        except (urllib.error.URLError, OSError, ValueError):
-            time.sleep(0.5)
+        time.sleep(0.5)
     raise ShotError(
         f"{url} didn't answer within {timeout}s of starting the server"
         + (f"\nWhat it printed:\n{printed(log)}" if printed(log) else "")
@@ -1060,14 +1069,17 @@ def take(
             url = normalize_url(url, cwd)
             server = None
             log = tmp / "server.txt"
+            running = bool(command) and answers(url)  # a server is up already (one the model started, say)
             try:
-                if command:
+                if command and not running:
                     server = run_program(command, cwd, dict(os.environ), log)
                     wait_for_server(url, server, SERVER_TIMEOUT, log, cancel)
                 shot = web(url, screen, wait, full_page, path, tmp)
             finally:
                 stop(server)
-            if command:
+            if running:
+                shot.report.append(f"({url} already answered, so `{command}` wasn't started: a server is running.)")
+            elif command:
                 shot.output = printed(log)
             return shot
         if not command:

@@ -347,3 +347,40 @@ def test_a_program_that_fails_to_start(tmp_path):
     with pytest.raises(sh.ShotError) as e:
         sh.take(tmp_path, sh.shots_dir(tmp_path), command=f"{sys.executable} app.py", wait=0, mode="qt")
     assert "exited before showing a window" in str(e.value) and "no camera" in str(e.value)
+
+
+@pytest.fixture
+def local_site(tmp_path):
+    """A web server answering on a free local port, as if one were running already."""
+    import http.server
+    import threading
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), http.server.SimpleHTTPRequestHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_address[1]}/"
+    server.shutdown()
+
+
+def test_a_running_server_isnt_started_again(tmp_path, local_site, monkeypatch):
+    def web(url, screen, wait, full_page, path, tmp):
+        path.write_bytes(b"png")
+        return sh.Shot(image=path, how="headless Chrome", screen=screen, report=["- Page: fine"])
+
+    monkeypatch.setattr(sh, "web", web)
+    marker = tmp_path / "started"
+    shot = sh.take(tmp_path, sh.shots_dir(tmp_path), command=f"touch {marker}; sleep 30", url=local_site, wait=0)
+    assert not marker.exists()  # the command never ran: the port was taken by the running server anyway
+    assert (
+        shot.report[-1]
+        == f"({local_site} already answered, so `touch {marker}; sleep 30` wasn't started: a server is running.)"
+    )
+
+
+def test_a_server_that_answers_counts_even_if_its_command_ended(tmp_path, local_site):
+    log = tmp_path / "server.txt"
+    log.write_text("handed off to a daemon\n")
+    proc = subprocess.Popen(["true"])
+    proc.wait()
+    sh.wait_for_server(local_site, proc, 5, log)  # no error
+    with pytest.raises(sh.ShotError, match="exited \\(exit code 0\\) before"):
+        sh.wait_for_server("http://127.0.0.1:9/", proc, 5, log)
