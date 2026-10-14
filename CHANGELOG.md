@@ -6,6 +6,21 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Steer while it works. Type while a request runs and press Enter: the line goes to the model at
+  its next step, as a note from you, without interrupting anything. The spinner shows what you're
+  typing and the notes waiting. Esc pauses after the current step, so you can look, then go on with
+  or without a note. Notes count as your requests for summaries and the review, and anything that
+  never reached the model goes back into the prompt. A command that runs for a while now shows a
+  spinner with its elapsed time. See
+  [Steer while it works](https://nasser1941.github.io/lcode/usage/#steer-while-it-works).
+
+### Fixed
+
+- "Where you left off" (`lcode -c`) and session titles showed lcode's own messages to the model,
+  such as a failed check, as if you had written them. They show your last request now.
+
 ## [0.32.0] - 2026-10-14
 
 ### Added

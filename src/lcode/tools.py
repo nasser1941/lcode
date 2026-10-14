@@ -1121,6 +1121,8 @@ class Toolbox:
         deadline = time.time() + int(timeout or 180)
         finished = 0.0  # when the command itself ended (its marker arrived)
         held_open = False  # something it started still holds the output open
+        spinner = self.agent.activity("Running the command")  # the elapsed time, and a note being typed
+        spinner.start()
         try:
             while True:
                 if self.agent.cancel is not None and self.agent.cancel.is_set():
@@ -1154,6 +1156,8 @@ class Toolbox:
             reading.clear()
             stop()
             raise
+        finally:
+            spinner.stop()
         reading.clear()
         code = proc.wait()
         if held_open and sandbox and token:

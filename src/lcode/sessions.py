@@ -45,7 +45,9 @@ def title_from(messages: list[dict]) -> str:
         if content.startswith(SUMMARY_PREFIX):
             compacted = True
             continue
-        text = re.split(r"\n\n<(?:file|directory) path=", content, maxsplit=1)[0]
+        if content.startswith("[lcode]"):
+            continue  # lcode's own message to the model (a failed check, a review), not the user's words
+        text = re.split(r"\n\n(?:<(?:file|directory|image) path=|\[lcode[:\]] )", content, maxsplit=1)[0]
         text = " ".join(text.split())
         if text:
             return text if len(text) <= TITLE_LENGTH else text[: TITLE_LENGTH - 1].rstrip() + "…"

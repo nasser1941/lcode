@@ -198,6 +198,7 @@ class Permissions:
         self.always: set[str] = set()
         self.rules = Rules()  # allow and deny lists from the settings (lcode.hooks)
         self.on_prompt = None  # called with the title before lcode asks the user (notification hooks)
+        self.read_line: Callable[[str], str] | None = None  # asks instead of input() (lcode.steer, during a request)
         # Decides instead of asking (lcode.api, lcode acp): True, False, or a message saying why not.
         self.approve: Callable[[dict], bool | str] | None = None
 
@@ -243,7 +244,8 @@ class Permissions:
         if kind == "mcp":
             scope = scope.replace(":", " › ", 1)
         try:
-            answer = input(f"  Allow? [y]es / [a]lways for '{scope}' this session / [n]o (+ optional reason): ")
+            question = f"  Allow? [y]es / [a]lways for '{scope}' this session / [n]o (+ optional reason): "
+            answer = (self.read_line or input)(question)
         except EOFError:
             return False, "The user denied this action (no input available)."
         answer = answer.strip()

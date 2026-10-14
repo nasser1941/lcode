@@ -160,6 +160,8 @@ def test_titles_skip_compaction_summaries(make_agent):
     summary = {"role": "user", "content": f"{sessions.SUMMARY_PREFIX}\n\n## Summary ..."}
     assert sessions.title_from([summary]) == "Compacted conversation"
     assert sessions.title_from([summary, {"role": "user", "content": "next step"}]) == "next step"
+    nudge = {"role": "user", "content": "[lcode] Your last tool call could not be parsed"}
+    assert sessions.title_from([nudge, {"role": "user", "content": "fix it\n\n[lcode] The user wrote"}]) == "fix it"
     # A session keeps its original title after /compact.
     agent = make_agent([reply("ok"), reply("SUMMARY")])
     agent.run_turn("design the cache layer")
