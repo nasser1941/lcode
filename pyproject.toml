@@ -61,6 +61,9 @@ path = "src/lcode/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/lcode"]
 
+[tool.hatch.build.targets.sdist]
+exclude = ["docs/assets/*.png"]  # images for the README and the docs site: not needed to build or install
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
