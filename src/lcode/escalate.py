@@ -233,7 +233,7 @@ def ask_user(agent: Agent, t: Target, why: str, text: str, names: list[str], pri
         f"[bold]Why:[/] {escape(why)}\n"
         f"[bold]What goes:[/] your requests, the task sheet, the failure, the last steps and these files: "
         f"{escape(files)} ({format_k(sent)} tokens)\n"
-        f"[bold]Where:[/] {escape(t.label)} at {escape(t.where)}\n"
+        f"[bold]Where:[/] {escape(t.label)}, {'on' if t.where == 'this machine' else 'at'} {escape(t.where)}\n"
         f"[bold]Cost:[/] {escape(cost_line(t, sent, price))}"
     )
     agent.console.print(Panel(body, title=f"Ask {t.model} for help?", title_align="left", border_style="magenta"))

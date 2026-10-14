@@ -235,7 +235,7 @@ after the model's fixes, at most once per request. You can also ask at any time:
 │ Why: the project's checks (`pytest -q`) failed 2 times in a row          │
 │ What goes: your requests, the task sheet, the failure, the last steps     │
 │ and these files: wall.py, simulate.py (3.1K tokens)                       │
-│ Where: claude-… (Anthropic) at api.anthropic.com                          │
+│ Where: claude-… (Anthropic), at api.anthropic.com                         │
 │ Cost: about $0.009 to $0.071 (3.1K tokens in at $3/M, up to 4.1K out …)  │
 ╰───────────────────────────────────────────────────────────────────────────╯
   Send it? [y]es / [n]o / [s]how what's sent:

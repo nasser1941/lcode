@@ -16,7 +16,10 @@ All notable changes to lcode are documented here. The format follows
   files in question, never the whole session), where, and the cost (`escalate_price`), and can
   read it all first. Keys come only from environment variables and go only to their provider.
   `lcode -p --escalate` allows it for one run, and `lcode bench --retry --escalate MODEL`
-  measures it. See
+  measures it. Measured on a 12 GB laptop with qwen3.6-35b and the bigger local qwen3.8-27b as
+  the advisor, on `runtime-bug` with a second try: 1 of 3 passed with its advice, as without it
+  (6 of 9 hidden-test problems fixed against 4), at about 9 minutes per question. A local advisor
+  helps a little; a cloud model is the one to try. See
   [A stronger model when stuck](https://nasser1941.github.io/lcode/usage/#a-stronger-model-when-stuck).
 
 ### Fixed

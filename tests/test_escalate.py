@@ -131,7 +131,7 @@ def test_nothing_goes_without_asking(make_agent, advisor):
     shown = text(agent)
     assert (
         "Ask claude-sonnet-4-5 for help?" in shown
-        and "Where: claude-sonnet-4-5 (Anthropic) at api.anthropic.com" in shown
+        and "Where: claude-sonnet-4-5 (Anthropic), at api.anthropic.com" in shown
     )
     assert "Cost: about $" in shown and "What would be sent" in shown and "fix the average" in shown
 
