@@ -48,7 +48,7 @@ from lcode.config import format_tokens
 from lcode.jobs import Jobs
 from lcode.mcp import McpManager
 from lcode.ollama import Ollama, OllamaError
-from lcode.permissions import Permissions
+from lcode.permissions import LEADING_CD, Permissions
 from lcode.render import MarkdownStreamer
 from lcode.repeats import Repeats
 from lcode.sandbox import Sandbox, SandboxError, project_root
@@ -122,7 +122,7 @@ SYSTEM_PROMPT = """You are lcode, an autonomous software-engineering agent runni
 # Verifying your work
 - A syntax check or an import only shows that code loads. Run what you changed the way it will be used (the script, the tests, the app) and fix what fails.
 - To fix a bug, first reproduce each problem the user reports with a test, a command or a short script, then run the same checks to show they're gone.
-- For what you can't see, like a GUI, a web page or a layout, check it without a screen where you can: `QT_QPA_PLATFORM=offscreen` for Qt, a headless browser, or a script that prints sizes and positions or renders to an image{look}. Measure instead of assuming.
+- For what you can't see, like a GUI, a web page or a layout, use the screenshot tool: it runs the program (or opens the page) without a screen and returns what it shows, with the sizes of windows, widgets or the page measured{look}. Measure instead of assuming.
 - Never claim something works, mark a todo done, or call it tested unless you ran it. If you couldn't check something, say so and tell the user exactly what to look for. If something fails, say so and show the relevant error.{checks}
 
 # Communication
@@ -131,7 +131,7 @@ SYSTEM_PROMPT = """You are lcode, an autonomous software-engineering agent runni
 
 # Environment
 - Working directory: {cwd}
-- OS: {os}; shell: bash; Python command: `{python}`
+- OS: {os}; shell: bash; Python command: {python}
 - Date: {date}
 - Git: {git}
 
@@ -216,6 +216,30 @@ def call_arguments(call: dict) -> dict:
         except json.JSONDecodeError:
             args = {}
     return args if isinstance(args, dict) else {}
+
+
+VENV_DIRS = (".venv", "venv", "env")
+
+
+def project_python(cwd: Path) -> Path | None:
+    """The project's virtual environment's Python (.venv, venv or env, here or up to the repository's root)."""
+    for folder in [cwd, *cwd.parents][:4]:
+        for name in VENV_DIRS:
+            path = folder / name / "bin" / "python"
+            if path.exists() and (folder / name / "pyvenv.cfg").exists():
+                return path
+        if (folder / ".git").exists():
+            break  # not beyond the repository
+    return None
+
+
+def python_line(cwd: Path) -> str:
+    """How the system prompt names the Python command."""
+    venv = project_python(cwd)
+    if venv is None:
+        return f"`{'python' if shutil.which('python') else 'python3'}`"
+    shown = venv.relative_to(cwd) if cwd in venv.parents else venv
+    return f"`{shown}` (the project's virtual environment: plain python lacks its packages)"
 
 
 class Progress:
@@ -372,7 +396,7 @@ class Agent:
             model=self.settings.model,
             cwd=self.cwd,
             os=f"{platform.system()} {platform.release()} ({platform.machine()})",
-            python="python" if shutil.which("python") else "python3",
+            python=python_line(self.cwd),
             date=dt.date.today().isoformat(),
             git=git_info(self.cwd),
             tree=tree(self.cwd, depth=1, limit=120),
@@ -383,7 +407,7 @@ class Agent:
             skills=extensions.skills_prompt(self.extensions().skills, self.settings.context),
             code=self.code_prompt(),
             map=self.map_prompt(),
-            look=" you look at with view_image" if self.vision_model() else "",
+            look="; look at other images with view_image" if self.vision_model() else "",
             checks=self.checks_prompt(),
         )
 
@@ -1000,6 +1024,9 @@ class Agent:
             return f"agent({args.get('type', '')}: {args.get('description') or str(args.get('task', ''))[:50]})"
         if name == "bash":
             return f"$ {str(args.get('command', ''))[:60]}"
+        if name == "screenshot":
+            what = args.get("url") or LEADING_CD.sub("", str(args.get("command") or ""))
+            return f"screenshot({what[:60]})"
         if name in ("web_search", "web_fetch", "view_image"):
             return f"{name}({args.get('query') or args.get('url') or args.get('path') or ''})"
         if self.mcp and self.mcp.owns(name):
