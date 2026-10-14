@@ -1,6 +1,7 @@
 """Steer while it works (#115): notes typed during a request reach the model at its next step; Esc pauses."""
 
 import os
+import select
 import sys
 import time
 
@@ -306,7 +307,7 @@ def test_keys_from_a_real_terminal():
             mode = termios.tcgetattr(slave)
             assert mode[3] & termios.ECHO and mode[3] & termios.ICANON
             os.write(master, b"y\n")
-            time.sleep(0.3)
+            assert select.select([slave], [], [], 3)[0]
             assert os.read(slave, 100) == b"y\n"  # the answer goes to the question, not into a note
         assert s.typed == "" and s.notes == ["fix the tést"]
 
@@ -314,12 +315,20 @@ def test_keys_from_a_real_terminal():
         wait_for(lambda: s.notes == ["fix the tést", "more"])
         assert not termios.tcgetattr(slave)[3] & termios.ECHO
         reader.stop()
-        assert termios.tcgetattr(slave) == before  # the terminal is as it was
+        assert same_mode(termios.tcgetattr(slave), before)  # the terminal is as it was
         assert not reader.thread.is_alive()
     finally:
         reader.stop()  # stopping twice is harmless
         os.close(master)
         os.close(slave)
+
+
+def same_mode(a, b):
+    """Terminal modes, ignoring PENDIN: macOS sets it itself when line editing comes back with input pending."""
+    import termios
+
+    pendin = getattr(termios, "PENDIN", 0)
+    return [*a[:3], a[3] & ~pendin, *a[4:]] == [*b[:3], b[3] & ~pendin, *b[4:]]
 
 
 def test_not_a_terminal():
