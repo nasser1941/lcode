@@ -298,3 +298,38 @@ def test_status_shows_the_sheet(make_agent):
     text = output(agent)
     assert "Requests (latest)" in text and "port the parser" in text and "Keep the old flags" in text
     assert "Open: --strict?" in text
+
+
+def test_saved_outputs_are_kept_small(tmp_path, monkeypatch):
+    """A runaway command can't fill the disk: one saved output is capped, and so are all of them together."""
+    import os
+    import time
+
+    from lcode import context
+
+    monkeypatch.setattr(context, "outputs_dir", lambda: tmp_path)
+    monkeypatch.setattr(context, "MAX_SAVED", 1000)
+    monkeypatch.setattr(context, "MAX_SAVED_TOTAL", 2500)
+    saved = context.save_output("x" * 5000, "output")
+    assert saved.read_text() == "x" * 1000 + context.CUT_SAVED
+
+    spool = context.OutputSpool(100)
+    for n in range(400):
+        spool.add(f"line {n:04d}\n")
+    text = spool.text()
+    assert spool.path.stat().st_size < 1200 and "lcode stopped saving here" in spool.path.read_text()
+    assert "line 0399" in text and "The first 0 MB of the output (4000 characters in all)" in text
+
+    for leftover in tmp_path.glob("*.txt"):
+        leftover.unlink()
+    old = tmp_path / "20200101-000000-output.txt"
+    old.write_text("y" * 10)
+    os.utime(old, (time.time() - 30 * 86400,) * 2)  # older than OUTPUT_DAYS
+    for n in range(4):
+        (tmp_path / f"2026101{n}-000000-output.txt").write_text("z" * 900)
+        os.utime(tmp_path / f"2026101{n}-000000-output.txt", (time.time() - 3600 + n,) * 2)
+    context.clean_outputs(tmp_path, room=900)
+    left = sorted(p.name for p in tmp_path.glob("*.txt"))
+    assert "20200101-000000-output.txt" not in left
+    assert sum(p.stat().st_size for p in tmp_path.glob("*.txt")) + 900 <= 2500
+    assert left == ["20261013-000000-output.txt"]  # the newest stays: 900 + 900 of room fit in 2500
