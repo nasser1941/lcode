@@ -78,6 +78,7 @@ class Result:
     usage: dict = field(default_factory=dict)  # requests, prompt_tokens, output_tokens
     checks: list[dict] = field(default_factory=list)  # {"command", "exit_code", "by": "lcode" | "model"}
     review: list[str] | None = None  # problems the review sent back ([] when it found none; None: no review)
+    escalations: list[dict] = field(default_factory=list)  # a stronger model asked: model, why, tokens, seconds
     seconds: float = 0.0
     error: str = ""
 
@@ -200,6 +201,9 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         repeat_limit=cfg["repeat_limit"],
         checks=cfg["checks"],
         review=cfg["review"],
+        escalate_model=cfg["escalate_model"],
+        escalate_url=cfg["escalate_url"],
+        escalate_price=cfg["escalate_price"],
         compact_at=cfg["compact_at"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
@@ -309,6 +313,7 @@ def run_request(agent: Agent, prompt: str) -> Result:
         usage=usage,
         checks=list(agent.check_results),
         review=agent.review_results,
+        escalations=list(agent.escalations),
         seconds=round(time.monotonic() - started, 2),
         error=error,
     )

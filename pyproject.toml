@@ -82,6 +82,7 @@ ignore = [
 "src/lcode/subagents.py" = ["E501"]
 "src/lcode/planning.py" = ["E501"]
 "src/lcode/review.py" = ["E501"] # the review prompt is prose
+"src/lcode/escalate.py" = ["E501"] # the advisor prompt is prose
 "src/lcode/extensions.py" = ["E501"]
 "src/lcode/context.py" = ["E501"]
 "src/lcode/lsp.py" = ["E501"]

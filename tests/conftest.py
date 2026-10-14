@@ -29,7 +29,7 @@ class FakeOllama:
     def show(self, model: str) -> dict:
         return {"capabilities": self.capabilities.get(model, ["completion", "tools"])}
 
-    def chat(self, payload: dict) -> dict:
+    def chat(self, payload: dict, timeout: float = 900) -> dict:
         self.chats.append(payload)
         content = self.chat_replies.pop(0) if self.chat_replies else self.description
         return {"message": {"role": "assistant", "content": content}}

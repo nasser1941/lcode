@@ -29,7 +29,7 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__
+from lcode import __version__, escalate
 from lcode.agent import Agent, Settings
 from lcode.config import format_tokens
 from lcode.hardware import Hardware
@@ -790,6 +790,8 @@ class TaskResult:
     tool_errors: int = 0  # failed tool calls, including malformed ones
     error: str | None = None  # why the run stopped early: a timeout or an Ollama error
     errors_by_tool: dict[str, int] = field(default_factory=dict)  # which tools failed, "malformed" for unreadable calls
+    first_passed: bool | None = None  # with --retry: whether the first try passed (None: no retry was needed)
+    escalations: int = 0  # times the stronger model was asked (--escalate)
 
 
 @dataclass
@@ -887,8 +889,13 @@ def run_task(
     keep: bool,
     usage: dict,
     agent: Agent | None = None,
+    retry: bool = False,
 ) -> TaskResult:
-    """Run one task in a new folder: in a new conversation, or continuing `agent`'s (--session)."""
+    """Run one task in a new folder: in a new conversation, or continuing `agent`'s (--session).
+
+    With `retry`, a failed task gets one more try, as a user would ask: "That didn't fix it. Look again." With a
+    stronger model set (--escalate), its advice goes along, as with /escalate.
+    """
     folder = Path(tempfile.mkdtemp(prefix=f"lcode-bench-{task.id}-"))
     try:
         for rel, content in task.files.items():
@@ -906,25 +913,28 @@ def run_task(
             if model:
                 codesearch.Index(folder, model).update(ollama)  # on the CPU: lcode's model stays loaded
             agent._code_index = None
+        agent.escalate_approved = True if settings.escalate_model else None  # the --escalate flag is the OK
         before = dict(agent.usage)
         first = len(agent.messages)
-        error = None
         started = time.monotonic()
-        try:
-            with time_limit(timeout):
-                agent.run_turn(task.prompt)
-        except TaskTimeout:
-            error = f"timed out after {timeout:.0f}s"
-        except OllamaError as e:
-            error = str(e).splitlines()[0][:200]
+        escalations = 0
+        error = attempt(agent, task.prompt, timeout)
+        escalations += len(agent.escalations)
+        check = checked(task, folder, agent)
+        first_passed = None
+        if retry and not (check.passed and error is None):
+            first_passed = False
+            text = RETRY
+            if error is None and agent.can_escalate():
+                advice = escalate.run(agent, "the user says the fix didn't work")
+                escalations += 1 if advice else 0
+                text = f"{RETRY}\n\n{advice}" if advice else RETRY
+            error = attempt(agent, text, timeout)
+            escalations += len(agent.escalations)
+            check = checked(task, folder, agent)
         seconds = time.monotonic() - started
         for key, value in agent.usage.items():
             usage[key] = usage.get(key, 0) + value - before.get(key, 0)
-        answer = next((m.get("content", "") for m in reversed(agent.messages) if m.get("role") == "assistant"), "")
-        try:
-            check = task.check(folder, answer)
-        except Exception as e:  # a check must never crash the benchmark
-            check = Check(False, f"check failed: {type(e).__name__}: {e}")
     finally:  # also when Ctrl+C stops the task
         from lcode.codesearch import index_dir
 
@@ -942,7 +952,32 @@ def run_task(
         tool_errors=count_tool_errors(agent.messages[first:] if len(agent.messages) > first else agent.messages),
         errors_by_tool=errors_by_tool(agent.messages[first:] if len(agent.messages) > first else agent.messages),
         error=error,
+        first_passed=first_passed,
+        escalations=escalations,
     )
+
+
+RETRY = "That didn't fix it: it still doesn't work right. Look again."
+
+
+def attempt(agent: Agent, text: str, timeout: float) -> str | None:
+    """One request of a task; why it stopped early, if it did."""
+    try:
+        with time_limit(timeout):
+            agent.run_turn(text)
+    except TaskTimeout:
+        return f"timed out after {timeout:.0f}s"
+    except OllamaError as e:
+        return str(e).splitlines()[0][:200]
+    return None
+
+
+def checked(task: Task, folder: Path, agent: Agent) -> Check:
+    answer = next((m.get("content", "") for m in reversed(agent.messages) if m.get("role") == "assistant"), "")
+    try:
+        return task.check(folder, answer)
+    except Exception as e:  # a check must never crash the benchmark
+        return Check(False, f"check failed: {type(e).__name__}: {e}")
 
 
 def prompt_speed(ollama: Ollama, settings: Settings, options: dict) -> float | None:
@@ -998,6 +1033,7 @@ def run_model(
     keep: bool = False,
     verbose: bool = False,
     session: bool = False,
+    retry: bool = False,
 ) -> ModelRun:
     run = ModelRun(name, settings.model, settings.context, settings.num_batch, settings.think, session=session)
     shared: Agent | None = None  # with --session, one conversation for all tasks
@@ -1038,10 +1074,10 @@ def run_model(
         try:
             if verbose:
                 console.rule(f"{task.id}: {task.title}")
-                result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared)
+                result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared, retry)
             else:
                 with console.status(Elapsed(f"  {task.id:<13} {task.title}")):
-                    result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared)
+                    result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared, retry)
         except KeyboardInterrupt:
             console.print("  [yellow]Stopped.[/]")
             run.interrupted = True

@@ -29,6 +29,7 @@ from lcode import (
     catalog,
     checks,
     codesearch,
+    escalate,
     extensions,
     limits,
     notify,
@@ -307,6 +308,9 @@ class Settings:
     repeat_limit: int = 3  # identical calls with identical results before the model is told (lcode.repeats)
     checks: str = "off"  # the project's checks after a change (lcode.checks): auto, off or a command
     review: str = "off"  # check a change against the request before the answer (lcode.review): auto or off
+    escalate_model: str | None = None  # a stronger model to ask when stuck (lcode.escalate): provider/model
+    escalate_url: str | None = None  # its server, when not the provider's usual one
+    escalate_price: str | None = None  # dollars per million tokens in/out, e.g. "3/15", for the cost estimate
 
 
 class Agent:
@@ -369,6 +373,8 @@ class Agent:
         self._check: tuple[Path, checks.Check | None] | None = None
         self.check_results: list[dict] = []  # the checks of the last request: command, exit code, who ran them
         self.review_results: list[str] | None = None  # what the last request's review found (None: no review)
+        self.escalations: list[dict] = []  # the stronger model asked in the last request (lcode.escalate)
+        self.escalate_approved: bool | None = None  # decided in advance (lcode -p --escalate, the benchmark)
         self.sent_chars = 0  # characters of the conversation the model had already read
         self.counted_chars: int | None = None  # characters that ctx_used covers (None: all of them)
         self.turn_status = ""  # how the last request ended: success, max_steps, loop
@@ -952,9 +958,8 @@ class Agent:
             )
             return None
         if round_ >= checks.MAX_ROUNDS:
-            self.say(
-                f"Checks still fail ({check.command}, exit code {code}): the model will say what's left.", warning=True
-            )
+            then = "" if self.can_escalate() else ": the model will say what's left"
+            self.say(f"Checks still fail ({check.command}, exit code {code}){then}.", warning=True)
         else:
             self.say(
                 f"Checks fail ({check.command}, exit code {code}): the model gets the output to fix it.", warning=True
@@ -1103,6 +1108,8 @@ class Agent:
         self.repeats.reset()
         self.check_results = []
         self.review_results = None
+        self.escalations = []
+        escalated = False  # the stronger model is asked at most once per request
         self.tools.before = {}
         reviewed = False
         changed = verified = False  # files changed in this request; the checks passed since
@@ -1166,6 +1173,15 @@ class Agent:
                     check_rounds += 1
                     feedback = self.run_check(check, check_rounds)
                     if feedback:
+                        if check_rounds >= checks.MAX_ROUNDS and not escalated and self.can_escalate():
+                            escalated = True
+                            why = f"the project's checks (`{check.command}`) failed {check_rounds} times in a row"
+                            advice = escalate.run(self, why, failure=feedback)
+                            if advice:
+                                self.messages.append({"role": "user", "content": advice})
+                                check_rounds -= 1  # the checks run once more after the advice
+                                changed = False
+                                continue
                         self.messages.append({"role": "user", "content": feedback})
                         changed = False  # run them again only if the model changes something more
                         continue
@@ -1259,6 +1275,14 @@ class Agent:
                             skipped["tool_call_id"] = rest["id"]
                         self.messages.append(skipped)
                     break
+            if looping and not escalated and self.can_escalate():
+                escalated = True
+                advice = escalate.run(self, f"it kept making the same call with the same result: {looping}")
+                if advice:
+                    self.messages.append({"role": "user", "content": advice})
+                    self.repeats.reset()
+                    looping = ""
+                    continue
             if looping:
                 self.turn_status = "loop"
                 self.console.print(
@@ -1275,6 +1299,11 @@ class Agent:
             return
         self.turn_status = "success"
         self.print_stats()
+
+    def can_escalate(self) -> bool:
+        """Whether a stronger model may be asked here: one is set, and this isn't a subagent or plan mode."""
+        model = (self.settings.escalate_model or "").strip().lower()
+        return bool(model) and model != "off" and self.allowed_tools is None and not self.planning()
 
     def steer(self) -> None:
         """Between two steps: pause if the user pressed Esc, then hand the model the notes typed meanwhile."""

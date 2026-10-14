@@ -582,11 +582,14 @@ def cmd_bench(args) -> None:
             compact_at=cfg["compact_at"] if args.compact_at is None else args.compact_at,
             checks=cfg["checks"] if args.checks is None else args.checks,
             review=cfg["review"] if args.review is None else args.review,
+            escalate_model=args.escalate_model,
+            escalate_url=cfg["escalate_url"],
+            escalate_price=cfg["escalate_price"],
             repo_map=args.repo_map,
             embed_model=cfg["embed_model"] if args.code_search else "off",
         )
         run = bench.run_model(
-            ollama, name, settings, tasks, console, args.timeout, args.keep, args.verbose, args.session
+            ollama, name, settings, tasks, console, args.timeout, args.keep, args.verbose, args.session, args.retry
         )
         runs.append(run)
         if run.interrupted:
@@ -662,6 +665,8 @@ def cmd_chat(args) -> None:
             sys.exit(1)
         fail(str(e))
     exit_code = 0
+    if args.escalate and args.prompt:
+        agent.escalate_approved = True  # the flag is the user's OK for this run
     try:
         if quiet:
             agent.perms.approve = lambda request: False  # nobody to ask: refuse what needs permission
@@ -727,6 +732,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--plan", action="store_true", help="start in plan mode: agree on a plan before any change")
     parser.add_argument("--auto-edit", action="store_true", help="apply file edits without asking")
     parser.add_argument("--yolo", action="store_true", help="never ask for permission (edits and commands)")
+    parser.add_argument(
+        "--escalate",
+        action="store_true",
+        help="with -p: let lcode ask escalate_model for help when stuck, without asking you (it costs money)",
+    )
     parser.add_argument("--no-think", action="store_true", help="disable model reasoning (faster, less accurate)")
     parser.add_argument("--no-web", action="store_true", help="don't let the model search or fetch web pages")
     parser.add_argument("--no-mcp", action="store_true", help="don't start MCP servers in this session")
@@ -778,6 +788,17 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument("--no-prune", action="store_true", help="don't remove old tool output (to compare, with --session)")
     p.add_argument(
         "--review", choices=["auto", "off"], help="review each change before it counts (default: the setting)"
+    )
+    p.add_argument(
+        "--retry",
+        action="store_true",
+        help='give a failed task one more try, as a user would: "That didn\'t fix it. Look again."',
+    )
+    p.add_argument(
+        "--escalate",
+        dest="escalate_model",
+        metavar="MODEL",
+        help="a stronger model to ask when stuck and on --retry, e.g. ollama/qwen3.8-27b (no questions asked)",
     )
     p.add_argument(
         "--checks",

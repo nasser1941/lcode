@@ -265,11 +265,16 @@ class OpenAICompatible:
             return self.chat({k: v for k, v in payload.items() if k not in ("format", "tools")}, timeout)
         if r.status_code != 200:
             raise self._failed(r.status_code, r.text)
-        choice = (r.json().get("choices") or [{}])[0].get("message") or {}
+        data = r.json()
+        choice = (data.get("choices") or [{}])[0].get("message") or {}
         message: dict = {"role": "assistant", "content": strip_thinking(choice.get("content") or "")}
         if choice.get("tool_calls"):
             message["tool_calls"] = [self._ollama_call(c) for c in choice["tool_calls"]]
-        return {"message": message}
+        reply: dict = {"message": message}
+        usage = data.get("usage") or {}
+        if usage.get("prompt_tokens") is not None:  # as Ollama counts them
+            reply["prompt_eval_count"], reply["eval_count"] = usage["prompt_tokens"], usage.get("completion_tokens")
+        return reply
 
     @staticmethod
     def _ollama_call(call: dict) -> dict:

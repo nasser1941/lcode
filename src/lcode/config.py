@@ -61,6 +61,14 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "notify_after": (30, int, "seconds a request runs before it notifies (with notify on)"),
     "review": ("off", str, "before the answer, check a change against the request and send problems back: auto | off"),
     "checks": ("auto", str, "run the project's checks before calling work done: auto | off | a command"),
+    "escalate_model": (
+        None,
+        str,
+        "a stronger model to ask, with your OK, when the model is stuck: anthropic/…, openai/…, xai/… (key from "
+        "ANTHROPIC_API_KEY, OPENAI_API_KEY, XAI_API_KEY) or ollama/<model> (local or at escalate_url)",
+    ),
+    "escalate_url": (None, str, "the stronger model's server, if not its provider's (another Ollama, any OpenAI API)"),
+    "escalate_price": (None, str, "its price in dollars per million tokens in/out, e.g. 3/15, for the cost shown"),
     "repeat_limit": (3, int, "identical tool calls with identical results before lcode steps in (0: never)"),
     "secret_check": (True, bool, "before git commit and git push, look for passwords, keys and tokens they'd add"),
     "compact_at": (65536, int, "summarize at this many tokens even when the window is larger (0: only at 85%)"),
@@ -165,6 +173,22 @@ def coerce(key: str, value: object) -> object:
         if value not in MEMORY_MODES:
             raise ConfigError(f"memory must be one of {', '.join(MEMORY_MODES)}")
         return value
+    if key in ("escalate_model", "escalate_url", "escalate_price"):
+        from lcode import escalate
+
+        text = str(value).strip()
+        if key == "escalate_url":
+            return normalize_host(text)
+        if key == "escalate_model":
+            provider = text.partition("/")[0].lower()
+            if "/" in text and provider not in escalate.PROVIDERS:
+                raise ConfigError(f"escalate_model's provider must be one of {', '.join(escalate.PROVIDERS)}")
+            return text
+        try:
+            escalate.parse_price(text)
+        except escalate.EscalateError as e:
+            raise ConfigError(str(e)) from e
+        return text
     if key == "lsp" and str(value).lower() not in ("auto", "off"):
         raise ConfigError("lsp must be auto or off")
     if key == "lsp":

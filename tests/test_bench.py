@@ -248,6 +248,8 @@ def test_report_and_markdown(tmp_path):
         "tool_errors",
         "error",
         "errors_by_tool",
+        "first_passed",
+        "escalations",
     }
     assert data["runs"][1]["error"] == "not installed"
 
