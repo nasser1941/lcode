@@ -41,6 +41,8 @@ ERROR_LINE = re.compile(
 )
 MAX_ERROR_LINES = 40
 OUTPUT_DAYS = 7  # saved full outputs are deleted after this
+MAX_SAVED = 20_000_000  # characters of one saved output: a runaway command doesn't fill the disk
+MAX_SAVED_TOTAL = 200_000_000  # bytes of saved outputs in all, the oldest go first
 
 
 # ----------------------------------------------------------------------------- the user's requests
@@ -262,15 +264,36 @@ def save_output(text: str, label: str) -> Path | None:
     folder = outputs_dir()
     try:
         folder.mkdir(parents=True, exist_ok=True)
-        cutoff = time.time() - OUTPUT_DAYS * 86400
-        for old in folder.glob("*.txt"):
-            if old.stat().st_mtime < cutoff:
-                old.unlink(missing_ok=True)
+        clean_outputs(folder, room=min(len(text), MAX_SAVED))
         path = folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{re.sub(r'[^a-z0-9]+', '-', label.lower())[:30]}.txt"
-        path.write_text(text)
+        path.write_text(text if len(text) <= MAX_SAVED else text[:MAX_SAVED] + CUT_SAVED)
         return path
     except OSError:
         return None
+
+
+CUT_SAVED = "\n[lcode stopped saving here: the output went on, but a saved output is kept to 20 MB]\n"
+
+
+def clean_outputs(folder: Path, room: int = 0) -> None:
+    """Delete saved outputs older than OUTPUT_DAYS, then the oldest until they take MAX_SAVED_TOTAL with `room`."""
+    cutoff = time.time() - OUTPUT_DAYS * 86400
+    files = []
+    for old in folder.glob("*.txt"):
+        try:
+            info = old.stat()
+        except OSError:
+            continue
+        if info.st_mtime < cutoff:
+            old.unlink(missing_ok=True)
+        else:
+            files.append((info.st_mtime, info.st_size, old))
+    total = sum(size for _, size, _ in files) + room
+    for _, size, old in sorted(files):
+        if total <= MAX_SAVED_TOTAL:
+            break
+        old.unlink(missing_ok=True)
+        total -= size
 
 
 def shorten(text: str, limit: int, label: str = "output") -> str:
@@ -315,6 +338,7 @@ class OutputSpool:
         self.chars = 0
         self.file = None
         self.path: Path | None = None
+        self.saved = 0  # characters written to the file
 
     def add(self, line: str) -> None:
         self.chars += len(line)
@@ -323,10 +347,12 @@ class OutputSpool:
             if self.chars > self.limit * 2:
                 self._spool()
             return
-        try:
-            self.file.write(line)
-        except OSError:
-            pass
+        if self.saved <= MAX_SAVED:  # past it, only the end and the error lines are kept (in memory)
+            try:
+                self.file.write(line if self.saved + len(line) <= MAX_SAVED else CUT_SAVED)
+            except OSError:
+                pass
+            self.saved += len(line)
         if ERROR_LINE.search(line) and len(self.errors) < MAX_ERROR_LINES:
             self.errors.append(line.strip()[:300])
         self.tail.append(line)
@@ -337,6 +363,7 @@ class OutputSpool:
     def _spool(self) -> None:
         text = "".join(self.head)
         self.path = save_output(text, self.label)
+        self.saved = len(text)
         if self.path is not None:
             try:
                 self.file = self.path.open("a")
@@ -359,12 +386,10 @@ class OutputSpool:
             note += "\n[...]\n\n"
         else:
             note += "] ...\n\n"
-        where = (
-            f"\n[The full {self.label} ({self.chars} characters) is in {self.path}: read parts of it with read_file "
-            "if you need them.]"
-            if self.path
-            else ""
-        )
+        whole = f"The full {self.label} ({self.chars} characters)"
+        if self.saved > MAX_SAVED:
+            whole = f"The first {MAX_SAVED // 1_000_000} MB of the {self.label} ({self.chars} characters in all)"
+        where = f"\n[{whole} is in {self.path}: read parts of it with read_file if you need them.]" if self.path else ""
         return f"{head}{note}{tail}{where}"
 
 

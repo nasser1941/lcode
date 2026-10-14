@@ -8,6 +8,11 @@ All notable changes to lcode are documented here. The format follows
 
 ### Fixed
 
+- Long command output can't fill the disk any more. lcode keeps the full text of long outputs so the
+  model can read parts of them, but a command that printed gigabytes was saved whole, and the
+  saved outputs had no total limit, only an age (7 days). Now one is kept to its first 20 MB (the
+  model still gets the end and the error lines), and all of them together to 200 MB, oldest first.
+
 - A screenshot of a web app no longer starts its server a second time when one already answers at
   the URL (one the model started itself, say), which used to fail on the busy port and put the
   error in the result. A page that answers also counts when the server command itself exits.
