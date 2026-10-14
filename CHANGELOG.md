@@ -6,6 +6,12 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A screenshot of a web app no longer starts its server a second time when one already answers at
+  the URL (one the model started itself, say), which used to fail on the busy port and put the
+  error in the result. A page that answers also counts when the server command itself exits.
+
 ## [0.34.0] - 2026-10-14
 
 ### Added

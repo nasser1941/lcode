@@ -191,7 +191,8 @@ SCHEMAS = [
         "page), saves a screenshot in .lcode/screenshots/ and returns what it shows, with the sizes of windows and "
         "widgets (Qt) or of the page, and the browser's console errors. Use it to check GUI and layout work instead "
         "of guessing. Python Qt programs run offscreen; other desktop programs on a virtual display (Linux); web pages "
-        "in a headless browser. For a web app, give the command that starts its server and the url.",
+        "in a headless browser. For a web app, give the command that starts its server and the url (lcode starts and "
+        "stops it); if a server is already running, or for an .html file, give only the url.",
         {
             "command": {"type": "string", "description": "Command that starts the program, or the web server"},
             "url": {"type": "string", "description": "Page to open: a URL, localhost:PORT/path or an .html file"},
