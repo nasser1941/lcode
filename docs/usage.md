@@ -44,6 +44,8 @@ lcode update [--check]       # update lcode, and Ollama when it runs in Docker (
 | ++enter++ | Send |
 | ++esc++ ++enter++ or a trailing `\` | New line |
 | ++ctrl+c++ | Interrupt the model or a running command |
+| Typing while it works | A note for the model, read at its next step ([Steer while it works](#steer-while-it-works)) |
+| ++esc++ while it works | Pause after the current step |
 | ++ctrl+d++ | Quit |
 | ++shift+tab++ | Cycle permission mode: ask → plan → auto-edit → yolo |
 | ++tab++ | Complete slash commands and `@` paths |
@@ -231,9 +233,10 @@ Much of the waiting with a local model isn't the model thinking: it's loading th
 a long conversation before the first word. lcode says which, in the status line under a request:
 
 ```text
-⠋ Loading qwen3.6-35b into memory… (0 tokens, 9s · Ctrl+C to stop)
-⠋ Reading the conversation (18K tokens)… (0 tokens, 21s · Ctrl+C to stop)
-⠋ Thinking… (312 tokens, 27s · Ctrl+C to stop)
+⠋ Loading qwen3.6-35b into memory… (0 tokens, 9s · type a note · Esc pauses · Ctrl+C stops)
+⠋ Reading the conversation (18K tokens)… (0 tokens, 21s · type a note · Esc pauses · Ctrl+C stops)
+⠋ Thinking… (312 tokens, 27s · type a note · Esc pauses · Ctrl+C stops)
+⠋ Running the command… (48s · type a note · Esc pauses · Ctrl+C stops)
 ```
 
 It prints a line only when something worth knowing happens, and nothing while the model simply
@@ -251,6 +254,42 @@ While the model loads in the background at startup, the status bar says
 `loading the model into memory…`. Mixture-of-Experts models, such as qwen3.6-35b, run well with
 part of them in system RAM. Dense ones slow down a lot, to a few tokens a second, which is why they
 get the warning.
+
+## Steer while it works
+
+A request can take minutes with a local model. You don't have to stop it to change course: type
+while it works, and press ++enter++. The line goes to the model at its next step, after the step it's
+on finishes, as a note from you. Nothing is interrupted or thrown away.
+
+```text
+● edit_file(tally.py)
+  ✓ Edited tally.py
+✎ Note for the model: also add a --min-count N option that skips rare words
+```
+
+What you type shows under the spinner, since the terminal doesn't echo it while lcode works:
+
+```text
+⠋ Thinking… (212 tokens, 14s · type a note · Esc pauses · Ctrl+C stops)
+  ✎ also add a --min-count N opt▏  Enter adds it as a note
+```
+
+- A note typed while the model writes its final answer still counts: the model reads it before the
+  request ends.
+- Press ++esc++ to pause after the current step, to look at what it did. Then press ++enter++ to go
+  on, type a note to go on with it, or press ++ctrl+c++ to stop the request. Press ++esc++ again
+  before the step ends if you change your mind.
+- Notes count as your requests: they're kept when old messages are
+  [summarized](how-it-works.md#context-management), and the [review](#a-review-before-the-answer)
+  checks the change against them too.
+- When lcode asks you something, such as a permission, the keyboard is yours again for the answer.
+  Keys you typed just before the question appeared are dropped, so a note you were finishing can't
+  answer it by accident.
+- What never reached the model, such as a note typed as the request ended or after ++ctrl+c++, is
+  put back in the prompt.
+
+Steering works in the interactive session on macOS and Linux. `lcode -p` and the editor
+integration don't read the keyboard during a request.
 
 ## Notifications
 

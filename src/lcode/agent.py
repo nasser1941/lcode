@@ -52,6 +52,7 @@ from lcode.permissions import Permissions
 from lcode.render import MarkdownStreamer
 from lcode.repeats import Repeats
 from lcode.sandbox import Sandbox, SandboxError, project_root
+from lcode.steer import NOTE_INTRO, Steering
 from lcode.tools import (
     LSP_SCHEMA,
     MEMORY_SCHEMA,
@@ -224,10 +225,12 @@ class Progress:
     arrives, for example while the model writes a long file into a tool call.
     """
 
-    def __init__(self, phase: str = "Thinking") -> None:
+    def __init__(self, phase: str = "Thinking", steering: Steering | None = None, tokens: bool = True) -> None:
         self.started = self.last_chunk = time.time()
         self.phase = phase
         self.chars = 0
+        self.steering = steering  # the note being typed and the notes waiting, shown on a second line
+        self.tokens = tokens  # False for a command running: no tokens to count
 
     def update(self, phase: str, text: str) -> None:
         self.phase, self.chars, self.last_chunk = phase, self.chars + len(text), time.time()
@@ -240,9 +243,11 @@ class Progress:
         now = time.time()
         streaming = self.phase in ("Thinking", "Writing")  # loading and reading say what they are throughout
         phase = self.phase if now - self.last_chunk < 3 or not streaming else "Working"
-        return Text.from_markup(
-            f"[cyan]{phase}…[/] [dim]({self.chars // 4} tokens, {now - self.started:.0f}s · Ctrl+C to stop)[/]"
-        )
+        tokens = f"{self.chars // 4} tokens, " if self.tokens else ""
+        keys = "Ctrl+C to stop" if self.steering is None else "type a note · Esc pauses · Ctrl+C stops"
+        line = Text.from_markup(f"[cyan]{phase}…[/] [dim]({tokens}{now - self.started:.0f}s · {keys})[/]")
+        below = self.steering.status() if self.steering is not None else None
+        return line if below is None else Text("\n").join([line, below])
 
 
 @dataclass
@@ -321,6 +326,9 @@ class Agent:
         self.read_only = False  # only read-only shell commands
         self.no_changes = ""  # set during a review: why nothing may change (read-only tools only)
         self.cancel: threading.Event | None = None  # set from another thread to stop
+        self.steering: Steering | None = None  # notes typed and pauses asked for during a request (lcode.repl)
+        self.turn_requests: list[str] = []  # the request, then the notes added to it while it ran
+        self.unsent = ""  # typed during the last request but never sent to the model: back in the prompt (lcode.repl)
         self.on_tool = None  # called with (name, arguments) before each tool runs
         self.jobs = Jobs()  # background commands (shared with subagents)
         self.turn_started = 0.0  # when the running request started (time.monotonic)
@@ -749,7 +757,7 @@ class Agent:
         """Stream one model response, rendering thinking/content live. Returns the assistant message."""
         content, thinking, tool_calls, final = "", "", [], {}
         md = MarkdownStreamer(self.console)
-        progress = Progress()
+        progress = Progress(steering=self.steering)
         watch = self.before_request(progress)
         status = None
         printed_thinking = False
@@ -845,15 +853,10 @@ class Agent:
         diff, changed = review.diff_of(self.tools.before, self.current_text, budget)
         if changed < review.MIN_CHANGED_LINES:
             return []
-        request = next(
-            (
-                context_tools.request_text(str(m.get("content", "")))
-                for m in reversed(self.messages)
-                if m.get("role") == "user"
-                and not str(m.get("content", "")).startswith(("[lcode]", sessions.SUMMARY_PREFIX))
-            ),
-            "",
-        )
+        request = self.turn_requests[0] if self.turn_requests else ""
+        if len(self.turn_requests) > 1:
+            added = "\n".join(f"- {note}" for note in self.turn_requests[1:])
+            request += f"\n\nWhat the user added while you worked:\n{added}"
         try:
             with self.console.status("Reviewing the change against your request…", spinner="dots"):
                 problems = review.run(self, request, answer, diff)
@@ -1069,6 +1072,7 @@ class Agent:
         self.turn_status = "running"
         note = planning.NOTE if self.planning() and self.allowed_tools is None else ""
         self.messages.append({"role": "user", "content": self.expand_mentions(user_text) + note})
+        self.turn_requests = [user_text.strip()]
         self.repeats.reset()
         self.check_results = []
         self.review_results = None
@@ -1081,6 +1085,8 @@ class Agent:
         for step in range(self.max_steps):
             if self.cancel is not None and self.cancel.is_set():
                 raise KeyboardInterrupt
+            if step and self.steering is not None:
+                self.steer()
             if step and self.autosave:
                 self.save()  # a crash or a closed terminal loses at most this step
             self.maybe_compact()
@@ -1126,6 +1132,8 @@ class Agent:
                 )
                 continue
             if not calls:
+                if self.steering is not None and self.steering.waiting():
+                    continue  # the user added a note while the model wrote its answer: it reads the note first
                 check = self.project_check() if changed and not verified else None
                 if check is not None and check_rounds < checks.MAX_ROUNDS:
                     check_rounds += 1
@@ -1240,6 +1248,34 @@ class Agent:
             return
         self.turn_status = "success"
         self.print_stats()
+
+    def steer(self) -> None:
+        """Between two steps: pause if the user pressed Esc, then hand the model the notes typed meanwhile."""
+        steering = self.steering
+        if steering is None:
+            return
+        if steering.take_pause():
+            self.console.print(
+                Text(
+                    "⏸ Paused. Press Enter to go on, type a note to go on with it, or press Ctrl+C to stop the request.",
+                    style="yellow",
+                )
+            )
+            note = steering.ask("  ⏸ ").strip()
+            if note:
+                steering.add(note)
+        notes = steering.take()
+        if not notes:
+            return
+        self.turn_requests += notes
+        self.messages.append({"role": "user", "content": "\n\n".join(notes) + "\n\n" + NOTE_INTRO})
+        for note in notes:
+            shown = note if len(note) <= 200 else note[:200] + "…"
+            self.console.print(Text(f"✎ Note for the model: {shown}", style="cyan"))
+
+    def activity(self, phase: str):
+        """A spinner with the elapsed time while something runs (a command), with the note being typed under it."""
+        return self.console.status(Progress(phase, self.steering, tokens=False), spinner="dots")
 
     def print_stats(self) -> None:
         pct = 100 * self.ctx_used / self.settings.context

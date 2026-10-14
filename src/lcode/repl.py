@@ -36,6 +36,7 @@ from lcode.checkpoints import Checkpoint, CheckpointError, Restore
 from lcode.config import PERMISSION_MODES, STATE_DIR, ConfigError, format_tokens, parse_context
 from lcode.hardware import Hardware
 from lcode.ollama import OllamaError
+from lcode.steer import KeyReader, Steering
 from lcode.tools import IGNORE_DIRS
 
 COMMANDS = {
@@ -874,6 +875,7 @@ def git_command(agent: Agent, cmd: str, arg: str) -> None:
 
 def run_safely(agent: Agent, text: str) -> None:
     started = time.monotonic()
+    reader = start_steering(agent) if agent.interactive else None
     try:
         agent.run_turn(text)
     except KeyboardInterrupt:
@@ -881,8 +883,31 @@ def run_safely(agent: Agent, text: str) -> None:
     except OllamaError as e:
         agent.console.print(f"[red]{e}[/]")
     finally:
+        if reader is not None:
+            stop_steering(agent, reader)
         agent.save()
         agent.finished(text, time.monotonic() - started)
+
+
+def start_steering(agent: Agent) -> KeyReader | None:
+    """Read the keyboard while the request runs: a typed line becomes a note for the model, Esc pauses."""
+    steering = Steering()
+    reader = KeyReader(steering)
+    if not reader.start():
+        return None  # not a terminal lcode can read keys from (or Windows): the request runs as before
+    agent.steering = steering
+    agent.perms.read_line = steering.ask  # questions take the keyboard back meanwhile
+    return reader
+
+
+def stop_steering(agent: Agent, reader: KeyReader) -> None:
+    reader.stop()
+    agent.steering = None
+    agent.perms.read_line = None
+    unsent = reader.steering.leftover()
+    if unsent:
+        agent.unsent = unsent
+        agent.console.print(Text("✎ What you typed didn't reach the model; it's in the prompt below.", style="cyan"))
 
 
 def session_start(agent: Agent) -> None:
@@ -1115,13 +1140,13 @@ def resume_session(agent: Agent, info: sessions.SessionInfo) -> None:
 
 def print_recap(agent: Agent) -> None:
     """Show the last request and the start of the last answer, so it's clear where things left off."""
-    last_user = next((m for m in reversed(agent.messages) if m.get("role") == "user"), None)
+    requests = context_tools.user_requests(agent.messages)  # the user's own words, not lcode's notes to the model
     last_answer = next(
         (m for m in reversed(agent.messages) if m.get("role") == "assistant" and m.get("content", "").strip()), None
     )
-    if not last_user:
+    if not requests:
         return
-    lines = [f"[bold]You:[/] {escape(sessions.title_from([last_user]))}"]
+    lines = [f"[bold]You:[/] {escape(sessions.title_from([{'role': 'user', 'content': requests[-1]}]))}"]
     if last_answer:
         answer = " ".join(last_answer["content"].split())
         answer = answer if len(answer) <= 300 else answer[:299].rstrip() + "…"
@@ -1153,7 +1178,8 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
     while True:
         try:
             agent.console.print()
-            line = session.prompt(HTML("<ansicyan><b>❯ </b></ansicyan>")).strip()
+            unsent, agent.unsent = agent.unsent, ""
+            line = session.prompt(HTML("<ansicyan><b>❯ </b></ansicyan>"), default=unsent).strip()
         except KeyboardInterrupt:
             continue
         except EOFError:
