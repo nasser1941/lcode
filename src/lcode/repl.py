@@ -1059,7 +1059,7 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         p = Path(os.path.expanduser(arg or "~"))
         p = (p if p.is_absolute() else agent.cwd / p).resolve()
         if p.is_dir():
-            agent.cwd = p
+            agent.cwd = agent.workspace = p
             agent.messages[0]["content"] = agent.system_prompt()
             c.print(f"Working directory: {p}")
         else:

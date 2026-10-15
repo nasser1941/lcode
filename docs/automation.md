@@ -50,7 +50,7 @@ went: `0` success, `1` an error, `3` stopped at `--max-steps`, `4` stopped becau
 
 | Field | |
 |---|---|
-| `status` | `success`, `error`, `max_steps`, `loop` (the model kept repeating the same call) or `interrupted` |
+| `status` | `success`, `error`, `max_steps`, `loop` (the model kept repeating the same call, or its replies went nowhere), `blocked` (a site it needed couldn't be reached) or `interrupted` |
 | `text` | The model's final answer |
 | `tool_calls` | Every tool call, with its arguments and output (the first 4,000 characters). `error` is true when the call failed or wasn't allowed |
 | `files_changed` | Files the request added (`A`), modified (`M`) or deleted (`D`), shell commands included |

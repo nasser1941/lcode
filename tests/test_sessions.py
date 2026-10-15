@@ -49,7 +49,7 @@ def test_list_orders_by_last_use_and_filters_by_folder(make_agent, tmp_path_fact
     run(second, "second task")
     touch(second, 100)
     elsewhere = make_agent()
-    elsewhere.cwd = tmp_path_factory.mktemp("elsewhere").resolve()
+    elsewhere.cwd = elsewhere.workspace = tmp_path_factory.mktemp("elsewhere").resolve()
     run(elsewhere, "other folder")
     assert [s.title for s in sessions.list_sessions(first.cwd)] == ["second task", "first task"]
     assert len(sessions.list_sessions()) == 3
@@ -115,7 +115,7 @@ def test_resumed_session_needs_fresh_reads(make_agent):
 def test_resume_switches_to_the_session_folder(make_agent, tmp_path_factory):
     other = tmp_path_factory.mktemp("other").resolve()
     agent = make_agent()
-    agent.cwd = other
+    agent.cwd = agent.workspace = other
     run(agent, "work in another folder")
     here = make_agent()
     assert choose_session(here, "all work in another") is not None

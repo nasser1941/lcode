@@ -158,3 +158,74 @@ def missing(check: Check, result: str) -> bool:
         return True
     head = result.splitlines()[:5]  # a missing program says so first; test failures look different
     return code not in (0, None) and any(MISSING.search(line) for line in head)
+
+
+# ----------------------------------------------------------------------------- scripts written, never run
+
+SCRIPT_SUFFIXES = (".sh", ".bash", ".zsh")
+SHELL_SHEBANG = re.compile(r"^#!\S*?(?:/|env\s+)(?:ba|z|da|k)?sh\b")
+RUNNERS = frozenset({"bash", "sh", "zsh", "dash", "ksh", "source", ".", "exec"})
+PREFIXES = frozenset({"sudo", "time", "nohup", "env", "command", "nice"})
+SEGMENTS = re.compile(r"&&|\|\||[;|\n&()]")
+
+
+def unrun_scripts(root: Path, changed: list[str], commands: list[str]) -> list[str]:
+    """Shell scripts written in this request that no command in it ran.
+
+    Small models write a build or install script and call it done without running it once; the first thing
+    the user then sees is its first error. Only shell scripts count (a .sh file, or a shell shebang): a Python
+    file with a shebang is as likely an app or a server that never ends.
+    """
+    unrun = []
+    for rel in changed:
+        path = root / rel
+        if not is_shell_script(path):
+            continue
+        if not any(runs(command, path.name) for command in commands):
+            unrun.append(rel)
+    return unrun
+
+
+def is_shell_script(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    if path.suffix in SCRIPT_SUFFIXES:
+        return True
+    if path.suffix:
+        return False
+    try:
+        with path.open("rb") as f:
+            first = f.readline(200).decode("utf-8", "replace")
+    except OSError:
+        return False
+    return bool(SHELL_SHEBANG.match(first))
+
+
+def runs(command: str, name: str) -> bool:
+    """Whether a shell command runs the script called `name` (not just chmods, cats or commits it)."""
+    for segment in SEGMENTS.split(command):
+        words = segment.split()
+        while words and (("=" in words[0] and not words[0].startswith("=")) or words[0] in PREFIXES):
+            words.pop(0)
+        if words and words[0] == "timeout":
+            words = words[2:] if len(words) > 2 else []
+        if not words:
+            continue
+        program = words[0].strip("'\"")
+        if program in RUNNERS:
+            rest = [w.strip("'\"") for w in words[1:] if not w.startswith("-")]
+            program = rest[0] if rest else ""
+        if Path(program).name == name:
+            return True
+    return False
+
+
+def unrun_note(scripts: list[str]) -> str:
+    names = ", ".join(scripts)
+    it = "it" if len(scripts) == 1 else "them"
+    return (
+        f"[lcode] You wrote {names} in this request but never ran {it}. Run {it} now and fix what fails, so you know "
+        f"{it} works before you say so. If running {it} would change things outside the project (install packages, "
+        f"deploy, delete data) or needs something you don't have, don't: tell the user plainly that {it} is untested "
+        "and why."
+    )

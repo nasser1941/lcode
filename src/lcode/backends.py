@@ -302,6 +302,7 @@ class OpenAICompatible:
         calls: dict[int, dict] = {}
         usage: dict = {}
         timings: dict = {}  # llama-server measures prompt and generation time itself
+        finished = ""  # why the reply ended, as Ollama's done_reason: "length" when it was cut off
         splitter = ThinkSplitter()
         first_token = None
         with r:
@@ -323,6 +324,7 @@ class OpenAICompatible:
                 usage = chunk.get("usage") or usage
                 timings = chunk.get("timings") or timings
                 for choice in chunk.get("choices") or []:
+                    finished = choice.get("finish_reason") or finished
                     delta = choice.get("delta") or {}
                     thinking = delta.get("reasoning_content") or delta.get("reasoning")
                     if thinking:
@@ -356,6 +358,7 @@ class OpenAICompatible:
             "prompt_eval_duration": first_token - started,
             "eval_count": int(usage.get("completion_tokens") or 0),
             "eval_duration": max(1, ended - first_token),
+            "done_reason": "length" if finished == "length" else "stop",
         }
         if timings.get("prompt_ms") is not None and timings.get("predicted_ms"):
             # The whole prompt counts (it's what fills the context), cached tokens included.

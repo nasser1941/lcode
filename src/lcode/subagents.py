@@ -461,6 +461,8 @@ class Run:
             show_thinking=False,
         )
         child = Agent(parent.ollama, settings, cwd, console=Console(file=io.StringIO(), width=120))
+        if not self.worktree:
+            child.workspace = parent.workspace  # it may cd around the same project, not out of it
         child.perms = self.relay  # type: ignore[assignment]
         child.sandbox = parent.sandbox
         child.jobs = parent.jobs  # its background commands belong to the session
@@ -487,11 +489,10 @@ class Run:
             last = child.messages[-1]
             if last.get("role") != "assistant" or last.get("tool_calls") or not last.get("content", "").strip():
                 # It ran out of steps, or went round in circles: ask for what it has so far, without tools.
-                why = (
-                    "You kept making the same call, so lcode stopped you."
-                    if child.turn_status == "loop"
-                    else "You've used all your steps."
-                )
+                why = {
+                    "loop": "You went round in circles, so lcode stopped you.",
+                    "blocked": "A site you needed can't be reached from this machine, so lcode stopped you.",
+                }.get(child.turn_status, "You've used all your steps.")
                 child.messages.append(
                     {
                         "role": "user",

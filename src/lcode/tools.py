@@ -1283,10 +1283,18 @@ class Toolbox:
             out.add(last)
             recent.append(last)
         if recorded and Path(recorded).is_dir() and Path(recorded).resolve() != self.agent.cwd:
-            if sandbox and not sandbox.contains(Path(recorded).resolve()):
+            from lcode.checkpoints import work_tree_for
+
+            moved = Path(recorded).resolve()
+            if sandbox and not sandbox.contains(moved):
                 status += "\n[That directory is outside the project; the working directory stays the same]"
+            elif not sandbox and not moved.is_relative_to(work_tree_for(self.agent.workspace)):
+                status += (
+                    f"\n[{moved} is outside the project, so the working directory stays {self.agent.cwd}: the next "
+                    "command starts there. To run something elsewhere, cd in the same command]"
+                )
             else:
-                self.agent.cwd = Path(recorded).resolve()
+                self.agent.cwd = moved
                 status += f"\n[Working directory is now {self.agent.cwd}]"
         if sandbox and code != 0 and not sandbox.network and NO_NETWORK.search("".join(recent)):
             status += (

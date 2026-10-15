@@ -285,7 +285,7 @@ def run_request(agent: Agent, prompt: str) -> Result:
 
     try:
         agent.run_turn(prompt)
-        status = agent.turn_status if agent.turn_status in ("max_steps", "loop") else "success"
+        status = agent.turn_status if agent.turn_status in ("max_steps", "loop", "blocked") else "success"
     except KeyboardInterrupt:
         status, error = "interrupted", "interrupted before the request was done"
     except ModelError as e:

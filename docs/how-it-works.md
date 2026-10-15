@@ -59,7 +59,37 @@ A result that changes isn't a repeat, so a test that's run again after a fix, or
 that's checked while it runs, never adds up. A call that may have changed something, like an edit or
 a shell command that isn't read-only, starts the count again for the other calls: checking the build
 after each edit is fine. Change the threshold with `lcode config set repeat_limit 5`, or turn it off
-with `0`.
+with `0` (that also turns off the checks for unreachable sites and for thinking in circles, below).
+
+### When a site can't be reached
+
+A download that fails however its address is written usually means this machine can't reach the
+site: a firewall, a proxy, a regional block, or no internet. No address the model tries will fix
+that, and every attempt differs, so the repeat count above never fires. lcode keeps track, per site,
+of the calls that failed to reach it (an HTTP error, a name that doesn't resolve, a refused or
+timed-out connection) and of the ones that got an answer.
+
+- **When three different calls failed for a site and none worked,** the result gets a note: check
+  one address on that site that must exist, and if that fails too, stop and tell you what fails
+  and what you could do (another network or a VPN, a proxy, a mirror, or running that step
+  somewhere else, such as CI).
+- **Two more,** and lcode ends the request with `Stopped: every request to dl.google.com failed (5
+  calls: HTTP 404)…`. The JSON output's status is `blocked`.
+
+A site that answered once in the request is never counted as out of reach, so a wrong address on a
+working site doesn't add up. Local addresses (localhost, private networks, names without a dot)
+aren't tracked.
+
+### When a reply goes nowhere
+
+Small models sometimes think in circles: a few paragraphs, over and over, until the context is full.
+That takes minutes behind the spinner and ends without an answer. lcode watches the thinking as it
+streams, and when its sentences keep repeating, it stops the model, drops that reply and asks for a
+short one: the next tool call, or what's blocking it. An empty reply, or one that filled the context
+before it said anything, gets the same second chance. The second time in a request, lcode stops it
+(status `loop`), offering the [stronger model](usage.md#a-stronger-model-when-stuck) first when one
+is set. An answer the context cut off midway is kept, with a warning to `/compact` or use a larger
+`/context`.
 
 ## Subagents
 

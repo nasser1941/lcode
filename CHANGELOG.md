@@ -6,6 +6,34 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+Found in a real session that spent an hour on an Android build whose downloads this machine
+couldn't reach, then ended without a word:
+
+- **A site this machine can't reach** now stops the guessing. lcode tracks, per site, the calls that
+  failed to reach it (HTTP errors, names that don't resolve, refused or timed-out connections) and
+  the ones that got an answer. After three different failed calls and none that worked, the model is
+  told to check one address that must exist and, if that fails too, to tell you what fails and what
+  you could do. Two more and lcode stops the request (status `blocked`). Before, every new address
+  looked like a new attempt, so nothing stepped in.
+- **Thinking in circles** is stopped as it streams. A model that repeats the same few paragraphs
+  used to think until the context was full (here 70,000 characters, about ten minutes behind the
+  spinner). Now the reply is dropped once its sentences keep repeating, and the model is asked for
+  its next step or what's blocking it.
+- **A reply with no answer** no longer ends the request as if it were done. An empty reply, or one
+  that filled the context before it said anything, gets a second chance; the second time lcode stops
+  (status `loop`) and offers the stronger model first, when one is set. An answer the context cut off
+  midway now says so. OpenAI-compatible servers report a cut-off reply too.
+- **A `cd` out of the project** no longer moves lcode there. A model that ran `cd /tmp` took the
+  session, the project checks and the memory notes with it, and the session was saved under `/tmp`,
+  so `lcode -c` in the project couldn't find it. Now a `cd` within the project is kept, and one out
+  of it isn't: the next command starts in the project again. Sessions are saved under the folder
+  lcode works in.
+- **Scripts it never ran** are sent back once before the answer counts: a model that wrote
+  `build_android.sh` and called the job done never ran it, and its first line failed. It now runs it
+  and fixes what fails, or says plainly that it's untested and why.
+
 ## [0.35.0] - 2026-10-14
 
 ### Added

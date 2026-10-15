@@ -101,7 +101,7 @@ reasoning is on.
 | `list_dir` | Directory tree, skipping `.git`, `node_modules`, virtualenvs and caches |
 | `glob` | Find files by pattern, newest first |
 | `grep` | Regex search with ripgrep (falls back to Python if ripgrep is missing) |
-| `bash` | Run a shell command with live output, a timeout and a persistent working directory; with `background`, keep it running ([details](#background-commands)) |
+| `bash` | Run a shell command with live output, a timeout and a persistent working directory (a `cd` within the project is kept, one out of it isn't); with `background`, keep it running ([details](#background-commands)) |
 | `bash_output`, `bash_stop` | Read what a background command printed since last time; stop it |
 | `todo_write` | Keep a visible task list for multi-step work, with notes (decisions, findings) that survive when old messages are removed; `/status` shows them |
 | `web_search` | Search the web for current information (needs a [search provider](#web-search)) |
@@ -183,6 +183,13 @@ command = "uv run pytest -q && uv run ruff check ."
 Or set it for yourself with `lcode config set checks "make check"`; `lcode config set checks off`
 turns checks off.
 
+**Scripts it never ran.** A model that writes a build or install script tends to call it done
+without running it once, and the first thing you see is its first error. When a request wrote a
+shell script (a `.sh` file, or a file with a shell shebang) and no command in it ran the script,
+lcode sends it back once before the answer counts: run it and fix what fails, or say plainly that
+it's untested and why, when running it would install, deploy or delete things. Making it executable
+or reading it doesn't count as running it. `checks = "off"` turns this off too.
+
 ## A review before the answer
 
 Models claim more than they did: half of a two-part request done, "it works now" without having
@@ -224,8 +231,10 @@ lcode config set escalate_price 3/15                # dollars per million tokens
 ```
 
 **When.** lcode offers it when the [loop breaker](how-it-works.md#when-the-model-repeats-itself)
-would stop the request, and when the project's [checks](#checks-before-done) fail twice in a row
-after the model's fixes, at most once per request. You can also ask at any time: `/escalate`, or
+would stop the request, when the model's replies [go nowhere](how-it-works.md#when-a-reply-goes-nowhere)
+twice, and when the project's [checks](#checks-before-done) fail twice in a row after the model's
+fixes, at most once per request. Not for a [site this machine can't reach](how-it-works.md#when-a-site-cant-be-reached):
+a stronger model can't reach it either. You can also ask at any time: `/escalate`, or
 `/escalate the window still grows` to say what's wrong.
 
 **Nothing is sent without asking**, in any permission mode:
