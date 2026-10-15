@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-10-15
+
 ### Fixed
 
 Found in a real session that spent an hour on an Android build whose downloads this machine
@@ -797,7 +799,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.35.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.35.1...HEAD
+[0.35.1]: https://github.com/nasser1941/lcode/compare/v0.35.0...v0.35.1
 [0.35.0]: https://github.com/nasser1941/lcode/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/nasser1941/lcode/compare/v0.33.1...v0.34.0
 [0.33.1]: https://github.com/nasser1941/lcode/compare/v0.33.0...v0.33.1
