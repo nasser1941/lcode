@@ -338,3 +338,12 @@ def test_lcode_runs_against_a_configured_server(server, repo, tmp_path, monkeypa
     with pytest.raises(SystemExit, match="1"):
         cli.main(["setup"])
     assert "lcode setup downloads models into Ollama, but lcode uses LM Studio" in out.file.getvalue()
+
+
+def test_a_reply_cut_off_by_the_server_says_so(server):
+    cut = {"choices": [{"index": 0, "delta": {"content": "The build"}, "finish_reason": "length"}]}
+    FakeServer.replies = [sse(cut, USAGE)]
+    chunks = list(OpenAICompatible(server).chat_stream({"model": "m", "messages": []}))
+    assert chunks[-1]["done_reason"] == "length"
+    FakeServer.replies = [sse(delta(content="Done."), USAGE)]
+    assert list(OpenAICompatible(server).chat_stream({"model": "m", "messages": []}))[-1]["done_reason"] == "stop"

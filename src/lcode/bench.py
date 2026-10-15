@@ -904,7 +904,7 @@ def run_task(
         if agent is None:
             agent = Agent(ollama, settings, folder, console=log)
         else:  # the same conversation moves on to this task's folder, as with /cd
-            agent.cwd = folder.resolve()
+            agent.cwd = agent.workspace = folder.resolve()
             agent.messages[0]["content"] = agent.system_prompt()
         if settings.embed_model != "off":  # --code-search: index the task's folder first, outside the timer
             from lcode import codesearch

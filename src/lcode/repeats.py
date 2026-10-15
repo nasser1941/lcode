@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections import deque
 from dataclasses import dataclass
 
 from lcode.permissions import is_read_only
@@ -102,3 +104,38 @@ def changes_things(name: str, args: dict, result: str) -> bool:
     if name == "bash":
         return not is_read_only(str(args.get("command", "")))
     return True  # other tools (MCP, subagents…) might
+
+
+class Circles:
+    """Notice a reply that goes round in circles while it streams: the same sentences over and over.
+
+    Small models sometimes fall into this while they think: a few paragraphs, repeated until the context is
+    full. It takes minutes behind the spinner and ends without an answer. Sentences shorter than MIN_SENTENCE
+    don't count (they repeat legitimately). The text is going round in circles when, of the last WINDOW
+    sentences, LOOPING or more were each seen REPEATS times or more.
+    """
+
+    MIN_SENTENCE = 20
+    WINDOW = 20
+    REPEATS = 4
+    LOOPING = 16
+    SPLIT = re.compile(r"\n|(?<=[.!?])\s+")
+
+    def __init__(self) -> None:
+        self.partial = ""
+        self.seen: dict[str, int] = {}
+        self.recent: deque[str] = deque(maxlen=self.WINDOW)
+
+    def feed(self, text: str) -> bool:
+        """Add streamed text; whether it's now going round in circles."""
+        parts = self.SPLIT.split(self.partial + text)
+        self.partial = parts.pop()
+        for part in parts:
+            sentence = " ".join(part.split()).lower()
+            if len(sentence) < self.MIN_SENTENCE:
+                continue
+            self.seen[sentence] = self.seen.get(sentence, 0) + 1
+            self.recent.append(sentence)
+        if len(self.recent) < self.WINDOW:
+            return False
+        return sum(self.seen[s] >= self.REPEATS for s in self.recent) >= self.LOOPING

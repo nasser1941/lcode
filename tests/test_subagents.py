@@ -395,6 +395,6 @@ def test_a_subagent_that_repeats_itself_still_gives_a_report(make_agent):
     )
     agent.run_turn("go")
     report = agent.ollama.payloads[6]
-    assert "You kept making the same call, so lcode stopped you." in report["messages"][-2]["content"]
+    assert "You went round in circles, so lcode stopped you." in report["messages"][-2]["content"]
     assert "tools" not in report
     assert "I kept listing the top level" in agent.messages[3]["content"] and agent.turn_status == "success"

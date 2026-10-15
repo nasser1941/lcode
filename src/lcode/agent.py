@@ -51,7 +51,7 @@ from lcode.mcp import McpManager
 from lcode.ollama import Ollama, OllamaError
 from lcode.permissions import LEADING_CD, Permissions
 from lcode.render import MarkdownStreamer
-from lcode.repeats import Repeats
+from lcode.repeats import Circles, Repeats
 from lcode.sandbox import Sandbox, SandboxError, project_root
 from lcode.steer import NOTE_INTRO, Steering
 from lcode.tools import (
@@ -71,6 +71,7 @@ from lcode.tools import (
     tree,
     truncate,
 )
+from lcode.unreachable import NOTE_AT, Sites
 
 GPU_MEMORY_ERRORS = (
     "out of memory",
@@ -80,6 +81,27 @@ GPU_MEMORY_ERRORS = (
 )
 SAFE_NUM_BATCH = 512  # Ollama's default prompt batch
 MAX_STEPS_PER_TURN = 150
+MAX_STALLS = 2  # replies that go round in circles or say nothing, per request, before lcode stops it
+STALLED = {
+    "circles": "the reply went round in circles, so lcode stopped it",
+    "cut_off": "the reply filled the context before it said anything",
+    "": "the reply was empty",
+}
+
+
+def stall_note(trouble: str) -> str:
+    """What the model is told after a reply that went round in circles or ended without a word."""
+    first = {
+        "circles": "Your last reply went round in circles (the same thoughts over and over), so lcode stopped it.",
+        "cut_off": "Your last reply filled the rest of the context before you said anything.",
+        "": "Your last reply was empty.",
+    }[trouble]
+    return (
+        f"[lcode] {first} Don't deliberate at length now. Either make your next tool call, or, if you're stuck, "
+        "tell the user in a few lines what you did, what fails, and what they could do."
+    )
+
+
 EVENT_OUTPUT = 4000  # characters of a tool's output in an event
 # How a tool result starts when the call failed or wasn't allowed (an "error" in events and results).
 REFUSED = ("Error:", "A deny rule", "The user denied", "This needs the user's permission")
@@ -319,6 +341,9 @@ class Agent:
         self.ollama = ollama
         self.settings = settings
         self.cwd = cwd.resolve()
+        # The folder lcode works in: where it started, or where /cd or a resumed session took it. A shell
+        # command may move the working directory around its project (self.cwd), but not out of it.
+        self.workspace = self.cwd
         self.perms = Permissions(self.console, settings.permission_mode)
         self.tools = Toolbox(self)
         self.session_id = self.new_session_id()
@@ -377,8 +402,10 @@ class Agent:
         self.escalate_approved: bool | None = None  # decided in advance (lcode -p --escalate, the benchmark)
         self.sent_chars = 0  # characters of the conversation the model had already read
         self.counted_chars: int | None = None  # characters that ctx_used covers (None: all of them)
-        self.turn_status = ""  # how the last request ended: success, max_steps, loop
+        self.turn_status = ""  # how the last request ended: success, max_steps, loop, blocked
         self.repeats = Repeats(settings.repeat_limit)  # notices when the model repeats itself
+        self.sites = Sites(NOTE_AT if settings.repeat_limit else 0)  # notices a site this machine can't reach
+        self.reply_trouble = ""  # what went wrong with the last reply: "circles", "cut_off" or ""
         self.response = None  # the streaming response, so another thread can abort it
         self.ctx_used = 0
         self.last_speed = 0.0
@@ -648,7 +675,7 @@ class Agent:
         f = self.session_file()
         f.parent.mkdir(parents=True, exist_ok=True)
         data = {
-            "cwd": str(self.cwd),
+            "cwd": str(self.workspace),  # where `lcode -c` there finds it, wherever the shell moved
             "model": self.settings.model,
             "name": self.session_name,
             "title": self.session_title,
@@ -687,7 +714,7 @@ class Agent:
         saved_cwd = Path(info.cwd) if info.cwd else self.cwd
         if saved_cwd != self.cwd:
             if saved_cwd.is_dir():
-                self.cwd = saved_cwd.resolve()
+                self.cwd = self.workspace = saved_cwd.resolve()
                 note = f"Working directory is now {self.cwd}"
             else:
                 note = f"The session's directory {saved_cwd} no longer exists; staying in {self.cwd}"
@@ -707,7 +734,7 @@ class Agent:
         return note
 
     def load_latest(self) -> bool:
-        latest = sessions.list_sessions(self.cwd, limit=1)
+        latest = sessions.list_sessions(self.workspace, limit=1)
         if latest:
             self.load(latest[0])
         return bool(latest)
@@ -805,8 +832,11 @@ class Agent:
                 status = None
 
         start_spinner()
+        circles = Circles()
+        self.reply_trouble = ""
+        stream = self.chat(self.messages, self.tool_schemas(), self.settings.think)
         try:
-            for chunk in self.chat(self.messages, self.tool_schemas(), self.settings.think):
+            for chunk in stream:
                 if self.cancel is not None and self.cancel.is_set():
                     raise KeyboardInterrupt
                 msg = chunk.get("message", {})
@@ -822,6 +852,9 @@ class Agent:
                         stop_spinner()  # raw text is printed as it streams
                         self.console.print(Text(msg["thinking"], style="dim italic"), end="")
                         printed_thinking = True
+                    if self.settings.repeat_limit and circles.feed(msg["thinking"]):
+                        self.reply_trouble = "circles"
+                        break  # closing the stream below stops the model
                 if msg.get("content"):
                     if printed_thinking:
                         self.console.print("\n")
@@ -846,9 +879,12 @@ class Agent:
             self.messages.append({"role": "assistant", "content": content + "\n[interrupted by user]"})
             raise
         finally:
+            stream.close()
             stop_spinner()
             if watch is not None:
                 watch.stop()
+        if final.get("done_reason") == "length" and not self.reply_trouble:
+            self.reply_trouble = "cut_off"  # it filled the context (or hit the output limit) mid-reply
         if printed_thinking:
             self.console.print()
         md.flush()
@@ -917,6 +953,12 @@ class Agent:
             f"\n- When you've changed files, lcode runs the project's checks (`{check.command}`) before your answer "
             "is final, and gives you the failures to fix. Run them yourself while you work, too."
         )
+
+    def unrun_scripts(self, commands: list[str]) -> list[str]:
+        """Shell scripts the model wrote in this request and never ran (only where the checks would run)."""
+        if self.allowed_tools is not None or self.planning() or self.no_changes or self.settings.checks == "off":
+            return []
+        return checks.unrun_scripts(project_root_or_cwd(self.cwd), list(self.tools.before), commands)
 
     def project_check(self) -> checks.Check | None:
         """The project's check command, for the main agent outside plan mode and reviews (None otherwise)."""
@@ -1106,6 +1148,7 @@ class Agent:
         self.messages.append({"role": "user", "content": self.expand_mentions(user_text) + note})
         self.turn_requests = [user_text.strip()]
         self.repeats.reset()
+        self.sites.reset()
         self.check_results = []
         self.review_results = None
         self.escalations = []
@@ -1116,6 +1159,10 @@ class Agent:
         check_rounds = 0
         malformed = 0
         looping = ""  # the call the model kept repeating, when lcode stopped the request for it
+        blocked = None  # the site that couldn't be reached, when lcode stopped the request for it
+        stalls = 0  # replies that went round in circles or ended without a word
+        commands: list[str] = []  # shell commands run in this request
+        scripts_noted = False  # the model was told about scripts it wrote and never ran
         for step in range(self.max_steps):
             if self.cancel is not None and self.cancel.is_set():
                 raise KeyboardInterrupt
@@ -1165,9 +1212,46 @@ class Agent:
                     }
                 )
                 continue
+            if not calls and (self.reply_trouble == "circles" or not (reply.get("content") or "").strip()):
+                stalls += 1
+                self.messages.pop()  # nothing to keep: no answer, and circles would only fill the context
+                if stalls < MAX_STALLS:
+                    self.console.print(
+                        Text(f"  ⎿ {STALLED[self.reply_trouble]}: asking for a short answer", style="yellow")
+                    )
+                    self.messages.append({"role": "user", "content": stall_note(self.reply_trouble)})
+                    continue
+                why = "its replies went round in circles or ended without an answer, twice in this request"
+                if not escalated and self.can_escalate():
+                    escalated = True
+                    advice = escalate.run(self, why)
+                    if advice:
+                        self.messages.append({"role": "user", "content": advice})
+                        stalls = 0
+                        continue
+                self.turn_status = "loop"
+                self.console.print(
+                    Text(
+                        "Stopped: the model's replies went round in circles or ended without an answer, twice in "
+                        "this request. Try again with a smaller step, or tell it what to do differently.",
+                        style="yellow",
+                    )
+                )
+                return
             if not calls:
+                if self.reply_trouble == "cut_off":
+                    self.say(
+                        "The answer was cut off: the context window is full. /compact or a larger /context helps.",
+                        warning=True,
+                    )
                 if self.steering is not None and self.steering.waiting():
                     continue  # the user added a note while the model wrote its answer: it reads the note first
+                unrun = [] if scripts_noted else self.unrun_scripts(commands)
+                if unrun:
+                    scripts_noted = True
+                    self.console.print(Text(f"  ⎿ never ran {', '.join(unrun)}: asking the model to", style="yellow"))
+                    self.messages.append({"role": "user", "content": checks.unrun_note(unrun)})
+                    continue
                 check = self.project_check() if changed and not verified else None
                 if check is not None and check_rounds < checks.MAX_ROUNDS:
                     check_rounds += 1
@@ -1247,6 +1331,21 @@ class Agent:
                     )
                     if verdict.stop:
                         looping = self.describe_call(name, args)
+                out_of_reach = self.sites.check(name, args, result)
+                if out_of_reach.note and not looping:
+                    result += out_of_reach.note
+                    what = "stopping the request" if out_of_reach.stop else "told the model"
+                    self.console.print(
+                        Text(
+                            f"  ⎿ {out_of_reach.calls} calls to {out_of_reach.site} failed "
+                            f"({out_of_reach.what}), none worked: {what}",
+                            style="yellow",
+                        )
+                    )
+                    if out_of_reach.stop:
+                        blocked = out_of_reach
+                if name == "bash":
+                    commands.append(str(args.get("command", "")))
                 if name in ("edit_file", "write_file", "apply_patch") and not result.startswith(REFUSED):
                     changed, verified = True, False
                 elif name == "bash" and changed and self.model_ran_checks(str(args.get("command", "")), result):
@@ -1264,7 +1363,7 @@ class Agent:
                         "output": result[:EVENT_OUTPUT] + ("…" if len(result) > EVENT_OUTPUT else ""),
                     }
                 )
-                if looping:
+                if looping or blocked:
                     for rest in calls[i + 1 :]:
                         skipped = {
                             "role": "tool",
@@ -1283,6 +1382,18 @@ class Agent:
                     self.repeats.reset()
                     looping = ""
                     continue
+            if blocked:
+                self.turn_status = "blocked"
+                self.console.print(
+                    Text(
+                        f"Stopped: every request to {blocked.site} failed ({blocked.calls} calls: {blocked.what}) and "
+                        "none worked, so this machine probably can't reach it: a firewall, a proxy, a regional block "
+                        "or no internet. Check the connection (another network or a VPN, a proxy setting), or tell "
+                        "the model another way to get what it needs.",
+                        style="yellow",
+                    )
+                )
+                return
             if looping:
                 self.turn_status = "loop"
                 self.console.print(
