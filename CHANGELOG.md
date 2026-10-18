@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-10-18
+
 ### Changed
 
 - `/models` and `/model` show a numbered list of models, and you switch by typing a number: no
@@ -808,7 +810,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.35.1...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.36.0...HEAD
+[0.36.0]: https://github.com/nasser1941/lcode/compare/v0.35.1...v0.36.0
 [0.35.1]: https://github.com/nasser1941/lcode/compare/v0.35.0...v0.35.1
 [0.35.0]: https://github.com/nasser1941/lcode/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/nasser1941/lcode/compare/v0.33.1...v0.34.0
