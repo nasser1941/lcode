@@ -113,44 +113,96 @@ def choose_context(
 # ----------------------------------------------------------------------------- lcode models
 
 
-def print_served(client: backends.OpenAICompatible, current: str | None) -> None:
+def print_served(
+    client: backends.OpenAICompatible, current: str | None, numbered: bool = False, out: Console | None = None
+) -> list[str]:
+    out = out or console
     try:
         served = client.chat_models()
         current = backends.pick_model(client, current) if current else None
     except OllamaError as e:
         if not isinstance(e, backends.BackendError) or "doesn't serve" not in str(e):
-            console.print(f"[red]{e}[/]")
-            return
-    console.print(f"[bold]Models served by {escape(client.describe())}[/]")
-    for name in served:
-        console.print(f"  {escape(name)}" + ("  [bold]current[/]" if name == current else ""))
+            out.print(f"[red]{e}[/]")
+            return []
+        served = []
+    out.print(f"[bold]Models served by {escape(client.describe())}[/]")
+    for i, name in enumerate(served, 1):
+        number = f"[cyan]{i:>3}[/]  " if numbered else "  "
+        out.print(f"{number}{escape(name)}" + ("  [bold]current[/]" if name == current else ""))
     if not served:
-        console.print("  none listed")
-    console.print(
-        "[dim]Models are downloaded and loaded in the server itself. Choose one with [/]lcode --model <id>[dim] "
-        "or [/]lcode config set model <id>[dim].[/]"
-    )
+        out.print("  none listed")
+    if not numbered:
+        out.print(
+            "[dim]Models are downloaded and loaded in the server itself. Choose one with [/]lcode --model <id>[dim] "
+            "or [/]lcode config set model <id>[dim].[/]"
+        )
+    return served
 
 
-def print_models(ollama: Ollama | None, hw: Hardware, current: str | None = None) -> None:
+def other_installed(ollama: Ollama, installed: set[str]) -> list[str]:
+    """Installed Ollama models outside the catalog that can chat and call tools (so lcode can use them), by name.
+    Embedding models are left out: Ollama may list `tools` for them too, but not `completion`."""
+    known = {name for spec in catalog.load() for name in (spec.tag, spec.local_name)}
+    usable = []
+    for name in sorted({n.removesuffix(":latest") for n in installed} - known):
+        try:
+            capabilities = ollama.show(name).get("capabilities") or []
+            if "completion" in capabilities and "tools" in capabilities:
+                usable.append(name)
+        except OllamaError:
+            continue
+    return usable
+
+
+def model_choices(ollama: Ollama | None) -> list[str]:
+    """What `/models` numbers, in its order: the catalog's keys, then other installed models that call tools.
+    For an OpenAI-compatible server, the models it serves."""
     if ollama is not None and backends.is_openai(ollama):
-        print_served(ollama, current)  # type: ignore[arg-type]
-        return
+        try:
+            return ollama.chat_models()  # type: ignore[union-attr]
+        except OllamaError:
+            return []
+    try:
+        installed = ollama.installed_names() if ollama else set()
+    except OllamaError:
+        installed = set()
+    return [spec.key for spec in catalog.load()] + (other_installed(ollama, installed) if ollama else [])
+
+
+def print_models(
+    ollama: Ollama | None,
+    hw: Hardware,
+    current: str | None = None,
+    numbered: bool = False,
+    out: Console | None = None,
+) -> list[str]:
+    """The models table; with `numbered`, a number on each row to pick it by. Returns the rows' names in order."""
+    out = out or console
+    if ollama is not None and backends.is_openai(ollama):
+        return print_served(ollama, current, numbered, out)  # type: ignore[arg-type]
     try:
         installed = ollama.installed_names() if ollama else set()
     except OllamaError:
         installed = set()
     rec = catalog.recommend(hw)
-    wide = console.width >= 130  # the descriptive columns don't fit an 80-column terminal
+    wide = out.width >= 130  # the descriptive columns don't fit an 80-column terminal
     columns = ["Key", "Model", "Type", "Size", "Max ctx", "Fits here", "Speed", "Status"]
     if not wide:
         columns = [c for c in columns if c not in ("Model", "Type")]
+    if numbered:
+        columns.insert(0, "#")
     table = Table(title=f"Models for this machine: {hw.describe()}", title_justify="left", header_style="bold")
     for col in columns:
         table.add_column(
-            col, no_wrap=col in ("Key", "Size", "Max ctx", "Fits here"), min_width=11 if col == "Status" else None
+            col,
+            no_wrap=col in ("#", "Key", "Size", "Max ctx", "Fits here"),
+            min_width=11 if col == "Status" else None,
+            justify="right" if col == "#" else "left",
+            style="cyan" if col == "#" else None,
         )
+    choices: list[str] = []
     for spec in catalog.load():
+        choices.append(spec.key)
         ctx, speed = spec.fit(hw)
         marks = []
         if spec.local_name in installed or spec.tag in installed:
@@ -161,6 +213,7 @@ def print_models(ollama: Ollama | None, hw: Hardware, current: str | None = None
             marks.append("[bold]current[/]")
         marks.append("tested" if spec.tested else "[dim]untested[/]")
         row = {
+            "#": str(len(choices)),
             "Key": spec.key,
             "Model": spec.name,
             "Type": spec.params,
@@ -171,11 +224,18 @@ def print_models(ollama: Ollama | None, hw: Hardware, current: str | None = None
             "Status": ", ".join(marks) if wide else "\n".join(marks),
         }
         table.add_row(*(row[c] for c in columns))
-    console.print(table)
-    console.print(
-        "[dim]Install one with [/]lcode setup <key>[dim]. 'Fits here' is the largest context that fits in memory; "
-        "choose another with --context. Any other Ollama model with tool calling also works: lcode --model <tag>[/]"
-    )
+    for name in other_installed(ollama, installed) if ollama else []:
+        choices.append(name)
+        marks = ["[green]installed[/]"] + (["[bold]current[/]"] if name == current else []) + ["[dim]not in catalog[/]"]
+        row = {"#": str(len(choices)), "Key": escape(name), "Status": ", ".join(marks) if wide else "\n".join(marks)}
+        table.add_row(*(row.get(c, "") for c in columns))
+    out.print(table)
+    if not numbered:
+        out.print(
+            "[dim]Install one with [/]lcode setup <key>[dim]. 'Fits here' is the largest context that fits in memory; "
+            "choose another with --context. Any other Ollama model with tool calling also works: lcode --model <tag>[/]"
+        )
+    return choices
 
 
 def cmd_models(args) -> None:

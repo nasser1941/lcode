@@ -159,6 +159,6 @@ def test_switching_models_picks_the_vision_model_again(make_agent, monkeypatch):
 
     agent = make_agent()
     agent._vision = "qwen3.8:27b"  # decided for the previous model
-    monkeypatch.setattr("lcode.cli.resolve_model", lambda ollama, name: ("lcode-qwen3.6-35b", None))
-    handle_command(agent, "/model qwen3.6-35b", LAPTOP)
+    monkeypatch.setattr("lcode.cli.resolve_model", lambda ollama, name: ("custom:7b", None))
+    handle_command(agent, "/model custom:7b", LAPTOP)
     assert agent._vision != "qwen3.8:27b"  # decided again for the new model (here: none can see)

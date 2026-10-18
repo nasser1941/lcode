@@ -6,6 +6,15 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `/models` and `/model` show a numbered list of models, and you switch by typing a number: no
+  second `/model <name>`. `/model 2` switches straight away, and a name still works. The list ends
+  with the other Ollama models you've installed that can call tools, and a model that isn't
+  installed says how to get it.
+- `/context` says why it stops at the model's largest window (256K for qwen3.6-35b): Ollama caps the
+  window at what the model was trained on, whatever the memory, so 512K or 1M would only look larger.
+
 ## [0.35.1] - 2026-10-15
 
 ### Fixed
