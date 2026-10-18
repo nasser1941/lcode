@@ -60,8 +60,17 @@ when they fit entirely in GPU (or Apple unified) memory.
 
     ```text
     ❯ /models
-    ❯ /model qwen3.5-9b
+    Models for this machine: RTX 4080 Laptop (12 GB VRAM), 31 GB RAM
+      #  Key           Size     Max ctx  Fits here  Speed                  Status
+      1  qwen3.6-35b   22.6 GB  256K     256K       good (experts in RAM)  installed, recommended, current
+      2  qwen3.8-27b   …
+      9  my-model:7b                                                       installed, not in catalog
+      Switch to which model? (number or name, Enter to keep lcode-qwen3.6-35b): 9
     ```
+
+    `/model` shows the same list. `/model 9` or `/model qwen3.5-9b` switches straight away. The
+    list ends with the other Ollama models you've installed that can call tools. A model that isn't
+    installed yet says how to get it (`lcode setup <key>` in a shell).
 
 ### Any other Ollama model
 
@@ -106,6 +115,10 @@ Context window for lcode-qwen3.6-35b
  5  256K  ~28 GB · GPU + RAM   current, recommended
   Choose a number, a size like 96k, or press Enter to keep 256K: 2
 ```
+
+The list stops at the largest window the model was trained on, and says so: Ollama caps the window
+there whatever the memory, so a larger setting would only look larger. For qwen3.6-35b that's 256K;
+512K and 1M are offered for models trained on them.
 
 Sizes accept `k` and `m` suffixes (`128k` = 131,072 tokens, `1m` = 1,048,576). When the window is
 85% full, lcode summarizes the conversation automatically so you can keep working; `/compact` does it

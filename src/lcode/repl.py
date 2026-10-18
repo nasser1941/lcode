@@ -68,8 +68,8 @@ COMMANDS = {
     "/compact": "Summarize the conversation to free context (optional: what to focus on)",
     "/context": "Show context usage and change the window size: pick from a list, or /context 128k",
     "/ctx": "Shortcut for /context",
-    "/model": "Show or switch model, e.g. /model qwen3.5-9b",
-    "/models": "List models and how they fit this machine",
+    "/model": "Switch model: pick a number from the list, or /model 2, /model qwen3.5-9b",
+    "/models": "List models and how they fit this machine; type a number to switch",
     "/think": "Toggle model reasoning on/off",
     "/verbose": "Toggle showing the model's reasoning text",
     "/plan": "Plan before changing anything: /plan <request>, or /plan to show the approved plan",
@@ -243,14 +243,20 @@ def banner(agent: Agent) -> None:
 CONTEXT_CHOICES = (16384, 32768, 65536, 131072, 262144, 524288, 1048576)
 
 
+def model_limit(agent: Agent) -> int | None:
+    """The largest context the model supports (what Ollama reports, else the catalog's), if known."""
+    spec = catalog.find(agent.settings.model)
+    try:
+        return agent.ollama.max_context(agent.settings.model) or (spec.max_context if spec else None)
+    except OllamaError:
+        return spec.max_context if spec else None
+
+
 def context_options(agent: Agent, hardware: Hardware) -> list[dict]:
     """The context sizes this model supports, with how each one fits this machine."""
     s = agent.settings
     spec = catalog.find(s.model)
-    try:
-        max_ctx = agent.ollama.max_context(s.model) or (spec.max_context if spec else None)
-    except OllamaError:
-        max_ctx = spec.max_context if spec else None
+    max_ctx = model_limit(agent)
     sizes = {c for c in CONTEXT_CHOICES if not max_ctx or c <= max_ctx} | {s.context}
     if max_ctx:
         sizes.add(max_ctx)
@@ -317,6 +323,15 @@ def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
             marks.append("[cyan]recommended[/]")
         table.add_row(str(i), format_tokens(option["size"]), option["note"], ", ".join(marks))
     c.print(table)
+    limit = model_limit(agent)
+    beyond = [size for size in CONTEXT_CHOICES if limit and size > limit]
+    if beyond:
+        sizes = " and ".join(format_tokens(size) for size in beyond[:2])
+        c.print(
+            f"[dim]Not offered: {sizes}{' and more' if len(beyond) > 2 else ''}. {s.model} was trained on up to "
+            f"{format_tokens(limit)} tokens, and Ollama caps the window there whatever the memory, so a larger "
+            "setting would only look larger.[/]"
+        )
     try:
         answer = input(f"  Choose a number, a size like 96k, or press Enter to keep {format_tokens(s.context)}: ")
     except EOFError:
@@ -809,6 +824,63 @@ def restore_checkpoint(agent: Agent, target: Checkpoint, rewind: bool) -> None:
     agent.save()
 
 
+def model_command(agent: Agent, arg: str, hardware: Hardware) -> None:
+    """/models and /model: the numbered list to pick from, or straight to a number or a name (/model 2)."""
+    from lcode.cli import model_choices, print_models
+
+    c, s = agent.console, agent.settings
+    if arg and not arg.isdigit():
+        switch_model(agent, arg, hardware)
+        return
+    if arg:
+        choices = model_choices(agent.ollama)
+    else:
+        choices = print_models(agent.ollama, hardware, s.model, numbered=True, out=c)
+        if not choices:
+            return
+        try:
+            answer = input(f"  Switch to which model? (number or name, Enter to keep {s.model}): ").strip()
+        except EOFError:
+            return
+        if not answer:
+            c.print(f"Keeping {s.model}.")
+            return
+        arg = answer
+    if arg.isdigit():
+        if not 1 <= int(arg) <= len(choices):
+            c.print(f"[red]There's no model {arg} in the list: choose 1 to {len(choices)}.[/]")
+            return
+        arg = choices[int(arg) - 1]
+    switch_model(agent, arg, hardware)
+
+
+def switch_model(agent: Agent, wanted: str, hardware: Hardware) -> None:
+    """Switch to a catalog key or an installed model, and size the context for it."""
+    from lcode.cli import NotInstalled, resolve_model
+
+    c, s = agent.console, agent.settings
+    try:
+        name, spec = resolve_model(agent.ollama, wanted)
+    except (NotInstalled, OllamaError) as e:
+        c.print(f"[red]{e}[/]")
+        return
+    if name == s.model:
+        c.print(f"Already using {name} (context {format_tokens(s.context)}).")
+        return
+    s.model = name
+    s.num_batch = spec.num_batch if spec and name == spec.local_name else None
+    if spec:  # size the context for the new model: largest window that fits this machine
+        s.context = limits.cap(name, spec.fit(hardware)[0] or MIN_USEFUL_CONTEXT)
+    elif backends.is_openai(agent.ollama):
+        s.context = backends.context_for(agent.ollama, name, None)[0]  # the server's window
+    agent._vision = False  # the model that looks at images goes with the model: decide again
+    agent.messages[0]["content"] = agent.system_prompt()
+    c.print(f"[green]Switched to {name}[/] (context {format_tokens(s.context)}).")
+    warning = residency.dense_warning(agent.ollama, name, s.context, hardware)
+    if warning:
+        agent.say(warning, warning=True)
+
+
 def apply_context(agent: Agent, size: int, hardware: Hardware) -> None:
     c, s = agent.console, agent.settings
     if size == s.context:
@@ -956,8 +1028,6 @@ def session_start(agent: Agent) -> None:
 
 def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
     """Run a slash command. Returns False when the REPL should exit."""
-    from lcode.cli import NotInstalled, print_models, resolve_model
-
     cmd, _, arg = line.partition(" ")
     arg = arg.strip()
     c, s = agent.console, agent.settings
@@ -1006,29 +1076,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         agent.compact(arg)
     elif cmd in ("/context", "/ctx"):
         context_command(agent, arg, hardware)
-    elif cmd == "/models":
-        print_models(agent.ollama, hardware, s.model)
-    elif cmd == "/model":
-        if not arg:
-            c.print(f"Model: {s.model}. Switch with /model <name>; list with /models.")
-        else:
-            try:
-                name, spec = resolve_model(agent.ollama, arg)
-            except (NotInstalled, OllamaError) as e:
-                c.print(f"[red]{e}[/]")
-                return True
-            s.model = name
-            s.num_batch = spec.num_batch if spec and name == spec.local_name else None
-            if spec:  # size the context for the new model: largest window that fits this machine
-                s.context = limits.cap(name, spec.fit(hardware)[0] or MIN_USEFUL_CONTEXT)
-            elif backends.is_openai(agent.ollama):
-                s.context = backends.context_for(agent.ollama, name, None)[0]  # the server's window
-            agent._vision = False  # the model that looks at images goes with the model: decide again
-            agent.messages[0]["content"] = agent.system_prompt()
-            c.print(f"[green]Switched to {name}[/] (context {format_tokens(s.context)}).")
-            warning = residency.dense_warning(agent.ollama, name, s.context, hardware)
-            if warning:
-                agent.say(warning, warning=True)
+    elif cmd in ("/models", "/model"):
+        model_command(agent, arg, hardware)
     elif cmd == "/think":
         s.think = (arg == "on") if arg in ("on", "off") else not s.think
         c.print(f"Reasoning {'on' if s.think else 'off'}.")

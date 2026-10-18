@@ -347,3 +347,17 @@ def test_a_reply_cut_off_by_the_server_says_so(server):
     assert chunks[-1]["done_reason"] == "length"
     FakeServer.replies = [sse(delta(content="Done."), USAGE)]
     assert list(OpenAICompatible(server).chat_stream({"model": "m", "messages": []}))[-1]["done_reason"] == "stop"
+
+
+def test_served_models_are_numbered_to_pick_from(server):
+    import io
+
+    from rich.console import Console
+
+    from lcode import cli
+
+    client = OpenAICompatible(server)
+    out = Console(file=io.StringIO(), width=120)
+    names = cli.print_models(client, None, MODELS[0], numbered=True, out=out)
+    assert names == cli.model_choices(client) == ["google/gemma-4-12b", "qwen/qwen3.6-35b-a3b"]  # no embeddings
+    assert "  2  qwen/qwen3.6-35b-a3b  current" in out.file.getvalue()
