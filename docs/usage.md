@@ -219,7 +219,8 @@ would have to read the whole conversation again. On a small GPU that's tens of s
 ## A stronger model when stuck
 
 Some problems are beyond a local model. When it's stuck, lcode can ask a stronger one for
-advice: a cloud model with your API key, or a bigger local model. The local model gets the advice
+advice: a cloud model with your API key, one of [Ollama's cloud models](models.md#cloud-models-through-ollama)
+(less than a cent a question for some), or a bigger local model. The local model gets the advice
 and carries on with its own tools. It's off until you choose the model:
 
 ```bash
@@ -227,6 +228,7 @@ lcode config set escalate_model anthropic/<model>   # with ANTHROPIC_API_KEY in 
 lcode config set escalate_model openai/<model>      # OPENAI_API_KEY
 lcode config set escalate_model xai/<model>         # XAI_API_KEY
 lcode config set escalate_model ollama/qwen3.8-27b  # a bigger local model: free, and nothing leaves
+lcode config set escalate_model ollama/glm-5.3-flash:cloud  # Ollama's cloud, after `ollama signin`
 lcode config set escalate_price 3/15                # dollars per million tokens in/out, for the cost
 ```
 
@@ -257,7 +259,8 @@ a stronger model can't reach it either. You can also ask at any time: `/escalate
 - **Keys** come from environment variables, are read when needed, and go only to their own
   provider. lcode never stores them.
 - **Cost.** The token count is always shown; the price only when you set `escalate_price`, since
-  prices change. A local model is free.
+  prices change. A local model is free; an Ollama cloud model isn't, and the panel says it goes to
+  ollama.com.
 - **Another server:** `escalate_url` points at another Ollama (`ollama/<model>`) or any OpenAI
   API (`custom/<model>`, key in `LCODE_ESCALATE_API_KEY`).
 - `lcode -p` can't ask, so it doesn't escalate unless you add `--escalate`, which is your OK for

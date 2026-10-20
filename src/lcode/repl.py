@@ -45,6 +45,8 @@ from lcode import memory as memory_notes
 from lcode.agent import AUTO_COMPACT_RATIO, INIT_PROMPT, Agent
 from lcode.catalog import MIN_USEFUL_CONTEXT
 from lcode.checkpoints import Checkpoint, CheckpointError, Restore
+from lcode.cloud import is_cloud
+from lcode.cloud import notice as cloud_notice
 from lcode.config import PERMISSION_MODES, STATE_DIR, ConfigError, format_tokens, parse_context
 from lcode.hardware import Hardware
 from lcode.ollama import OllamaError
@@ -876,6 +878,8 @@ def switch_model(agent: Agent, wanted: str, hardware: Hardware) -> None:
     agent._vision = False  # the model that looks at images goes with the model: decide again
     agent.messages[0]["content"] = agent.system_prompt()
     c.print(f"[green]Switched to {name}[/] (context {format_tokens(s.context)}).")
+    if is_cloud(name):
+        agent.say(cloud_notice(name))
     warning = residency.dense_warning(agent.ollama, name, s.context, hardware)
     if warning:
         agent.say(warning, warning=True)
@@ -1256,6 +1260,8 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
         run_safely(agent, prompt)
         return
     banner(agent)
+    if is_cloud(agent.settings.model):
+        agent.say(cloud_notice(agent.settings.model))
     warning = residency.dense_warning(agent.ollama, agent.settings.model, agent.settings.context, hardware)
     if warning:
         agent.say(warning, warning=True)
@@ -1286,6 +1292,8 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
 
 def preload(agent: Agent, session: PromptSession | None = None) -> None:
     """Start loading the model in the background so the first answer comes sooner; the status bar says so."""
+    if is_cloud(agent.settings.model):
+        return  # it runs on ollama.com: there's nothing to load here
     where = residency.placement(agent.ollama, agent.settings.model)
     if where is not None and (not where.context or where.context == agent.settings.context):
         return  # already in memory

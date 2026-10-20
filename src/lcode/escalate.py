@@ -23,6 +23,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from lcode import context as context_tools
+from lcode.cloud import is_cloud
 from lcode.ollama import Ollama, OllamaError, redact
 
 if TYPE_CHECKING:
@@ -76,13 +77,22 @@ class Target:
     @property
     def cloud(self) -> bool:
         """Paid per token: a cloud provider, or an OpenAI-compatible API elsewhere."""
-        return self.provider in ("openai", "anthropic", "xai") or (self.provider == "custom" and not self.local)
+        return (
+            self.provider in ("openai", "anthropic", "xai")
+            or (self.provider == "custom" and not self.local)
+            or (self.provider == "ollama" and is_cloud(self.model))  # an Ollama cloud model runs on ollama.com
+        )
 
     @property
     def where(self) -> str:
+        if self.provider == "ollama" and is_cloud(self.model):
+            return "ollama.com, through " + ("this machine's Ollama" if self.local else self._host())
         if self.url:
-            return re.sub(r"^https?://", "", redact(self.url)).split("/")[0]
+            return self._host()
         return "this machine"
+
+    def _host(self) -> str:
+        return re.sub(r"^https?://", "", redact(self.url)).split("/")[0]
 
 
 def target(setting: str | None, url: str | None = None) -> Target | None:
@@ -105,6 +115,8 @@ def target(setting: str | None, url: str | None = None) -> Target | None:
         raise EscalateError(f"escalate_model {setting!r} names no model")
     if provider == "custom" and not url:
         raise EscalateError("a custom/… escalate_model needs escalate_url, the server's OpenAI-compatible address")
+    if provider == "ollama" and is_cloud(model):
+        name = "Ollama cloud"
     return Target(provider, model.strip(), (url or base).rstrip("/"), key_env, f"{model.strip()} ({name})")
 
 

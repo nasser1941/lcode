@@ -21,6 +21,7 @@ from rich.table import Table
 from lcode import __version__, backends, catalog, config, limits, web
 from lcode.agent import Settings
 from lcode.catalog import ModelSpec
+from lcode.cloud import is_cloud, signin_command
 from lcode.config import ConfigError, format_tokens, parse_context
 from lcode.hardware import Hardware, detect
 from lcode.ollama import MIN_VERSION, Ollama, OllamaError, redact, version_tuple
@@ -384,6 +385,13 @@ def cmd_doctor(args) -> None:
     try:
         model, spec = resolve_model(ollama, cfg["model"])
         line("Model", f"{cfg['model']} → {model}", True)
+        if is_cloud(model):
+            line(
+                "",
+                "runs in Ollama's cloud: what lcode sends goes to ollama.com, billed per token, and this Ollama "
+                f"must be signed in once: {signin_command(ollama.host)}",
+                None,
+            )
         ctx, note = choose_context(ollama, model, spec, cfg["context"], hw)
         if spec:
             from lcode.subagents import parallel_slots
