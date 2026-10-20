@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass
 
 from lcode import catalog
+from lcode.cloud import is_cloud
 from lcode.ollama import OllamaError
 
 GB = 1e9
@@ -97,6 +98,8 @@ def expected_share(model: str, context: int, hardware) -> float | None:
 
 def dense_warning(ollama, model: str, context: int, hardware) -> str:
     """For a dense model that won't fit on the GPU: what that means and what to do. Empty otherwise."""
+    if is_cloud(model):
+        return ""  # it runs on ollama.com
     if hardware is None or hardware.unified or is_moe(ollama, model) is not False:
         return ""
     spec = catalog.find(model)

@@ -45,6 +45,7 @@ from lcode import (
 from lcode import context as context_tools
 from lcode import memory as memory_notes
 from lcode.checkpoints import Checkpoints
+from lcode.cloud import is_cloud
 from lcode.config import format_tokens
 from lcode.jobs import Jobs
 from lcode.mcp import McpManager
@@ -1011,8 +1012,8 @@ class Agent:
     def before_request(self, progress: Progress) -> residency.LoadWatch | None:
         """Set the status line for what comes before the first token: loading the model if it isn't in memory
         (watched until it is), then reading the prompt. Returns the watch while the model loads."""
-        if getattr(self.ollama, "kind", "ollama") != "ollama":
-            return None
+        if getattr(self.ollama, "kind", "ollama") != "ollama" or is_cloud(self.settings.model):
+            return None  # another server loads models itself; an Ollama cloud model isn't loaded here at all
         model, context = self.settings.model, self.settings.context
         fresh = max(0, conversation_chars(self.messages) - self.sent_chars) // 3
         where = residency.placement(self.ollama, model)

@@ -9,6 +9,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
+from lcode.cloud import is_cloud, unauthorized
+
 MIN_VERSION = (0, 30, 0)  # first release that runs the Qwen3.5/3.6 hybrid-attention architecture
 
 
@@ -49,6 +51,8 @@ class Ollama:
             r = requests.post(self._url(path), json=payload, timeout=timeout)
         except requests.RequestException as e:
             raise OllamaError(f"cannot reach Ollama at {redact(self.host)}: {e}") from e
+        if r.status_code == 401 and is_cloud(payload.get("model")):
+            raise OllamaError(unauthorized(payload["model"], self.host))
         if r.status_code != 200:
             raise OllamaError(f"Ollama {path} failed ({r.status_code}): {r.text[:300]}")
         return r.json()
@@ -164,6 +168,8 @@ class Ollama:
         if on_open:
             on_open(r)
         with r:
+            if r.status_code == 401 and is_cloud(payload.get("model")):
+                raise OllamaError(unauthorized(payload["model"], self.host))
             if r.status_code != 200:
                 raise OllamaError(f"Ollama error {r.status_code}: {r.text[:500]}")
             for line in r.iter_lines():

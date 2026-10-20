@@ -85,6 +85,104 @@ context; set `--context` yourself. If a model prints tool calls as text instead 
 lcode tries to recover them, but results are usually worse. To propose a model for the catalog, see
 [Contributing](contributing.md#adding-a-model-to-the-catalog).
 
+## Cloud models through Ollama
+
+Ollama also offers models that run on its own servers, with tags that end in `cloud`, such as
+`minimax-m3.1-flash:cloud`. Your Ollama passes the requests on, so lcode uses them like an installed
+model: as the main model, or as the [stronger model to ask when stuck](usage.md#a-stronger-model-when-stuck).
+What changes:
+
+- **Your code leaves the machine.** What lcode sends (your requests and the files it reads) goes to
+  ollama.com. lcode says so when a session starts, when you switch to one, and in `lcode doctor`.
+- **It's billed per token** to your ollama.com account (some models are free for a while).
+- **It needs an ollama.com account** and a connection to ollama.com.
+
+### Setting one up
+
+1. **Sign your Ollama in** to your ollama.com account, once. It prints a link to open in the
+   browser:
+
+    === "Ollama installed normally"
+
+        ```bash
+        ollama signin
+        ```
+
+    === "Ollama in Docker"
+
+        ```bash
+        docker exec -it <container> ollama signin
+        ```
+
+        `lcode doctor` shows this command with your container's name once a cloud model is set.
+
+2. **Add the model.** This stores a small reference, not the weights:
+
+    ```bash
+    ollama pull minimax-m3.1-flash:cloud      # in Docker: docker exec <container> ollama pull …
+    ```
+
+3. **Use it** as the main model, or as the stronger model when stuck:
+
+    ```bash
+    lcode --model minimax-m3.1-flash:cloud --context 256k    # or pick it by number in /models
+
+    lcode config set escalate_model ollama/minimax-m3.1-flash:cloud
+    lcode config set escalate_price 0.15/0.60                 # its price in/out, for the cost shown
+    ```
+
+    As the main model, give the context yourself: lcode defaults to 32K for models outside its
+    catalog. A larger window costs more, since every step sends the conversation again (the
+    repeated part at the lower *cached* price). As the stronger model, only a short brief goes out,
+    and only when you say yes: the panel shows `Where: … at ollama.com` and the cost.
+
+If a request fails with *this Ollama isn't signed in to an ollama.com account*, run the sign-in
+command the message shows.
+
+### Cheap coding models in Ollama's cloud
+
+The cloud models that call tools, cheapest first. Prices are in dollars per million tokens, from
+[ollama.com](https://ollama.com/search?c=cloud) on 2026-10-20. Check a model's page before you
+rely on a price: they change.
+
+- **TB 2.1** is the Terminal-Bench 2.1 score as published on the model's page. The makers measured
+  it themselves, in different setups, so it's a rough guide, not a ranking. A dash means the page
+  gives none.
+- **One question** is the most a question to the stronger model costs: a 15K-token brief, plus
+  lcode's 4K-token cap on the answer.
+- **DeepSeek** charges less off-peak. Its prices read off-peak / peak.
+
+| Model | Input | Cached | Output | Context | TB 2.1 | One question |
+|---|---|---|---|---|---|---|
+| `glm-5.3-flash:cloud` | $0.15 | $0.03 | $0.50 | 1M | 84.3 | $0.004 |
+| `minimax-m3.1-flash:cloud` | $0.15 | $0.015 | $0.60 | 976K | — | $0.005 |
+| `deepseek-v4.1-flash:cloud` | $0.15 / $0.30 | $0.003 / $0.006 | $0.60 / $1.20 | 1M | 90.6 | $0.005–$0.009 |
+| `minimax-m2.7:cloud` | $0.30 | $0.06 | $1.20 | 200K | — | $0.009 |
+| `nemotron-3-ultra:cloud` | $0.10 | $0.10 | $3.00 | 256K | — | $0.014 |
+| `mistral-large-3:675b-cloud` | $0.50 | — | $1.50 | 256K | — | $0.014 |
+| `minimax-m3:cloud` | $0.60 | $0.12 | $2.40 | 512K | — | $0.019 |
+| `mistral-large-4:cloud` | $0.68 | $0.07 | $2.09 | 1M | — | $0.019 |
+| `deepseek-v4-pro:cloud` | $0.66 / $1.32 | $0.022 / $0.044 | $1.98 / $3.96 | 1M | 87.9 | $0.018–$0.036 |
+| `kimi-k2.6:cloud` | $0.95 | $0.16 | $4.00 | 256K | — | $0.031 |
+| `kimi-k2.7-code:cloud` | $0.95 | $0.19 | $4.00 | 256K | — | $0.031 |
+| `muse-spark-open:cloud` | $1.25 | $0.15 | $4.25 | 1M | — | $0.036 |
+| `glm-5.2:cloud` | $1.40 | $0.26 | $4.40 | 976K | 81.0 | $0.039 |
+| `glm-5.3:cloud` | $1.40 | $0.26 | $4.40 | 1M | 88.2 | $0.039 |
+| `kimi-k3:cloud` | $3.00 | $0.30 | $15.00 | 1M | 88.3 | $0.106 |
+
+- **For the stronger model, the first three cost under a cent a question.**
+  - `deepseek-v4.1-flash` has the highest published score (90.6, DeepSeek's own measurement).
+  - `glm-5.3-flash` is the cheapest.
+  - `minimax-m3.1-flash` is free until 22 October 2026.
+- **GLM-5.3, DeepSeek V4 Pro and Kimi K3** publish similar scores (88.2, 87.9, 88.3) for 4 to 25
+  times the price.
+- **Not in the table:** `beam`, `gemma4:31b-cloud`, `nemotron-3-super`, `nemotron-3-nano` and
+  `clef` have cloud versions too, but list no price on their pages. Clef is an image model, not a
+  coding one.
+
+To set a price for the cost shown, use the input/output pair from the table, e.g.
+`lcode config set escalate_price 0.15/0.50` for `glm-5.3-flash:cloud`.
+
 ## Choosing a context window
 
 The **context window** is how much text the model can see at once: the conversation, files it has

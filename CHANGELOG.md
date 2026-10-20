@@ -6,6 +6,17 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Ollama's cloud models (tags ending in `cloud`, such as `minimax-m3.1-flash:cloud`) work as the
+  main model or as the stronger model when stuck, and lcode says what they are: what it sends goes
+  to ollama.com and is billed per token. The stronger-model panel said "free, on this machine" for
+  them; it now says ollama.com and shows the cost. A request Ollama refuses because it isn't signed
+  in says to run `ollama signin` (in Docker, with your container's name), and lcode skips the
+  local loading and GPU checks for them. The docs explain the setup and list the cloud models that
+  call tools, with prices and published coding scores: see
+  [Cloud models through Ollama](https://nasser1941.github.io/lcode/models/#cloud-models-through-ollama).
+
 ## [0.36.0] - 2026-10-18
 
 ### Changed
