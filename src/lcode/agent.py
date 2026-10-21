@@ -99,7 +99,9 @@ def stall_note(trouble: str) -> str:
     }[trouble]
     return (
         f"[lcode] {first} Don't deliberate at length now. Either make your next tool call, or, if you're stuck, "
-        "tell the user in a few lines what you did, what fails, and what they could do."
+        "tell the user in a few lines what you did, what fails, and what they could do. If you were about to check "
+        "something by running it, run it now instead of reasoning about it: for a window, take a screenshot (with "
+        "actions for clicks or keys)."
     )
 
 
