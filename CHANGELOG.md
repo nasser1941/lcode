@@ -12,6 +12,9 @@ All notable changes to lcode are documented here. The format follows
   the way a user would: `double_click Camera 1` (a widget by its text) or `double_click 300,200`,
   `click`, `right_click`, `key Escape`, `key ctrl+s`, `type …`, `wait 2`. The result says what each
   step hit. Bugs that only show after a click were out of reach before.
+- Qt's warnings are listed at the top of a screenshot's report, taken from everything the program
+  printed. In a real run the cause (`setLayout: … which already has a layout`) was there, among 30
+  lines of the program's logs, and the model looked past it.
 
 ### Fixed
 

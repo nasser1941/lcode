@@ -437,15 +437,16 @@ a screen and sees what you would, measured:
 - **Clicks and keys first.** For something that only shows after a click, a Python Qt program can
   take `actions` before the picture, the way you would: `double_click 300,200` (a point in the
   window), `double_click Camera 1` (the widget showing that text), `click Save`, `right_click …`,
-  `key Escape`, `key ctrl+s`, `type some text`, `wait 2`. The result says what each step hit, and
-  what the program printed, where Qt names layout mistakes:
+  `key Escape`, `key ctrl+s`, `type some text`, `wait 2`. The result says what each step hit.
+- **Qt's warnings come first.** Qt names many layout mistakes in what the program prints, often
+  among the program's own logs. lcode lists them at the top of the report:
 
     ```text
     ● screenshot(python camera_wall.py)  actions: double_click Camera 1
+    Qt printed warnings (they often name the cause):
+    - QWidget::setLayout: Attempting to set QLayout "" on FocusedCamera "", which already has a layout
     Steps, before the picture:
     - double_click Camera 1: on QLabel "Camera 1 — Connected" at (207, 317)
-    What the program printed:
-    QWidget::setLayout: Attempting to set QLayout "" on FocusedCamera "", which already has a layout
     ```
 - A model that can see describes the picture with the model's question in mind (see
   [Which model looks](#images)). Without one, the measurements still come back.
