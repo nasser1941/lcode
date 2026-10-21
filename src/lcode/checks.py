@@ -229,3 +229,52 @@ def unrun_note(scripts: list[str]) -> str:
         f"deploy, delete data) or needs something you don't have, don't: tell the user plainly that {it} is untested "
         "and why."
     )
+
+
+# ----------------------------------------------------------------------------- windows it never looked at
+
+GUI_IMPORT = re.compile(r"^\s*(?:from|import)\s+(PyQt[56]|PySide[26]|tkinter|kivy|wx|gi\.repository)\b", re.M)
+LOOKED = frozenset({"screenshot", "view_image"})
+
+
+def unseen_windows(root: Path, changed: list[str], tools_used: set[str]) -> dict[str, str]:
+    """Python files that draw a window (they import a GUI toolkit), changed in this request when the model never
+    looked at one: file -> toolkit.
+
+    A small model checks a window change by importing the module and running unrelated tests, then calls it done;
+    the user finds a blank window. Tests and imports don't show what's on the screen; a screenshot does.
+    """
+    if tools_used & LOOKED:
+        return {}
+    found = {}
+    for rel in changed:
+        path = root / rel
+        if path.suffix != ".py" or not path.is_file():
+            continue
+        try:
+            text = path.read_text(errors="replace")[:200_000]
+        except OSError:
+            continue
+        match = GUI_IMPORT.search(text)
+        if match:
+            found[rel] = match.group(1)
+    return found
+
+
+def unseen_note(found: dict[str, str]) -> str:
+    names = ", ".join(found)
+    kits = sorted(set(found.values()))
+    qt = any(kit.startswith(("PyQt", "PySide")) for kit in kits)
+    how = (
+        "take a screenshot with the screenshot tool: it runs the program without a screen and shows what it draws, "
+        "and what the program printed (Qt names layout mistakes there). For something that only shows after a click "
+        'or a key, give actions, e.g. actions=["double_click Camera 1"]'
+        if qt
+        else "take a screenshot with the screenshot tool: it runs the program on a virtual display and shows what it "
+        "draws"
+    )
+    return (
+        f"[lcode] You changed {names}, which draws a window ({', '.join(kits)}), but never looked at it: tests and "
+        f"imports don't show what's on the screen. Before you say it works, {how}. Check the picture against what the "
+        "user asked for. If the program can't run here, tell the user plainly that you haven't seen it working."
+    )

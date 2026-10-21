@@ -6,7 +6,8 @@ one exactly: the same tool, the same arguments and the same result. At the `limi
 failed: one sooner) the result gets a note that tells the model so, and if it still goes on, lcode ends the
 request.
 
-Results that change aren't repeats: a test run again after a fix, a background job read while it runs. And
+Results that change aren't repeats: a test run again after a fix, a background job read while it runs. Timings
+don't count as a change, though: `75 passed in 0.12s` and then `in 0.14s` is the same result. And
 a call that may have changed something (a file edit, a shell command that isn't read-only) starts the count
 again for every other call, so checking a build after each edit never adds up. Its own repeats still count:
 running the same failing command over and over is a loop.
@@ -23,6 +24,9 @@ from dataclasses import dataclass
 from lcode.permissions import is_read_only
 
 STOP_AFTER_NOTE = 2  # repeats after the note before the request ends
+TIMING = re.compile(
+    r"\b\d+(?:\.\d+)?\s?(?:ms|µs|us|s|secs?|seconds?|mins?|minutes?)\b|\b\d{1,2}:\d{2}:\d{2}(?:[.,]\d+)?\b", re.I
+)
 FAILED = ("Error:", "A deny rule", "The user denied", "This needs the user's permission")
 UNCHANGING = frozenset(
     {
@@ -64,7 +68,7 @@ class Repeats:
         """Count this call and its result."""
         if self.limit <= 0:
             return Verdict(1)
-        key = hashlib.sha256(json.dumps([name, args, result], sort_keys=True, default=str).encode()).hexdigest()
+        key = hashlib.sha256(json.dumps([name, args, steady(result)], sort_keys=True, default=str).encode()).hexdigest()
         count = self.seen.get(key, 0) + 1
         if changes_things(name, args, result):
             self.seen.clear()
@@ -93,6 +97,11 @@ class Repeats:
             f"Making it again won't change that. Use what it returned, or try something different. {hint}"
             "If you're stuck, stop and tell the user what is blocking you.",
         )
+
+
+def steady(result: str) -> str:
+    """The result without its timings and clock times, which change on every run of the same command."""
+    return TIMING.sub("#", result)
 
 
 def changes_things(name: str, args: dict, result: str) -> bool:

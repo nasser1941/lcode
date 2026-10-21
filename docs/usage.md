@@ -183,6 +183,13 @@ command = "uv run pytest -q && uv run ruff check ."
 Or set it for yourself with `lcode config set checks "make check"`; `lcode config set checks off`
 turns checks off.
 
+**Windows it never looked at.** A model that changes a window checks it with an import and the
+project's tests, which don't show what's on the screen, and calls it done: you find a blank
+window. When a request changed a Python file that draws one (it imports PyQt, PySide, tkinter,
+Kivy, wx or GTK) and the model never took a [screenshot](#screenshots) or looked at an image,
+lcode sends it back once: look at it, with clicks first if that's where the change shows, or say
+plainly that it's unchecked. `checks = "off"` turns this off.
+
 **Scripts it never ran.** A model that writes a build or install script tends to call it done
 without running it once, and the first thing you see is its first error. When a request wrote a
 shell script (a `.sh` file, or a file with a shell shebang) and no command in it ran the script,
@@ -427,6 +434,19 @@ a screen and sees what you would, measured:
 
 - For a web app, the model gives the command that starts the server and the page's URL: lcode
   starts the server, waits for the page to answer, takes the shot and stops the server.
+- **Clicks and keys first.** For something that only shows after a click, a Python Qt program can
+  take `actions` before the picture, the way you would: `double_click 300,200` (a point in the
+  window), `double_click Camera 1` (the widget showing that text), `click Save`, `right_click …`,
+  `key Escape`, `key ctrl+s`, `type some text`, `wait 2`. The result says what each step hit, and
+  what the program printed, where Qt names layout mistakes:
+
+    ```text
+    ● screenshot(python camera_wall.py)  actions: double_click Camera 1
+    Steps, before the picture:
+    - double_click Camera 1: on QLabel "Camera 1 — Connected" at (207, 317)
+    What the program printed:
+    QWidget::setLayout: Attempting to set QLayout "" on FocusedCamera "", which already has a layout
+    ```
 - A model that can see describes the picture with the model's question in mind (see
   [Which model looks](#images)). Without one, the measurements still come back.
 - Shots are saved in `.lcode/screenshots/` in the project, which keeps itself out of git, so you

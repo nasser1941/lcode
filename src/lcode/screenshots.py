@@ -6,7 +6,9 @@ returns what the model can't otherwise see: a picture (described by the vision m
 
 - A Python Qt program (PyQt5/6, PySide2/6) runs on Qt's "offscreen" platform, with a screen of the asked size. A
   small startup hook (a sitecustomize module on PYTHONPATH) waits for the program's event loop, then grabs its
-  windows, measures them and their widgets, and quits it.
+  windows, measures them and their widgets, and quits it. First it can take `actions`, the way a user would: click
+  or double-click a point or a widget by its text, press a key, type, wait. Bugs that only show after a click need
+  that, and Qt's warnings (in what the program printed) often name the cause.
 - Other desktop programs run on a virtual X display (Xvfb, Linux), captured with ImageMagick's `import` or `xwd`.
   The Qt hook still measures a Python Qt program there.
 - A web page, or a local server started with `command`, opens in headless Chrome (or Chromium, Edge), driven
@@ -43,6 +45,14 @@ from pathlib import Path
 DEFAULT_SCREEN = (1920, 1080)
 DEFAULT_WAIT = 3  # seconds for a program or page to start and draw
 MAX_WAIT = 60
+MAX_ACTIONS = 20
+ACTION_PAUSE = 0.4  # seconds after each action, for the program to react and redraw
+MOUSE_ACTIONS = ("click", "double_click", "right_click")
+KEY_NAMES = {"enter": "Return", "return": "Return", "esc": "Escape", "escape": "Escape", "space": "Space",
+             "tab": "Tab", "backspace": "Backspace", "delete": "Delete", "del": "Delete", "home": "Home", "end": "End",
+             "pageup": "PageUp", "pagedown": "PageDown", "up": "Up", "down": "Down", "left": "Left",
+             "right": "Right"}  # fmt: skip
+MODIFIERS = ("ctrl", "shift", "alt", "meta")
 SERVER_TIMEOUT = 60  # seconds for a server started with `command` to answer at `url`
 GRACE = 25  # seconds beyond `wait` before a program that never showed a window is stopped
 QT_BINDINGS = ("PyQt6", "PyQt5", "PySide6", "PySide2")
@@ -169,15 +179,19 @@ def _lcode_shot():
     out = _os.environ.get("LCODE_SHOT_OUT")
     wait_ms = int(float(_os.environ.get("LCODE_SHOT_WAIT", "3")) * 1000)
     quit_after = _os.environ.get("LCODE_SHOT_QUIT", "1") == "1"
+    actions = json.loads(_os.environ.get("LCODE_SHOT_ACTIONS") or "[]")
+    pause_ms = int(float(_os.environ.get("LCODE_SHOT_PAUSE", "0.4")) * 1000)
     bindings = ("PyQt6", "PyQt5", "PySide6", "PySide2")
     state = {"scheduled": False}
 
-    def capture(binding):
+    def capture(binding, steps=None):
         QtCore = _sys.modules[binding + ".QtCore"]
         QtGui = _sys.modules[binding + ".QtGui"]
         QtWidgets = _sys.modules.get(binding + ".QtWidgets")
         app = QtGui.QGuiApplication.instance()
         result = {"binding": binding, "windows": [], "screen": None, "platform": app.platformName()}
+        if steps is not None:
+            result["actions"] = steps
         screen = app.primaryScreen()
         if screen is not None:
             g, a = screen.geometry(), screen.availableGeometry()
@@ -257,6 +271,100 @@ def _lcode_shot():
             app.quit()
             QtCore.QTimer.singleShot(3000, lambda: _os._exit(0))
 
+    def text_of(widget):
+        for getter in ("text", "windowTitle", "title", "placeholderText"):
+            fn = getattr(widget, getter, None)
+            if callable(fn):
+                try:
+                    text = str(fn() or "")
+                except Exception:
+                    text = ""
+                if text:
+                    return text
+        return ""
+
+    def act(binding, then):
+        """Take the steps one by one, pausing after each so the program reacts, then call then(log)."""
+        QtCore = _sys.modules[binding + ".QtCore"]
+        QtWidgets = _sys.modules[binding + ".QtWidgets"]
+        Qt = QtCore.Qt
+        try:
+            QTest = importlib.import_module(binding + ".QtTest").QTest
+        except Exception as e:
+            then([{"step": s["raw"], "error": "Qt's QtTest module isn't available (%s)" % e} for s in actions])
+            return
+        app = QtWidgets.QApplication.instance()
+
+        def enum(group, name):  # scoped enums (PyQt6, PySide6), or flat ones (PyQt5, PySide2)
+            scope = getattr(Qt, group, None)
+            if scope is not None and hasattr(scope, name):
+                return getattr(scope, name)
+            return getattr(Qt, name)
+
+        def window():
+            tops = [w for w in app.topLevelWidgets() if w.isVisible() and w.width() > 1 and w.height() > 1]
+            active = app.activeWindow()
+            return active if active in tops else (tops[0] if tops else None)
+
+        def describe(widget):
+            text = text_of(widget)[:40]
+            return type(widget).__name__ + (' "%s"' % text if text else "")
+
+        def by_text(top, wanted):
+            wanted = wanted.casefold()
+            found = [c for c in top.findChildren(QtWidgets.QWidget)
+                     if c.isVisible() and wanted in text_of(c).casefold()]  # fmt: skip
+            return min(found, key=lambda c: c.width() * c.height()) if found else None
+
+        log = []
+
+        def step(i):
+            if i >= len(actions):
+                then(log)
+                return
+            s, note, pause = actions[i], {"step": actions[i]["raw"]}, pause_ms
+            try:
+                top = window()
+                if s["do"] == "wait":
+                    pause = int(s["seconds"] * 1000)
+                elif top is None:
+                    note["error"] = "no window to act on"
+                elif s["do"] in ("click", "double_click", "right_click"):
+                    if "text" in s:
+                        target = by_text(top, s["text"])
+                        pos = target.rect().center() if target is not None else None
+                    else:
+                        point = QtCore.QPoint(s["x"], s["y"])
+                        target = top.childAt(point) or top
+                        pos = target.mapFrom(top, point)
+                    if target is None:
+                        note["error"] = 'no visible widget shows "%s"' % s["text"]
+                    else:
+                        button = enum("MouseButton", "RightButton" if s["do"] == "right_click" else "LeftButton")
+                        none = enum("KeyboardModifier", "NoModifier")
+                        at = target.mapTo(top, pos)  # before the click moves things around
+                        note["target"] = "%s at (%d, %d)" % (describe(target), at.x(), at.y())
+                        click = QTest.mouseDClick if s["do"] == "double_click" else QTest.mouseClick
+                        click(target, button, none, pos)
+                else:
+                    target = app.focusWidget() or top
+                    if s["do"] == "key":
+                        mods = enum("KeyboardModifier", "NoModifier")
+                        names = {"ctrl": "ControlModifier", "shift": "ShiftModifier", "alt": "AltModifier",
+                                 "meta": "MetaModifier"}  # fmt: skip
+                        for m in s["mods"]:
+                            mods = mods | enum("KeyboardModifier", names[m])
+                        QTest.keyClick(target, enum("Key", "Key_" + s["key"]), mods)
+                    else:
+                        QTest.keyClicks(target, s["text"])
+                    note["target"] = describe(target)
+            except Exception as e:  # one step failing doesn't stop the picture
+                note["error"] = "%s: %s" % (type(e).__name__, e)
+            log.append(note)
+            QtCore.QTimer.singleShot(pause, lambda: step(i + 1))
+
+        step(0)
+
     def patch(binding):
         """Wrap exec() of the application classes loaded so far (QtWidgets may come after QtGui)."""
         QtCore = _sys.modules.get(binding + ".QtCore")
@@ -275,14 +383,23 @@ def _lcode_shot():
                 state["scheduled"] = True
                 open(_os.path.join(out, "started"), "w").close()  # the event loop runs: a capture is coming
 
-                def run():
+                def run(steps=None):
                     try:
-                        capture(binding)
+                        capture(binding, steps)
                     except Exception as e:  # the program goes on; lcode reports what went wrong
                         with open(_os.path.join(out, "qt.json"), "w") as f:
                             json.dump({"error": "%s: %s" % (type(e).__name__, e)}, f)
 
-                QtCore.QTimer.singleShot(wait_ms, run)
+                def start():
+                    if not actions:
+                        run()
+                        return
+                    try:
+                        act(binding, run)
+                    except Exception as e:
+                        run([{"step": "actions", "error": "%s: %s" % (type(e).__name__, e)}])
+
+                QtCore.QTimer.singleShot(wait_ms, start)
 
         class Wrapped:
             """In place of exec(): schedules the capture, then runs the original, static or not."""
@@ -372,6 +489,69 @@ def hook_dir(tmp: Path) -> Path:
 # --------------------------------------------------------------------------------------------- running a program
 
 
+def parse_actions(actions) -> list[dict]:
+    """The steps to take before the picture, from the tool's `actions` (a list, or one string split on ; and lines).
+
+    `click X,Y`, `double_click X,Y`, `right_click X,Y` (a point in the window), or the same with a widget's text
+    (`double_click "Camera 1"`); `key Escape` or `key ctrl+s`; `type some text`; `wait 2` (seconds).
+    """
+    if not actions:
+        return []
+    if isinstance(actions, str):
+        actions = [part for line in actions.splitlines() for part in line.split(";")]
+    steps = []
+    for raw in actions:
+        raw = str(raw).strip()
+        if not raw:
+            continue
+        verb, _, rest = raw.partition(" ")
+        verb, rest = verb.lower().replace("-", "_"), rest.strip()
+        if verb == "doubleclick":
+            verb = "double_click"
+        step: dict = {"do": verb, "raw": raw}
+        if verb in MOUSE_ACTIONS:
+            point = re.fullmatch(r"\(?\s*(-?\d+)\s*[, ]\s*(-?\d+)\s*\)?", rest)
+            if point:
+                step["x"], step["y"] = int(point.group(1)), int(point.group(2))
+            elif rest.strip("\"'"):
+                step["text"] = rest.strip("\"'")
+            else:
+                raise ShotError(f"{raw!r}: say where, as X,Y in the window or the widget's text, e.g. {verb} 200,150")
+        elif verb == "key":
+            parts = [p for p in re.split(r"[+\s]+", rest.lower()) if p]
+            if not parts:
+                raise ShotError(f"{raw!r}: name the key, e.g. key Escape or key ctrl+s")
+            *mods, key = parts
+            if any(m not in MODIFIERS for m in mods):
+                raise ShotError(f"{raw!r}: modifiers are {', '.join(MODIFIERS)}")
+            if key in KEY_NAMES:
+                key = KEY_NAMES[key]
+            elif re.fullmatch(r"f([1-9]|1[0-2])", key) or (len(key) == 1 and key.isalnum()):
+                key = key.upper()
+            else:
+                raise ShotError(f"{raw!r}: unknown key {key!r} (Escape, Return, Tab, Space, arrows, F1-F12, a letter)")
+            step["key"], step["mods"] = key, mods
+        elif verb == "type":
+            if not rest:
+                raise ShotError(f"{raw!r}: give the text to type")
+            step["text"] = rest
+        elif verb == "wait":
+            try:
+                step["seconds"] = max(0.0, min(float(rest or 1), 10.0))
+            except ValueError as e:
+                raise ShotError(f"{raw!r}: wait takes seconds, e.g. wait 2") from e
+        else:
+            raise ShotError(f"{raw!r}: actions are click, double_click, right_click, key, type and wait")
+        steps.append(step)
+    if len(steps) > MAX_ACTIONS:
+        raise ShotError(f"at most {MAX_ACTIONS} actions in one screenshot")
+    return steps
+
+
+def actions_time(steps: list[dict]) -> float:
+    return sum(s.get("seconds", 0) for s in steps) + ACTION_PAUSE * len(steps)
+
+
 def run_program(command: str, cwd: Path, env: dict[str, str], log: Path) -> subprocess.Popen:
     out = log.open("wb")
     try:
@@ -423,7 +603,9 @@ def base_env(hook: Path) -> dict[str, str]:
     return env
 
 
-def qt_offscreen(command: str, cwd: Path, screen: tuple[int, int], wait: int, tmp: Path, cancel=None) -> Shot:
+def qt_offscreen(
+    command: str, cwd: Path, screen: tuple[int, int], wait: int, tmp: Path, cancel=None, actions: list | None = None
+) -> Shot:
     """Run a Python Qt program on Qt's offscreen platform and capture its windows."""
     config = tmp / "screens.json"
     w, h = screen
@@ -453,12 +635,14 @@ def qt_offscreen(command: str, cwd: Path, screen: tuple[int, int], wait: int, tm
         LCODE_SHOT_OUT=str(out),
         LCODE_SHOT_WAIT=str(wait),
         LCODE_SHOT_QUIT="1",
+        LCODE_SHOT_ACTIONS=json.dumps(actions or []),
+        LCODE_SHOT_PAUSE=str(ACTION_PAUSE),
     )
     env.pop("DISPLAY", None)
     log = tmp / "output.txt"
     proc = run_program(command, cwd, env, log)
     try:
-        deadline = time.time() + wait + GRACE
+        deadline = time.time() + wait + actions_time(actions or []) + GRACE
         while time.time() < deadline and proc.poll() is None and not (out / "qt.json").exists():
             if cancel is not None and cancel():
                 raise KeyboardInterrupt
@@ -509,8 +693,17 @@ def qt_report(data: dict) -> list[str]:
     screen = data.get("screen") or [0, 0]
     sw, sh = screen
     windows = data.get("windows") or []
+    if data.get("actions"):
+        lines.append("Steps, before the picture:")
+        for note in data["actions"]:
+            done = (
+                f"couldn't: {note['error']}"
+                if note.get("error")
+                else (f"on {note['target']}" if note.get("target") else "done")
+            )
+            lines.append(f"- {note['step']}: {done}")
     if not windows:
-        return ["No visible Qt window."]
+        return [*lines, "No visible Qt window."]
     for win in windows:
         title = f'"{win["title"]}" ' if win.get("title") else ""
         x, y, w, h = win["x"], win["y"], win["width"], win["height"]
@@ -1059,12 +1252,15 @@ def take(
     full_page: bool = False,
     mode: str = "auto",
     cancel=None,
+    actions: list | None = None,
 ) -> Shot:
-    """Take the screenshot. `cancel` is checked while waiting (return True to stop)."""
+    """Take the screenshot. `cancel` is checked while waiting (return True to stop); `actions` come first."""
     wait = max(0, min(int(wait), MAX_WAIT))
     path = new_path(folder, label_for(command, url))
     with tempfile.TemporaryDirectory(prefix="lcode-shot-") as name:
         tmp = Path(name)
+        if actions and url:
+            raise ShotError("actions work for Python Qt programs (PyQt, PySide), not web pages yet")
         if url:
             url = normalize_url(url, cwd)
             server = None
@@ -1086,7 +1282,14 @@ def take(
             raise ShotError("give a command that starts the program, or a url")
         if mode == "auto":
             mode = "qt" if looks_like_qt(command, cwd) or not xvfb_available() else "xvfb"
-        shot = (qt_offscreen if mode == "qt" else virtual_display)(command, cwd, screen, wait, tmp, cancel)
+        if actions and mode != "qt":
+            raise ShotError(
+                "actions work for Python Qt programs (PyQt, PySide) only: take this one's screenshot without them"
+            )
+        if mode == "qt":
+            shot = qt_offscreen(command, cwd, screen, wait, tmp, cancel, actions)
+        else:
+            shot = virtual_display(command, cwd, screen, wait, tmp, cancel)
         shutil.copyfile(shot.image, path)
         kept = []
         for i, window in enumerate(shot.windows):

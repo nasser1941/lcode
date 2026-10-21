@@ -961,6 +961,12 @@ class Agent:
             return []
         return checks.unrun_scripts(project_root_or_cwd(self.cwd), list(self.tools.before), commands)
 
+    def unseen_windows(self, tools_used: set[str]) -> dict[str, str]:
+        """Window code the model changed in this request and never looked at (only where the checks would run)."""
+        if self.allowed_tools is not None or self.planning() or self.no_changes or self.settings.checks == "off":
+            return {}
+        return checks.unseen_windows(project_root_or_cwd(self.cwd), list(self.tools.before), tools_used)
+
     def project_check(self) -> checks.Check | None:
         """The project's check command, for the main agent outside plan mode and reviews (None otherwise)."""
         if self.allowed_tools is not None or self.planning() or self.no_changes or self.settings.checks == "off":
@@ -1164,6 +1170,8 @@ class Agent:
         stalls = 0  # replies that went round in circles or ended without a word
         commands: list[str] = []  # shell commands run in this request
         scripts_noted = False  # the model was told about scripts it wrote and never ran
+        tools_used: set[str] = set()  # tools called in this request
+        windows_noted = False  # the model was told about windows it changed and never looked at
         for step in range(self.max_steps):
             if self.cancel is not None and self.cancel.is_set():
                 raise KeyboardInterrupt
@@ -1252,6 +1260,14 @@ class Agent:
                     scripts_noted = True
                     self.console.print(Text(f"  ⎿ never ran {', '.join(unrun)}: asking the model to", style="yellow"))
                     self.messages.append({"role": "user", "content": checks.unrun_note(unrun)})
+                    continue
+                unseen = {} if windows_noted else self.unseen_windows(tools_used)
+                if unseen:
+                    windows_noted = True
+                    self.console.print(
+                        Text(f"  ⎿ never looked at {', '.join(unseen)}: asking the model to", style="yellow")
+                    )
+                    self.messages.append({"role": "user", "content": checks.unseen_note(unseen)})
                     continue
                 check = self.project_check() if changed and not verified else None
                 if check is not None and check_rounds < checks.MAX_ROUNDS:
@@ -1345,6 +1361,7 @@ class Agent:
                     )
                     if out_of_reach.stop:
                         blocked = out_of_reach
+                tools_used.add(name)
                 if name == "bash":
                     commands.append(str(args.get("command", "")))
                 if name in ("edit_file", "write_file", "apply_patch") and not result.startswith(REFUSED):

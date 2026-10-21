@@ -56,7 +56,8 @@ same tool, the same arguments and the same result.
   `loop`.
 
 A result that changes isn't a repeat, so a test that's run again after a fix, or a background job
-that's checked while it runs, never adds up. A call that may have changed something, like an edit or
+that's checked while it runs, never adds up. Timings don't count as a change: `75 passed in 0.12s`
+and then `in 0.14s` is the same result. A call that may have changed something, like an edit or
 a shell command that isn't read-only, starts the count again for the other calls: checking the build
 after each edit is fine. Change the threshold with `lcode config set repeat_limit 5`, or turn it off
 with `0` (that also turns off the checks for unreachable sites and for thinking in circles, below).

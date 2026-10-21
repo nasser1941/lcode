@@ -192,7 +192,8 @@ SCHEMAS = [
         "widgets (Qt) or of the page, and the browser's console errors. Use it to check GUI and layout work instead "
         "of guessing. Python Qt programs run offscreen; other desktop programs on a virtual display (Linux); web pages "
         "in a headless browser. For a web app, give the command that starts its server and the url (lcode starts and "
-        "stops it); if a server is already running, or for an .html file, give only the url.",
+        "stops it); if a server is already running, or for an .html file, give only the url. For something that "
+        "only shows after a click or a key (a Python Qt program), give `actions`: they run first, then the picture.",
         {
             "command": {"type": "string", "description": "Command that starts the program, or the web server"},
             "url": {"type": "string", "description": "Page to open: a URL, localhost:PORT/path or an .html file"},
@@ -203,6 +204,14 @@ SCHEMAS = [
             "screen": {"type": "string", "description": "Screen (or browser window) size, WxH (default 1920x1080)"},
             "wait": {"type": "integer", "description": "Seconds to let it start and draw first (default 3)"},
             "full_page": {"type": "boolean", "description": "Web pages: the whole page, not just the window"},
+            "actions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Python Qt programs: steps to take before the picture, as a user would: "
+                '"click X,Y", "double_click X,Y", "right_click X,Y" (a point in the window, as the sizes show), '
+                'or with the widget\'s text: "double_click Camera 1"; "key Escape", "key ctrl+s"; "type some text"; '
+                '"wait 2". The result says what each step hit.',
+            },
             "mode": {
                 "type": "string",
                 "enum": ["auto", "qt", "xvfb"],
@@ -698,6 +707,7 @@ class Toolbox:
         wait: int = screenshots.DEFAULT_WAIT,
         full_page: bool = False,
         mode: str = "auto",
+        actions: list | str | None = None,
     ) -> str:
         command, url = (command or "").strip(), (url or "").strip()
         if not command and not url:
@@ -708,6 +718,7 @@ class Toolbox:
             size = screenshots.parse_screen(screen)
             if url:
                 url = screenshots.normalize_url(url, self.agent.cwd)
+            steps = screenshots.parse_actions(actions)
         except screenshots.ShotError as e:
             raise ToolError(str(e)) from e
         if command:
@@ -748,6 +759,7 @@ class Toolbox:
                     full_page=full_page,
                     mode=mode,
                     cancel=cancelled,
+                    actions=steps,
                 )
         except screenshots.ShotError as e:
             raise ToolError(f"no screenshot: {e}") from e
@@ -762,6 +774,8 @@ class Toolbox:
             lines.append(f"What the {'server' if url else 'program'} printed:\n{shot.output}")
         if self.agent.vision_model():
             what = f"the page {url}" if url else f"the program `{command}` on a {w}x{h} screen"
+            if steps:
+                what += ", after these steps: " + "; ".join(s["raw"] for s in steps)
             ask = f"This is a screenshot of {what}." + (f" {question.strip()}" if question.strip() else "")
             try:
                 seen = self.agent.look(shot.image, ask)
