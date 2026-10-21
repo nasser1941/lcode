@@ -30,6 +30,11 @@ window, while the user saw a blank screen each time:
   times in a row (`75 passed in 0.14s`, then `0.12s`…) without the repeat check noticing.
 - **A reply lcode drops** for going round in circles is saved, and the message says where, so you
   can read what the model was thinking instead of taking the stop on trust.
+- **The checks use the project's own Python.** They ran `python -m …` from PATH, which doesn't have
+  the project's dependencies, so a project with a `.venv` "failed" its checks on imports. Now
+  `.venv/bin/python` (or `venv`, `env`) runs them.
+- **Tests written for pytest get pytest** when the project has no pytest configuration: the tests
+  import it, or a requirements file lists it. They used to get `unittest`, which can't run them.
 
 ## [0.37.0] - 2026-10-20
 

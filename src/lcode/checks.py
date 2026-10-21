@@ -50,8 +50,26 @@ def find(root: Path, setting: str, trusted: bool) -> Check | None:
     return detect(root)
 
 
-def python() -> str:
+VENVS = (".venv", "venv", "env")
+PYTEST_USE = re.compile(r"^\s*(?:import pytest\b|from pytest\b)|^\s*@pytest\.", re.M)
+
+
+def python(root: Path | None = None) -> str:
+    """The project's own Python (its .venv, venv or env), where its dependencies are; else the one on PATH."""
+    if root is not None:
+        for env in VENVS:
+            for exe in ("bin/python", "Scripts/python.exe"):
+                if (root / env / exe).is_file():
+                    return f"{env}/{exe}"  # the checks run in the project's root
     return "python" if shutil.which("python") else "python3"
+
+
+def uses_pytest(root: Path) -> bool:
+    """Whether the tests are written for pytest (they import it), or the requirements list it, without a config."""
+    for name in ("requirements.txt", "requirements-dev.txt", "requirements_dev.txt", "dev-requirements.txt"):
+        if re.search(r"^\s*pytest\b", text(root / name), re.M | re.I):
+            return True
+    return any(PYTEST_USE.search(text(path)[:20000]) for path in test_files(root)[:50])
 
 
 def text(path: Path) -> str:
@@ -61,38 +79,49 @@ def text(path: Path) -> str:
         return ""
 
 
-def python_tests(root: Path) -> bool:
-    """Whether the project has Python test files (a few levels deep, outside environments and caches)."""
+def test_files(root: Path, limit: int = 200) -> list[Path]:
+    """The project's Python test files, a few levels deep, outside environments and caches."""
     from lcode.tools import IGNORE_DIRS
 
-    def walk(folder: Path, depth: int) -> bool:
-        try:
-            entries = list(folder.iterdir())
-        except OSError:
-            return False
-        if any(e.is_file() and re.fullmatch(r"test_.*\.py|.*_test\.py", e.name) for e in entries):
-            return True
-        return depth > 0 and any(
-            walk(e, depth - 1)
-            for e in entries
-            if e.is_dir() and e.name not in IGNORE_DIRS and not e.name.startswith(".")
-        )
+    found: list[Path] = []
 
-    return walk(root, 3)
+    def walk(folder: Path, depth: int) -> None:
+        try:
+            entries = sorted(folder.iterdir())
+        except OSError:
+            return
+        found.extend(e for e in entries if e.is_file() and re.fullmatch(r"test_.*\.py|.*_test\.py", e.name))
+        if depth > 0:
+            for e in entries:
+                if len(found) >= limit:
+                    return
+                if e.is_dir() and e.name not in IGNORE_DIRS and e.name not in VENVS and not e.name.startswith("."):
+                    walk(e, depth - 1)
+
+    walk(root, 3)
+    return found[:limit]
+
+
+def python_tests(root: Path) -> bool:
+    """Whether the project has Python test files (a few levels deep, outside environments and caches)."""
+    return bool(test_files(root, limit=1))
 
 
 def detect(root: Path) -> Check | None:
     """A check command from what the project looks like. Python checks need test files: pytest configured in a
     project without tests "fails" with nothing to run."""
     if python_tests(root):
+        py = python(root)
         configs = text(root / "pyproject.toml") + text(root / "setup.cfg") + text(root / "tox.ini")
         if "pytest" in configs or any((root / name).is_file() for name in ("pytest.ini", "conftest.py")):
-            runner = "uv run pytest -q" if (root / "uv.lock").is_file() else f"{python()} -m pytest -q"
+            runner = "uv run pytest -q" if (root / "uv.lock").is_file() else f"{py} -m pytest -q"
             return Check(runner, "pytest in the project's configuration")
+        if uses_pytest(root):
+            return Check(f"{py} -m pytest -q", "tests written for pytest")
         if list(root.glob("test_*.py")) or list(root.glob("*_test.py")):
-            return Check(f"{python()} -m unittest", "test files")
+            return Check(f"{py} -m unittest", "test files")
         if (root / "tests").is_dir():
-            return Check(f"{python()} -m unittest discover -s tests -t .", "tests/")
+            return Check(f"{py} -m unittest discover -s tests -t .", "tests/")
     package = text(root / "package.json")
     if package:
         try:

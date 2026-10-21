@@ -170,7 +170,9 @@ runs the project's checks itself before the answer is final:
 - **Programs** using `lcode -p --output json` see the runs in the result's `checks`.
 
 **Which checks.** lcode looks at the project: pytest when the configuration mentions it (`uv run
-pytest -q` with a `uv.lock`), otherwise `python -m unittest` for `test_*.py` files. Then
+pytest -q` with a `uv.lock`), when the tests import it, or when a requirements file lists it;
+otherwise `python -m unittest` for `test_*.py` files. Python checks run with the project's own
+environment when it has one (`.venv/bin/python`, `venv`, `env`), where its dependencies are. Then
 `npm test` (or pnpm, yarn, bun) when `package.json` has a test script, `cargo test`, `go test ./...`
 and `make test`. To choose the command yourself, set it for the repository in
 `.lcode/settings.toml`. That file is used once you trust the repository, like its hooks:
