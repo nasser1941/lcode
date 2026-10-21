@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-10-21
+
 ### Added
 
 - The screenshot tool can click first. For a Python Qt program, `actions` run before the picture,
@@ -853,7 +855,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.38.0...HEAD
+[0.38.0]: https://github.com/nasser1941/lcode/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/nasser1941/lcode/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/nasser1941/lcode/compare/v0.35.1...v0.36.0
 [0.35.1]: https://github.com/nasser1941/lcode/compare/v0.35.0...v0.35.1
