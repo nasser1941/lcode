@@ -212,3 +212,16 @@ def test_the_real_qt_test_can_find_a_python(tmp_path):
     done = subprocess.run([QT_PYTHON, "-c", "import PyQt6.QtTest"], capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
     assert shutil.which(QT_PYTHON) or os.path.exists(QT_PYTHON)
+
+
+def test_qt_warnings_are_pulled_out_of_what_the_program_printed(tmp_path):
+    log = tmp_path / "output.txt"
+    lines = ["2026-10-21 [INFO] Camera 1: connecting"] * 40
+    lines[3] = 'QWidget::setLayout: Attempting to set QLayout "" on FocusedCamera "", which already has a layout'
+    lines[5] = lines[3]  # said twice, listed once
+    lines[7] = "This plugin does not support propagateSizeHints()"  # offscreen noise
+    lines[9] = "qt.qpa.fonts: Populating font family aliases took 50 ms"
+    lines[39] = "QPainter::begin: Paint device returned engine == 0, type: 2"
+    log.write_text("\n".join(lines))
+    assert sh.qt_warnings(log) == [lines[3], lines[39]]
+    assert sh.qt_warnings(tmp_path / "missing.txt") == []

@@ -585,6 +585,27 @@ def stop(proc: subprocess.Popen | None) -> None:
             proc.wait(timeout=3)
 
 
+QT_WARNING = re.compile(r"^(?:Q[A-Za-z0-9]+::\w+|qt\.[\w.]+:|QML |Qt[: ])")
+NOT_A_PROBLEM = re.compile(
+    r"propagateSizeHints|QFont::|This plugin does not support|qt\.qpa\.fonts"
+)  # offscreen platform noise
+MAX_WARNINGS = 6
+
+
+def qt_warnings(log: Path) -> list[str]:
+    """Qt's own warnings in everything the program printed (not just the end that's shown), without repeats."""
+    try:
+        text = log.read_bytes().decode(errors="replace")
+    except OSError:
+        return []
+    found: list[str] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if QT_WARNING.match(line) and not NOT_A_PROBLEM.search(line) and line[:300] not in found:
+            found.append(line[:300])
+    return found[:MAX_WARNINGS]
+
+
 def printed(log: Path) -> str:
     try:
         text = log.read_bytes().decode(errors="replace")
@@ -666,6 +687,9 @@ def qt_offscreen(
     if image is None and not windows:
         raise ShotError("the program started Qt but showed no window")
     report = qt_report(data)
+    warnings = qt_warnings(log)
+    if warnings:
+        report[:0] = ["Qt printed warnings (they often name the cause):", *[f"- {line}" for line in warnings]]
     if shot_screen != screen:  # Qt 5's offscreen platform has a fixed screen
         report.append(
             f"(Qt used a {shot_screen[0]}x{shot_screen[1]} screen offscreen, not the {screen[0]}x{screen[1]} asked "
