@@ -248,3 +248,18 @@ def test_a_script_written_and_never_run_is_sent_back_once(make_agent, repo):
     agent = make_agent([reply(tool_calls=[write]), reply("Done.")], checks="off")
     agent.run_turn("Write a build script")
     assert agent.messages[-1]["content"] == "Done."
+
+
+def test_a_dropped_reply_is_kept_where_the_user_can_read_it(make_agent):
+    import re
+
+    looping = [{"message": {"thinking": LOOP}, "done": False} for _ in range(200)]
+    agent = make_agent([None, reply("Done.")])
+    agent.ollama.scripts[0] = streamed(looping, [])
+    agent.run_turn("Build the APK")
+    text = " ".join(output(agent).split())
+    match = re.search(r"the dropped reply is in (\S+?\.txt)", text)
+    assert match, text
+    from pathlib import Path
+
+    assert "Let me try to check the actual download page" in Path(match.group(1)).read_text()

@@ -1223,10 +1223,11 @@ class Agent:
                 continue
             if not calls and (self.reply_trouble == "circles" or not (reply.get("content") or "").strip()):
                 stalls += 1
-                self.messages.pop()  # nothing to keep: no answer, and circles would only fill the context
+                dropped = self.messages.pop()  # no answer, and circles would only fill the context
+                kept = self.keep_dropped(dropped)
                 if stalls < MAX_STALLS:
                     self.console.print(
-                        Text(f"  ⎿ {STALLED[self.reply_trouble]}: asking for a short answer", style="yellow")
+                        Text(f"  ⎿ {STALLED[self.reply_trouble]}: asking for a short answer{kept}", style="yellow")
                     )
                     self.messages.append({"role": "user", "content": stall_note(self.reply_trouble)})
                     continue
@@ -1242,7 +1243,7 @@ class Agent:
                 self.console.print(
                     Text(
                         "Stopped: the model's replies went round in circles or ended without an answer, twice in "
-                        "this request. Try again with a smaller step, or tell it what to do differently.",
+                        f"this request{kept}. Try again with a smaller step, or tell it what to do differently.",
                         style="yellow",
                     )
                 )
@@ -1428,6 +1429,14 @@ class Agent:
             return
         self.turn_status = "success"
         self.print_stats()
+
+    def keep_dropped(self, reply: dict) -> str:
+        """Save a reply lcode dropped (its thinking too), so the user can see what went round in circles."""
+        text = "\n\n".join(part for part in (reply.get("thinking"), reply.get("content")) if part)
+        if not text.strip():
+            return ""
+        path = context_tools.save_output(text, "dropped reply")
+        return f" (the dropped reply is in {path})" if path else ""
 
     def can_escalate(self) -> bool:
         """Whether a stronger model may be asked here: one is set, and this isn't a subagent or plan mode."""

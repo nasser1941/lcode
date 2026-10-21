@@ -86,7 +86,8 @@ aren't tracked.
 Small models sometimes think in circles: a few paragraphs, over and over, until the context is full.
 That takes minutes behind the spinner and ends without an answer. lcode watches the thinking as it
 streams, and when its sentences keep repeating, it stops the model, drops that reply and asks for a
-short one: the next tool call, or what's blocking it. An empty reply, or one that filled the context
+short one: the next tool call, or what's blocking it. The dropped reply is saved, and the message
+says where, so you can read what went round in circles. An empty reply, or one that filled the context
 before it said anything, gets the same second chance. The second time in a request, lcode stops it
 (status `loop`), offering the [stronger model](usage.md#a-stronger-model-when-stuck) first when one
 is set. An answer the context cut off midway is kept, with a warning to `/compact` or use a larger

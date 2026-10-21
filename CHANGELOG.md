@@ -25,6 +25,8 @@ window, while the user saw a blank screen each time:
   printed: `setLayout: … which already has a layout`.
 - **A rerun that only took a different time** counts as a repeat: the model ran the same tests four
   times in a row (`75 passed in 0.14s`, then `0.12s`…) without the repeat check noticing.
+- **A reply lcode drops** for going round in circles is saved, and the message says where, so you
+  can read what the model was thinking instead of taking the stop on trust.
 
 ## [0.37.0] - 2026-10-20
 
