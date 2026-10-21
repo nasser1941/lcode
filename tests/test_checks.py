@@ -190,3 +190,33 @@ def test_a_failure_the_model_doesnt_touch_isnt_checked_again(make_agent):
     )
     agent.run_turn("write notes")
     assert len(agent.check_results) == 1 and agent.messages[-1]["content"].startswith("That failure")
+
+
+@pytest.mark.parametrize(
+    ("files", "expected"),
+    [
+        ({"tests/test_wall.py": "import pytest\n\n@pytest.mark.parametrize('x', [1])\ndef test_x(x): ...\n"},
+         "-m pytest -q"),
+        ({"requirements.txt": "PyQt6\npytest>=8\n", "tests/test_wall.py": "def test_x(): ...\n"}, "-m pytest -q"),
+        ({"tests/test_wall.py": "import unittest\n"}, "-m unittest discover -s tests -t ."),
+    ],
+)  # fmt: skip
+def test_tests_written_for_pytest_get_pytest_without_a_config(tmp_path, files, expected):
+    for name, content in files.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(content)
+    check = checks.detect(tmp_path)
+    assert check.command.endswith(expected)
+
+
+def test_the_projects_own_python_runs_the_checks(tmp_path):
+    """Its dependencies are in its environment: the Python on PATH fails on their imports."""
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_wall.py").write_text("import pytest\n")
+    assert not checks.detect(tmp_path).command.startswith(".venv")
+    (tmp_path / ".venv" / "bin").mkdir(parents=True)
+    (tmp_path / ".venv" / "bin" / "python").write_text("")
+    (tmp_path / ".venv" / "lib" / "test_inside_the_venv.py").parent.mkdir(parents=True)
+    (tmp_path / ".venv" / "lib" / "test_inside_the_venv.py").write_text("import pytest\n")
+    assert checks.detect(tmp_path).command == ".venv/bin/python -m pytest -q"
+    assert checks.test_files(tmp_path) == [tmp_path / "tests" / "test_wall.py"]  # not the environment's own

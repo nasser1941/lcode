@@ -6,6 +6,36 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The screenshot tool can click first. For a Python Qt program, `actions` run before the picture,
+  the way a user would: `double_click Camera 1` (a widget by its text) or `double_click 300,200`,
+  `click`, `right_click`, `key Escape`, `key ctrl+s`, `type …`, `wait 2`. The result says what each
+  step hit. Bugs that only show after a click were out of reach before.
+- Qt's warnings are listed at the top of a screenshot's report, taken from everything the program
+  printed. In a real run the cause (`setLayout: … which already has a layout`) was there, among 30
+  lines of the program's logs, and the model looked past it.
+
+### Fixed
+
+From a real session that "fixed" a double-click feature four times without once looking at the
+window, while the user saw a blank screen each time:
+
+- **Windows it never looked at** are sent back once before the answer counts. When a request
+  changed a Python file that draws a window (PyQt, PySide, tkinter, Kivy, wx, GTK) and the model
+  never took a screenshot or looked at an image, it's told to look (with clicks first, if that's
+  where the change shows) or to say plainly that it's unchecked. The real cause was in what Qt
+  printed: `setLayout: … which already has a layout`.
+- **A rerun that only took a different time** counts as a repeat: the model ran the same tests four
+  times in a row (`75 passed in 0.14s`, then `0.12s`…) without the repeat check noticing.
+- **A reply lcode drops** for going round in circles is saved, and the message says where, so you
+  can read what the model was thinking instead of taking the stop on trust.
+- **The checks use the project's own Python.** They ran `python -m …` from PATH, which doesn't have
+  the project's dependencies, so a project with a `.venv` "failed" its checks on imports. Now
+  `.venv/bin/python` (or `venv`, `env`) runs them.
+- **Tests written for pytest get pytest** when the project has no pytest configuration: the tests
+  import it, or a requirements file lists it. They used to get `unittest`, which can't run them.
+
 ## [0.37.0] - 2026-10-20
 
 ### Added

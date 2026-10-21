@@ -248,3 +248,16 @@ def test_a_script_written_and_never_run_is_sent_back_once(make_agent, repo):
     agent = make_agent([reply(tool_calls=[write]), reply("Done.")], checks="off")
     agent.run_turn("Write a build script")
     assert agent.messages[-1]["content"] == "Done."
+
+
+def test_a_dropped_reply_is_kept_where_the_user_can_read_it(make_agent):
+    from lcode import context
+
+    looping = [{"message": {"thinking": LOOP}, "done": False} for _ in range(200)]
+    agent = make_agent([None, reply("Done.")])
+    agent.ollama.scripts[0] = streamed(looping, [])
+    agent.run_turn("Build the APK")
+    [saved] = context.outputs_dir().glob("*dropped-reply.txt")
+    assert "Let me try to check the actual download page" in saved.read_text()
+    shown = "".join(output(agent).split())  # a long path may be wrapped on screen
+    assert "thedroppedreplyisin" in shown and saved.name in shown

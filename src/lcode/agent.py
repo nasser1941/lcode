@@ -99,7 +99,9 @@ def stall_note(trouble: str) -> str:
     }[trouble]
     return (
         f"[lcode] {first} Don't deliberate at length now. Either make your next tool call, or, if you're stuck, "
-        "tell the user in a few lines what you did, what fails, and what they could do."
+        "tell the user in a few lines what you did, what fails, and what they could do. If you were about to check "
+        "something by running it, run it now instead of reasoning about it: for a window, take a screenshot (with "
+        "actions for clicks or keys)."
     )
 
 
@@ -961,6 +963,12 @@ class Agent:
             return []
         return checks.unrun_scripts(project_root_or_cwd(self.cwd), list(self.tools.before), commands)
 
+    def unseen_windows(self, tools_used: set[str]) -> dict[str, str]:
+        """Window code the model changed in this request and never looked at (only where the checks would run)."""
+        if self.allowed_tools is not None or self.planning() or self.no_changes or self.settings.checks == "off":
+            return {}
+        return checks.unseen_windows(project_root_or_cwd(self.cwd), list(self.tools.before), tools_used)
+
     def project_check(self) -> checks.Check | None:
         """The project's check command, for the main agent outside plan mode and reviews (None otherwise)."""
         if self.allowed_tools is not None or self.planning() or self.no_changes or self.settings.checks == "off":
@@ -1164,6 +1172,8 @@ class Agent:
         stalls = 0  # replies that went round in circles or ended without a word
         commands: list[str] = []  # shell commands run in this request
         scripts_noted = False  # the model was told about scripts it wrote and never ran
+        tools_used: set[str] = set()  # tools called in this request
+        windows_noted = False  # the model was told about windows it changed and never looked at
         for step in range(self.max_steps):
             if self.cancel is not None and self.cancel.is_set():
                 raise KeyboardInterrupt
@@ -1215,10 +1225,11 @@ class Agent:
                 continue
             if not calls and (self.reply_trouble == "circles" or not (reply.get("content") or "").strip()):
                 stalls += 1
-                self.messages.pop()  # nothing to keep: no answer, and circles would only fill the context
+                dropped = self.messages.pop()  # no answer, and circles would only fill the context
+                kept = self.keep_dropped(dropped)
                 if stalls < MAX_STALLS:
                     self.console.print(
-                        Text(f"  ⎿ {STALLED[self.reply_trouble]}: asking for a short answer", style="yellow")
+                        Text(f"  ⎿ {STALLED[self.reply_trouble]}: asking for a short answer{kept}", style="yellow")
                     )
                     self.messages.append({"role": "user", "content": stall_note(self.reply_trouble)})
                     continue
@@ -1234,7 +1245,7 @@ class Agent:
                 self.console.print(
                     Text(
                         "Stopped: the model's replies went round in circles or ended without an answer, twice in "
-                        "this request. Try again with a smaller step, or tell it what to do differently.",
+                        f"this request{kept}. Try again with a smaller step, or tell it what to do differently.",
                         style="yellow",
                     )
                 )
@@ -1252,6 +1263,14 @@ class Agent:
                     scripts_noted = True
                     self.console.print(Text(f"  ⎿ never ran {', '.join(unrun)}: asking the model to", style="yellow"))
                     self.messages.append({"role": "user", "content": checks.unrun_note(unrun)})
+                    continue
+                unseen = {} if windows_noted else self.unseen_windows(tools_used)
+                if unseen:
+                    windows_noted = True
+                    self.console.print(
+                        Text(f"  ⎿ never looked at {', '.join(unseen)}: asking the model to", style="yellow")
+                    )
+                    self.messages.append({"role": "user", "content": checks.unseen_note(unseen)})
                     continue
                 check = self.project_check() if changed and not verified else None
                 if check is not None and check_rounds < checks.MAX_ROUNDS:
@@ -1345,6 +1364,7 @@ class Agent:
                     )
                     if out_of_reach.stop:
                         blocked = out_of_reach
+                tools_used.add(name)
                 if name == "bash":
                     commands.append(str(args.get("command", "")))
                 if name in ("edit_file", "write_file", "apply_patch") and not result.startswith(REFUSED):
@@ -1411,6 +1431,14 @@ class Agent:
             return
         self.turn_status = "success"
         self.print_stats()
+
+    def keep_dropped(self, reply: dict) -> str:
+        """Save a reply lcode dropped (its thinking too), so the user can see what went round in circles."""
+        text = "\n\n".join(part for part in (reply.get("thinking"), reply.get("content")) if part)
+        if not text.strip():
+            return ""
+        path = context_tools.save_output(text, "dropped reply")
+        return f" (the dropped reply is in {path})" if path else ""
 
     def can_escalate(self) -> bool:
         """Whether a stronger model may be asked here: one is set, and this isn't a subagent or plan mode."""

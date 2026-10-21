@@ -56,7 +56,8 @@ same tool, the same arguments and the same result.
   `loop`.
 
 A result that changes isn't a repeat, so a test that's run again after a fix, or a background job
-that's checked while it runs, never adds up. A call that may have changed something, like an edit or
+that's checked while it runs, never adds up. Timings don't count as a change: `75 passed in 0.12s`
+and then `in 0.14s` is the same result. A call that may have changed something, like an edit or
 a shell command that isn't read-only, starts the count again for the other calls: checking the build
 after each edit is fine. Change the threshold with `lcode config set repeat_limit 5`, or turn it off
 with `0` (that also turns off the checks for unreachable sites and for thinking in circles, below).
@@ -85,7 +86,8 @@ aren't tracked.
 Small models sometimes think in circles: a few paragraphs, over and over, until the context is full.
 That takes minutes behind the spinner and ends without an answer. lcode watches the thinking as it
 streams, and when its sentences keep repeating, it stops the model, drops that reply and asks for a
-short one: the next tool call, or what's blocking it. An empty reply, or one that filled the context
+short one: the next tool call, or what's blocking it. The dropped reply is saved, and the message
+says where, so you can read what went round in circles. An empty reply, or one that filled the context
 before it said anything, gets the same second chance. The second time in a request, lcode stops it
 (status `loop`), offering the [stronger model](usage.md#a-stronger-model-when-stuck) first when one
 is set. An answer the context cut off midway is kept, with a warning to `/compact` or use a larger

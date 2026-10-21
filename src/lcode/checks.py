@@ -50,8 +50,26 @@ def find(root: Path, setting: str, trusted: bool) -> Check | None:
     return detect(root)
 
 
-def python() -> str:
+VENVS = (".venv", "venv", "env")
+PYTEST_USE = re.compile(r"^\s*(?:import pytest\b|from pytest\b)|^\s*@pytest\.", re.M)
+
+
+def python(root: Path | None = None) -> str:
+    """The project's own Python (its .venv, venv or env), where its dependencies are; else the one on PATH."""
+    if root is not None:
+        for env in VENVS:
+            for exe in ("bin/python", "Scripts/python.exe"):
+                if (root / env / exe).is_file():
+                    return f"{env}/{exe}"  # the checks run in the project's root
     return "python" if shutil.which("python") else "python3"
+
+
+def uses_pytest(root: Path) -> bool:
+    """Whether the tests are written for pytest (they import it), or the requirements list it, without a config."""
+    for name in ("requirements.txt", "requirements-dev.txt", "requirements_dev.txt", "dev-requirements.txt"):
+        if re.search(r"^\s*pytest\b", text(root / name), re.M | re.I):
+            return True
+    return any(PYTEST_USE.search(text(path)[:20000]) for path in test_files(root)[:50])
 
 
 def text(path: Path) -> str:
@@ -61,38 +79,49 @@ def text(path: Path) -> str:
         return ""
 
 
-def python_tests(root: Path) -> bool:
-    """Whether the project has Python test files (a few levels deep, outside environments and caches)."""
+def test_files(root: Path, limit: int = 200) -> list[Path]:
+    """The project's Python test files, a few levels deep, outside environments and caches."""
     from lcode.tools import IGNORE_DIRS
 
-    def walk(folder: Path, depth: int) -> bool:
-        try:
-            entries = list(folder.iterdir())
-        except OSError:
-            return False
-        if any(e.is_file() and re.fullmatch(r"test_.*\.py|.*_test\.py", e.name) for e in entries):
-            return True
-        return depth > 0 and any(
-            walk(e, depth - 1)
-            for e in entries
-            if e.is_dir() and e.name not in IGNORE_DIRS and not e.name.startswith(".")
-        )
+    found: list[Path] = []
 
-    return walk(root, 3)
+    def walk(folder: Path, depth: int) -> None:
+        try:
+            entries = sorted(folder.iterdir())
+        except OSError:
+            return
+        found.extend(e for e in entries if e.is_file() and re.fullmatch(r"test_.*\.py|.*_test\.py", e.name))
+        if depth > 0:
+            for e in entries:
+                if len(found) >= limit:
+                    return
+                if e.is_dir() and e.name not in IGNORE_DIRS and e.name not in VENVS and not e.name.startswith("."):
+                    walk(e, depth - 1)
+
+    walk(root, 3)
+    return found[:limit]
+
+
+def python_tests(root: Path) -> bool:
+    """Whether the project has Python test files (a few levels deep, outside environments and caches)."""
+    return bool(test_files(root, limit=1))
 
 
 def detect(root: Path) -> Check | None:
     """A check command from what the project looks like. Python checks need test files: pytest configured in a
     project without tests "fails" with nothing to run."""
     if python_tests(root):
+        py = python(root)
         configs = text(root / "pyproject.toml") + text(root / "setup.cfg") + text(root / "tox.ini")
         if "pytest" in configs or any((root / name).is_file() for name in ("pytest.ini", "conftest.py")):
-            runner = "uv run pytest -q" if (root / "uv.lock").is_file() else f"{python()} -m pytest -q"
+            runner = "uv run pytest -q" if (root / "uv.lock").is_file() else f"{py} -m pytest -q"
             return Check(runner, "pytest in the project's configuration")
+        if uses_pytest(root):
+            return Check(f"{py} -m pytest -q", "tests written for pytest")
         if list(root.glob("test_*.py")) or list(root.glob("*_test.py")):
-            return Check(f"{python()} -m unittest", "test files")
+            return Check(f"{py} -m unittest", "test files")
         if (root / "tests").is_dir():
-            return Check(f"{python()} -m unittest discover -s tests -t .", "tests/")
+            return Check(f"{py} -m unittest discover -s tests -t .", "tests/")
     package = text(root / "package.json")
     if package:
         try:
@@ -228,4 +257,53 @@ def unrun_note(scripts: list[str]) -> str:
         f"{it} works before you say so. If running {it} would change things outside the project (install packages, "
         f"deploy, delete data) or needs something you don't have, don't: tell the user plainly that {it} is untested "
         "and why."
+    )
+
+
+# ----------------------------------------------------------------------------- windows it never looked at
+
+GUI_IMPORT = re.compile(r"^\s*(?:from|import)\s+(PyQt[56]|PySide[26]|tkinter|kivy|wx|gi\.repository)\b", re.M)
+LOOKED = frozenset({"screenshot", "view_image"})
+
+
+def unseen_windows(root: Path, changed: list[str], tools_used: set[str]) -> dict[str, str]:
+    """Python files that draw a window (they import a GUI toolkit), changed in this request when the model never
+    looked at one: file -> toolkit.
+
+    A small model checks a window change by importing the module and running unrelated tests, then calls it done;
+    the user finds a blank window. Tests and imports don't show what's on the screen; a screenshot does.
+    """
+    if tools_used & LOOKED:
+        return {}
+    found = {}
+    for rel in changed:
+        path = root / rel
+        if path.suffix != ".py" or not path.is_file():
+            continue
+        try:
+            text = path.read_text(errors="replace")[:200_000]
+        except OSError:
+            continue
+        match = GUI_IMPORT.search(text)
+        if match:
+            found[rel] = match.group(1)
+    return found
+
+
+def unseen_note(found: dict[str, str]) -> str:
+    names = ", ".join(found)
+    kits = sorted(set(found.values()))
+    qt = any(kit.startswith(("PyQt", "PySide")) for kit in kits)
+    how = (
+        "take a screenshot with the screenshot tool: it runs the program without a screen and shows what it draws, "
+        "and what the program printed (Qt names layout mistakes there). For something that only shows after a click "
+        'or a key, give actions, e.g. actions=["double_click Camera 1"]'
+        if qt
+        else "take a screenshot with the screenshot tool: it runs the program on a virtual display and shows what it "
+        "draws"
+    )
+    return (
+        f"[lcode] You changed {names}, which draws a window ({', '.join(kits)}), but never looked at it: tests and "
+        f"imports don't show what's on the screen. Before you say it works, {how}. Check the picture against what the "
+        "user asked for. If the program can't run here, tell the user plainly that you haven't seen it working."
     )
