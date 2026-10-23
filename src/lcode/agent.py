@@ -308,6 +308,7 @@ class Settings:
     comfyui_url: str = "http://127.0.0.1:8188"
     comfyui_path: str | None = None  # a ComfyUI install lcode doesn't find by itself (lcode.comfy)
     media_dir: str = ".lcode/media"  # where image and video mode save their files (lcode.media)
+    image_model: str = "flux2-klein-4b"  # the media catalog's model image mode uses (lcode.media_catalog)
     num_batch: int | None = None
     keep_alive: str = "30m"
     think: bool = True
@@ -687,6 +688,7 @@ class Agent:
             "cwd": str(self.workspace),  # where `lcode -c` there finds it, wherever the shell moved
             "model": self.settings.model,
             "mode": self.settings.mode,
+            "image_model": self.settings.image_model,
             "name": self.session_name,
             "title": self.session_title,
             "messages": self.messages,
@@ -735,6 +737,8 @@ class Agent:
         self.session_name = data.get("name", "")
         if data.get("mode") in ("code", "image", "video"):
             self.settings.mode = data["mode"]  # a session belongs to the mode it was made in
+        if isinstance(data.get("image_model"), str):
+            self.settings.image_model = data["image_model"]
         self.session_title = data.get("title") or sessions.title_from(self.messages)
         self.tools.read_mtimes.clear()  # files may have changed since; the model must read them again
         self.tools.todos = list(data.get("todos") or [])

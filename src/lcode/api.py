@@ -200,6 +200,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         comfyui_url=cfg["comfyui_url"],
         comfyui_path=cfg["comfyui_path"],
         media_dir=cfg["media_dir"],
+        image_model=cfg["image_model"],
         web=switch(options.web, cfg["web"], "on"),
         search_backend=cfg["search_backend"],
         searxng_url=cfg["searxng_url"],

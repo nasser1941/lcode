@@ -1,12 +1,5 @@
 {
-  "name": "FLUX.2 klein 4B",
-  "task": "text-to-image",
   "source": "ComfyUI's template image_flux2_klein_text_to_image (the distilled 4B subgraph), in API format",
-  "models": {
-    "diffusion_models": ["flux-2-klein-4b-fp8.safetensors", "flux-2-klein-4b.safetensors"],
-    "text_encoders": ["qwen_3_4b.safetensors"],
-    "vae": ["flux2-vae.safetensors"]
-  },
   "defaults": {"width": 1024, "height": 1024, "steps": 4, "batch": 1},
   "labels": {
     "1": "loading the model",
@@ -18,8 +11,8 @@
     "13": "saving"
   },
   "graph": {
-    "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "$diffusion_models", "weight_dtype": "default"}},
-    "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "$text_encoders", "type": "flux2", "device": "default"}},
+    "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "$model", "weight_dtype": "default"}},
+    "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "$text_encoder", "type": "flux2", "device": "default"}},
     "3": {"class_type": "VAELoader", "inputs": {"vae_name": "$vae"}},
     "4": {"class_type": "CLIPTextEncode", "inputs": {"text": "$prompt", "clip": ["2", 0]}},
     "5": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["4", 0]}},

@@ -1,7 +1,7 @@
 """Image and video mode: a request becomes media, made by ComfyUI (lcode.comfy) with no language model in between.
 
-For now image mode makes one image per request with FLUX.2 klein 4B, the engine's first workflow; models, sizes,
-variations and a gallery come with #150 and #151, video with #153.
+Image mode makes one image per request with the image model chosen from the media catalog (lcode.media_catalog);
+sizes, variations and a gallery come with #151, video with #153.
 """
 
 from __future__ import annotations
@@ -16,11 +16,12 @@ from typing import TYPE_CHECKING
 from rich.text import Text
 
 from lcode import comfy
+from lcode import media_catalog as catalog
 
 if TYPE_CHECKING:
     from lcode.agent import Agent
 
-IMAGE_WORKFLOW = "flux2-klein-4b-t2i"
+SOON = {"video": "Video models come with video generation (#153)."}
 IGNORED = "# lcode's images and videos: not part of the project unless you add them\n*\n"
 
 
@@ -28,8 +29,19 @@ class MediaError(Exception):
     pass
 
 
-def image_model() -> str:
-    return comfy.load_workflow(IMAGE_WORKFLOW).name
+def installed_lister(agent: Agent) -> catalog.Installed | None:
+    """What ComfyUI has installed: asked from it when it's running, else read from its folders; None: unknown."""
+    server = comfy.Server(agent.settings.comfyui_url)
+    if server.stats():
+        return catalog.lister(server)
+    install = comfy.find_install(agent.settings.comfyui_path)
+    return catalog.lister(install=install) if install else None
+
+
+def current(agent: Agent) -> catalog.MediaModel:
+    """The image model the agent uses (the image_model setting, or /model in image mode)."""
+    cat = catalog.load()
+    return cat.find(agent.settings.image_model) or cat.models[catalog.DEFAULT_IMAGE]
 
 
 @dataclass
@@ -183,6 +195,28 @@ class Line:
         return text
 
 
+def ensure_installed(
+    agent: Agent, model: catalog.MediaModel, server: comfy.Server, ask: Callable[[str], bool] | None
+) -> dict[str, str]:
+    """The model's files (role -> installed name), downloading the missing ones first when the user agrees."""
+    files, missing = catalog.chosen_files(model, catalog.lister(server))
+    if not missing:
+        return files
+    size = sum(f.gb for f in missing)
+    if ask is None:
+        raise MediaError(f"{model.name} isn't installed ({size:.1f} GB to download): lcode media install {model.key}")
+    install = comfy.find_install(agent.settings.comfyui_path)
+    try:
+        catalog.install(model, server=server, install=install, console=agent.console, ask=ask)
+    except catalog.CatalogError as e:
+        raise MediaError(str(e)) from e
+    files, missing = catalog.chosen_files(model, catalog.lister(server))
+    if missing:
+        raise MediaError(f"ComfyUI doesn't see {', '.join(f.name for f in missing)} yet: restart it and try again")
+    agent.say(f"Installed {model.name}.")
+    return files
+
+
 def generate_image(
     agent: Agent, prompt: str, cancelled: Callable[[], bool] = lambda: False, ask: Callable[[str], bool] | None = None
 ) -> Made:
@@ -193,20 +227,17 @@ def generate_image(
     server = engine(agent, ask, cancelled)
     for path in comfy.collect(server):
         agent.say(f"Saved {shown(agent, path)}: it finished while lcode wasn't watching.")
-    workflow = comfy.load_workflow(IMAGE_WORKFLOW)
-    files, missing = comfy.choose_files(server, workflow)
-    if missing:
-        raise MediaError(
-            f"{workflow.name} isn't installed in ComfyUI (missing {', '.join(missing)}). lcode installs image "
-            "models from #150 on; until then put the files in ComfyUI's models folder."
-        )
+    model = current(agent)
+    files = ensure_installed(agent, model, server, ask)
+    workflow = comfy.load_workflow(model.workflow)
     free_gpu(agent)
     seed = random.randrange(2**32)
     values = {**workflow.defaults, **files, "prompt": prompt, "seed": seed}
     graph = comfy.fill(workflow.graph, values)
     meta = {
         "prompt": prompt,
-        "model": workflow.name,
+        "model": model.name,
+        "model_key": model.key,
         "workflow": workflow.key,
         "seed": seed,
         "width": values["width"],
@@ -217,7 +248,7 @@ def generate_image(
     }
     out = folder(agent)
     stem = f"{time.strftime('%Y%m%d-%H%M%S')}-{comfy.slug(prompt)}"
-    line = Line(workflow.name, "Esc or Ctrl+C cancels" if agent.interactive else "")
+    line = Line(model.name, "Esc or Ctrl+C cancels" if agent.interactive else "")
     job = {"id": ""}
 
     def on_event(event: comfy.Event) -> None:
@@ -252,7 +283,7 @@ def generate_image(
     comfy.forget(prompt_id)
     if not saved:
         raise MediaError("ComfyUI finished but returned no image.")
-    made = Made(saved, workflow.name, seed, values["width"], values["height"], time.monotonic() - line.started)
+    made = Made(saved, model.name, seed, values["width"], values["height"], time.monotonic() - line.started)
     for path in saved:
         agent.console.print(
             Text("◆ ", style="green")

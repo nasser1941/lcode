@@ -254,6 +254,14 @@ class Server:
         except (requests.RequestException, ValueError):
             return []
 
+    def folder_paths(self) -> dict[str, list[str]]:
+        """Where ComfyUI keeps each kind of model (its own folders and extra_model_paths.yaml's)."""
+        try:
+            r = requests.get(self.url + "/internal/folder_paths", timeout=10)
+            return r.json() if r.status_code == 200 else {}
+        except (requests.RequestException, ValueError):
+            return {}
+
     def upload(self, path: Path) -> str:
         """Upload an input image; the name to use in a workflow."""
         with path.open("rb") as f:
@@ -420,32 +428,18 @@ class Events:
 
 @dataclass
 class Workflow:
+    """A graph in ComfyUI's API format with `$name` placeholders: the model's files (by role, from media.toml),
+    the prompt, the seed and the settings in `defaults`."""
+
     key: str
-    name: str
-    task: str
-    models: dict[str, list[str]]  # ComfyUI folder -> file names it can use, preferred first
-    defaults: dict
     graph: dict
+    defaults: dict = field(default_factory=dict)
     labels: dict[str, str] = field(default_factory=dict)  # node id -> what it does, for progress
 
 
 def load_workflow(key: str) -> Workflow:
     data = json.loads(resources.files("lcode.workflows").joinpath(f"{key}.json").read_text())
-    return Workflow(key, data["name"], data["task"], data["models"], data.get("defaults", {}), data["graph"],
-                    data.get("labels", {}))  # fmt: skip
-
-
-def choose_files(server: Server, workflow: Workflow) -> tuple[dict[str, str], list[str]]:
-    """For each model the workflow needs, the installed file to use; and the folders where none is installed."""
-    chosen, missing = {}, []
-    for folder, names in workflow.models.items():
-        installed = set(server.models(folder))
-        found = next((n for n in names if n in installed), None)
-        if found:
-            chosen[folder] = found
-        else:
-            missing.append(f"{folder}/{names[0]}")
-    return chosen, missing
+    return Workflow(key, data["graph"], data.get("defaults", {}), data.get("labels", {}))
 
 
 PLACEHOLDER = re.compile(r"^\$([a-z_]+)$")

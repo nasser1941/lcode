@@ -41,7 +41,7 @@ def ready(agent: Agent) -> str:
         from lcode import media
 
         return (
-            f"Describe an image and press Enter: {media.image_model()} makes it on your GPU, into "
+            f"Describe an image and press Enter: {media.current(agent).name} makes it on your GPU, into "
             f"{agent.settings.media_dir}. /mode code switches back."
         )
     return COMING.get(agent.settings.mode, "")

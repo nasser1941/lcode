@@ -7,6 +7,7 @@ lcode [options]              # interactive session in the current directory
 lcode setup [model]          # pick, download and configure a model
 lcode models                 # the model catalog and what fits this machine
 lcode doctor                 # check the installation (include this in bug reports)
+lcode media [install MODEL]  # image and video models: what fits here, what's installed; install one
 lcode config [set|unset]     # show or change settings
 lcode bench [models]         # score models on small coding tasks on this machine
 lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases… (see MCP servers)
