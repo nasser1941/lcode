@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import platform
 import re
 import shutil
+import signal
 import sys
 import tempfile
 import time
@@ -466,6 +468,7 @@ def cmd_doctor(args) -> None:
     except ValueError as e:
         line("MCP", str(e), False)
         ok = False
+    line("ComfyUI", *comfyui_status(cfg))
     if cfg["sandbox"] == "off":
         line("Sandbox", "off (lcode config set sandbox docker)", True)
     else:
@@ -733,17 +736,10 @@ def cmd_chat(args) -> None:
             print(json.dumps({"type": "result", "status": "error", "error": str(e)}), flush=True)
             sys.exit(1)
         fail(str(e))
+    exit_on_hangup()
     exit_code = 0
     if args.prompt and agent.settings.mode != "code":
-        from lcode import modes
-
-        message = modes.COMING[agent.settings.mode]
-        if quiet:
-            print(json.dumps({"type": "result", "status": "error", "error": message}), flush=True)
-        else:
-            out.print(f"[yellow]{escape(message)}[/]")
-        api.close_agent(agent)
-        sys.exit(2)
+        media_request(agent, args.prompt, out, quiet)  # makes the image or video, then exits
     if args.escalate and args.prompt:
         agent.escalate_approved = True  # the flag is the user's OK for this run
     try:
@@ -763,6 +759,83 @@ def cmd_chat(args) -> None:
             out.print(f"[dim]{escape(worktree.finish())}[/]")
     if exit_code:
         sys.exit(exit_code)
+
+
+def exit_on_hangup() -> None:
+    """A closed terminal (SIGHUP) or a plain kill (SIGTERM) ends lcode the usual way: it saves the session and stops
+    what it started (ComfyUI, MCP servers, background jobs) instead of leaving them running."""
+
+    def leave(signum, frame):
+        raise SystemExit(128 + signum)
+
+    for name in ("SIGHUP", "SIGTERM"):
+        sig = getattr(signal, name, None)
+        if sig is not None:
+            with contextlib.suppress(ValueError, OSError):  # only the main thread can
+                signal.signal(sig, leave)
+
+
+def comfyui_status(cfg: dict) -> tuple[str, bool | None]:
+    """lcode doctor's ComfyUI line: running or found, and whether the image model is there."""
+    from lcode import comfy, media
+
+    workflow = comfy.load_workflow(media.IMAGE_WORKFLOW)
+    server = comfy.Server(cfg["comfyui_url"])
+    stats = server.stats()
+    install = None if stats else comfy.find_install(cfg["comfyui_path"])
+    if not stats and install is None:
+        return "not found: image mode offers to install it (or lcode config set comfyui_path <folder>)", None
+    if stats:
+        where = f"{(stats.get('system') or {}).get('comfyui_version', '?')} running at {server.url}"
+        installed = {folder: set(server.models(folder)) for folder in workflow.models}
+    else:
+        where = f"{install.path} (lcode starts it in image mode)"
+        installed = {folder: set(comfy.local_models(install, folder)) for folder in workflow.models}
+    missing = [f"{f}/{names[0]}" for f, names in workflow.models.items() if not installed[f] & set(names)]
+    if missing:
+        return f"{where} · {workflow.name} not installed (missing {', '.join(missing)})", None
+    return f"{where} · image model: {workflow.name}", True
+
+
+def media_request(agent, prompt: str, out: Console, quiet: bool) -> None:
+    """`lcode --mode image -p "…"`: make the image, say where it went (or, with --output json, a result object)."""
+    import json
+
+    from lcode import api, media, modes
+
+    if agent.settings.mode == "video":
+        message = modes.COMING["video"]
+        if quiet:
+            print(json.dumps({"type": "result", "status": "error", "error": message}), flush=True)
+        else:
+            out.print(f"[yellow]{escape(message)}[/]")
+        api.close_agent(agent)
+        sys.exit(2)
+    try:
+        made = media.generate_image(agent, prompt)
+    except (media.MediaError, KeyboardInterrupt) as e:
+        message = str(e) or "Cancelled."
+        if quiet:
+            print(json.dumps({"type": "result", "status": "error", "error": message}), flush=True)
+        else:
+            out.print(f"[red]{escape(message)}[/]")
+        api.close_agent(agent)
+        sys.exit(1)
+    if quiet:
+        result = {
+            "type": "result",
+            "status": "success",
+            "mode": "image",
+            "files": [str(path) for path in made.files],
+            "model": made.model,
+            "seed": made.seed,
+            "width": made.width,
+            "height": made.height,
+            "seconds": round(made.seconds, 1),
+        }
+        print(json.dumps(result, ensure_ascii=False), flush=True)
+    api.close_agent(agent)
+    sys.exit(0)
 
 
 def compact_tokens(value: str) -> int:

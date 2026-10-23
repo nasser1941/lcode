@@ -71,6 +71,9 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   `lcode --worktree` runs parallel sessions on one repository.
 - **In your editor.** Zed, JetBrains IDEs, Neovim and other editors that speak the Agent Client
   Protocol run lcode with `lcode acp`, with diffs and approvals in the editor.
+- **Image mode.** `/mode image`, describe a picture, and FLUX.2 klein 4B makes it on your GPU in
+  seconds through ComfyUI, which lcode starts, follows and stops itself. Video mode is next
+  ([modes](https://nasser1941.github.io/lcode/modes/)).
 - **Automation.** `lcode -p --output json` for scripts and CI, a Python API (`from lcode import
   Session`), and a GitHub Action that answers `@lcode` in issues and pull requests on your own
   self-hosted runner.

@@ -15,6 +15,7 @@ A session is one conversation: each `run` continues it. `stream` yields the same
 
 from __future__ import annotations
 
+import contextlib
 import io
 import queue
 import threading
@@ -130,6 +131,24 @@ def switch(wanted: bool | None, configured: str, default_on: str) -> str:
     return configured if configured != "off" else default_on
 
 
+def coding_model(ollama, options: Options, cfg: dict, requested: int | None, hw: Hardware, console: Console):
+    """The coding model to use, its catalog entry and the context window; SetupError when there's none."""
+    from lcode import cli
+
+    check_server(ollama, hw)
+    try:
+        model, spec = cli.resolve_model(ollama, options.model or cfg["model"])
+    except cli.NotInstalled as e:
+        first_run = not options.model and cfg["model"] == config.DEFAULT_MODEL and not config.CONFIG_PATH.exists()
+        if first_run and not backends.is_openai(ollama):
+            raise SetupError("lcode isn't set up yet. Run:  lcode setup") from e
+        raise SetupError(str(e)) from e
+    context, note = cli.choose_context(ollama, model, spec, requested, hw)
+    if note:
+        console.print(f"[yellow]Context {config.format_tokens(context)}: {note}[/]")
+    return model, spec, context
+
+
 def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | None = None) -> Agent:
     """An agent set up the way `lcode` sets up a session: model, context, hooks, language servers, MCP."""
     from lcode import catalog, cli, extensions, hooks
@@ -153,17 +172,14 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
     except OllamaError as e:
         raise SetupError(str(e)) from e
     hw = hw or detect()
-    check_server(ollama, hw)
+    no_coding_model = ""  # why, when image or video mode starts without one
     try:
-        model, spec = cli.resolve_model(ollama, options.model or cfg["model"])
-    except cli.NotInstalled as e:
-        first_run = not options.model and cfg["model"] == config.DEFAULT_MODEL and not config.CONFIG_PATH.exists()
-        if first_run and not backends.is_openai(ollama):
-            raise SetupError("lcode isn't set up yet. Run:  lcode setup") from e
-        raise SetupError(str(e)) from e
-    context, note = cli.choose_context(ollama, model, spec, requested, hw)
-    if note:
-        console.print(f"[yellow]Context {config.format_tokens(context)}: {note}[/]")
+        model, spec, context = coding_model(ollama, options, cfg, requested, hw, console)
+    except SetupError as e:
+        if (options.mode or cfg["mode"]) == "code":
+            raise
+        # Image and video mode don't need the coding model: start without it, and say so on /mode code.
+        model, spec, context, no_coding_model = options.model or cfg["model"], None, requested or 32768, str(e)
     num_batch = cfg["num_batch"]
     if num_batch is None and spec and spec.num_batch:
         if model == spec.local_name:
@@ -182,6 +198,8 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         permission_mode=options.permission_mode or cfg["permission_mode"],
         mode=options.mode or cfg["mode"],
         comfyui_url=cfg["comfyui_url"],
+        comfyui_path=cfg["comfyui_path"],
+        media_dir=cfg["media_dir"],
         web=switch(options.web, cfg["web"], "on"),
         search_backend=cfg["search_backend"],
         searxng_url=cfg["searxng_url"],
@@ -211,6 +229,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.hardware = hw
+    agent.no_coding_model = no_coding_model
     agent.autosave = True
     agent.interactive = options.interactive
     if options.max_steps:
@@ -250,15 +269,25 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
 
 
 def close_agent(agent: Agent) -> None:
+    """Stop what lcode started (background jobs, servers, the sandbox, ComfyUI), then say so: the terminal may be
+    gone already (closed), and saying it then fails."""
+    from lcode import media
+
+    said = []
     stopped = agent.jobs.stop_all()
     if stopped:
-        agent.console.print(f"[dim]Stopped {stopped} background job(s).[/]")
+        said.append(f"Stopped {stopped} background job(s).")
+    if media.stop_engine(agent):
+        said.append("Stopped ComfyUI.")
     if agent.lsp is not None:
         agent.lsp.close()
     if agent.mcp:
         agent.mcp.close()
     if agent.sandbox:
         agent.sandbox.stop()
+    for line in said:
+        with contextlib.suppress(OSError):
+            agent.console.print(f"[dim]{line}[/]")
 
 
 # ----------------------------------------------------------------------------- running

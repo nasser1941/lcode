@@ -2,11 +2,11 @@
 
 - **code** is the coding agent: a language model with tools, and nothing else. It doesn't generate images or
   videos: the MCP servers that do (`comfyui`, `xai`) aren't loaded in code mode.
-- **image** and **video** generate media on the GPU with image and video models (through ComfyUI, #149). They
-  don't need the big coding model: lcode unloads it when you switch to them, and frees ComfyUI's memory when you
-  switch back, so one model has the GPU at a time.
+- **image** and **video** generate media on the GPU with image and video models, through ComfyUI (lcode.comfy,
+  lcode.media). They don't need the big coding model: lcode unloads it when you switch to them, and stops the
+  ComfyUI it started (or frees the memory of yours) when you switch back, so one model has the GPU at a time.
 
-Until the generation engine lands, image and video mode say what's coming instead of sending the prompt anywhere.
+Video mode says what's coming instead of sending the prompt anywhere until video generation lands (#153).
 """
 
 from __future__ import annotations
@@ -28,15 +28,23 @@ MEDIA_SERVERS = frozenset({"comfyui", "xai"})  # the MCP catalog's image and vid
 MEDIA_COMMANDS = ("comfy-mcp", "lcode-mcp-xai")  # the same servers, under any name
 NOTED_FILE = "media-servers-noted"
 COMING = {
-    "image": (
-        "Image mode doesn't generate yet: lcode's own ComfyUI engine (#149), the image models (#150) and "
-        "generation (#151) come next. /mode code switches back."
-    ),
     "video": (
-        "Video mode doesn't generate yet: lcode's own ComfyUI engine (#149), the video models (#150) and "
-        "generation (#153) come next. /mode code switches back."
+        "Video mode doesn't generate yet: the video models (#150) and video generation (#153) come next. "
+        "/mode image makes images now; /mode code switches back."
     ),
 }
+
+
+def ready(agent: Agent) -> str:
+    """What to do in the agent's mode, said on entering it."""
+    if agent.settings.mode == "image":
+        from lcode import media
+
+        return (
+            f"Describe an image and press Enter: {media.image_model()} makes it on your GPU, into "
+            f"{agent.settings.media_dir}. /mode code switches back."
+        )
+    return COMING.get(agent.settings.mode, "")
 
 
 def is_media_server(server: ServerConfig) -> bool:
@@ -93,10 +101,24 @@ def switch(agent: Agent, new: str) -> list[str]:
             lines.append(f"Unloaded {agent.settings.model} to free the GPU for {new}s.")
         except Exception:  # not loaded, or Ollama gone: nothing to free
             pass
-    if new == "code" and free_comfyui(agent.settings.comfyui_url):
-        lines.append("ComfyUI gave the GPU back.")
+    if new == "code":
+        from lcode import media
+
+        if media.stop_engine(agent):
+            lines.append("Stopped ComfyUI to give the GPU back.")
+        elif free_comfyui(agent.settings.comfyui_url):
+            lines.append("ComfyUI gave the GPU back.")
     agent.settings.mode = new
     lines.insert(0, f"Mode: {new} ({TITLES[new]}).")
+    if new == "code" and agent.no_coding_model:
+        reason = agent.no_coding_model.strip().splitlines()[0]
+        lines.append(f"lcode started without its coding model ({reason}). Fix that, then restart lcode.")
+    if new == "image":
+        from lcode import media
+
+        warming = media.warm(agent)
+        if warming:
+            lines.append(warming)
     if new != "code":
-        lines.append(COMING[new])
+        lines.append(ready(agent))
     return lines

@@ -306,6 +306,8 @@ class Settings:
     context: int
     mode: str = "code"  # what lcode makes: code, image or video (lcode.modes)
     comfyui_url: str = "http://127.0.0.1:8188"
+    comfyui_path: str | None = None  # a ComfyUI install lcode doesn't find by itself (lcode.comfy)
+    media_dir: str = ".lcode/media"  # where image and video mode save their files (lcode.media)
     num_batch: int | None = None
     keep_alive: str = "30m"
     think: bool = True
@@ -370,6 +372,8 @@ class Agent:
         self.session_name = ""
         self.session_title = ""
         self.interactive = True  # False for `lcode -p`: no end-of-session questions
+        self.comfy_process = None  # the ComfyUI lcode started for image and video mode, stopped when it exits
+        self.no_coding_model = ""  # why there's no coding model, when lcode started in image or video mode without
         self.reflected = 0  # messages before this index were already checked for notes to remember
         self._memory: memory_notes.Memory | None = None
         self._agent_types: tuple[Path, dict[str, subagents.AgentType], list[str]] | None = None

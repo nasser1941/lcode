@@ -72,8 +72,18 @@ def call(name: str, **arguments) -> dict:
 
 @pytest.fixture(autouse=True)
 def isolated_state(tmp_path_factory, monkeypatch):
-    """Every test gets its own state folder, so none writes into the user's (approvals, sessions…)."""
+    """Every test gets its own state folder, so none writes into the user's (approvals, sessions…).
+
+    And no test finds or starts the user's own ComfyUI: tests that need one use the stand-in (comfy_standin).
+    """
     monkeypatch.setattr("lcode.config.STATE_DIR", tmp_path_factory.mktemp("lcode-state"))
+    monkeypatch.setattr("lcode.comfy.CANDIDATES", ())
+    monkeypatch.setattr("lcode.comfy.cli_workspace", lambda: None)
+
+    def no_launch(*args, **kwargs):
+        raise AssertionError("a test tried to start a real ComfyUI")
+
+    monkeypatch.setattr("lcode.comfy.launch", no_launch)
 
 
 @pytest.fixture
@@ -100,6 +110,7 @@ def make_agent(repo: Path, monkeypatch, tmp_path_factory):
             "permission_mode": mode,
             "trust_project": True,
             "skills": "all",
+            "comfyui_url": "http://127.0.0.1:9",  # nothing there: never the user's own ComfyUI
         }
         opts.update(settings)
         return Agent(FakeOllama(scripts), Settings(**opts), repo, console=console)

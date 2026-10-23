@@ -36,6 +36,7 @@ from lcode import (
     extensions,
     gitflow,
     limits,
+    media,
     modes,
     residency,
     sessions,
@@ -213,6 +214,17 @@ def build_session(agent: Agent) -> PromptSession:
     )
 
 
+def model_lines(agent: Agent) -> str:
+    """The banner's model lines: the coding model and its context, or the mode's own model."""
+    s = agent.settings
+    if s.mode == "image":
+        return f"[dim]model[/]    {escape(media.image_model())} [dim]· ComfyUI · {escape(s.media_dir)}[/]\n"
+    if s.mode == "video":
+        return "[dim]model[/]    [dim]video models come with #150 and #153[/]\n"
+    server = f" [dim]· {escape(agent.ollama.describe())}[/]" if backends.is_openai(agent.ollama) else ""
+    return f"[dim]model[/]    {escape(s.model)}{server}\n[dim]context[/]  {format_tokens(s.context)} tokens\n"
+
+
 def banner(agent: Agent) -> None:
     s = agent.settings
     agent.console.print(
@@ -220,11 +232,7 @@ def banner(agent: Agent) -> None:
             Group(
                 Text.from_markup(f"[bold cyan]lcode[/] [dim]v{__version__}[/] — {modes.TITLES[s.mode]}\n"),
                 Text.from_markup(
-                    f"[dim]model[/]    {escape(s.model)}"
-                    + (f" [dim]· {escape(agent.ollama.describe())}[/]" if backends.is_openai(agent.ollama) else "")
-                    + "\n"
-                    f"[dim]context[/]  {format_tokens(s.context)} tokens\n"
-                    f"[dim]cwd[/]      {agent.cwd}\n"
+                    model_lines(agent) + f"[dim]cwd[/]      {agent.cwd}\n"
                     f"[dim]mode[/]     {s.mode} [dim](/mode code, image or video)[/]\n"
                     f"[dim]perms[/]    {agent.perms.mode} [dim](Shift+Tab to cycle)[/]\n"
                     f"[dim]web[/]      {web_status(agent)}\n"
@@ -1108,8 +1116,13 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
     elif cmd in ("/context", "/ctx"):
         context_command(agent, arg, hardware)
     elif cmd in ("/models", "/model"):
-        if s.mode != "code":
-            c.print(f"[yellow]{escape(modes.COMING[s.mode])}[/]")
+        if s.mode == "image":
+            c.print(
+                f"Image model: [bold]{media.image_model()}[/], through ComfyUI. "
+                "[dim]More image models, and installing them from lcode, come with #150.[/]"
+            )
+        elif s.mode != "code":
+            c.print(f"[yellow]{escape(modes.ready(agent))}[/]")
         else:
             model_command(agent, arg, hardware)
     elif cmd == "/think":
@@ -1288,23 +1301,30 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
         if info:
             resume_session(agent, info)
     session_start(agent)
-    if prompt and agent.settings.mode != "code":
-        agent.console.print(f"[yellow]{escape(modes.COMING[agent.settings.mode])}[/]")
+    if prompt and agent.settings.mode == "video":
+        agent.console.print(f"[yellow]{escape(modes.ready(agent))}[/]")
         prompt = None
+    if prompt and agent.settings.mode == "image":
+        respond(agent, prompt)
+        return
     if prompt:
         run_safely(agent, prompt)
         return
     banner(agent)
-    if is_cloud(agent.settings.model):
+    if agent.settings.mode == "code" and is_cloud(agent.settings.model):
         agent.say(cloud_notice(agent.settings.model))
-    warning = residency.dense_warning(agent.ollama, agent.settings.model, agent.settings.context, hardware)
-    if warning:
-        agent.say(warning, warning=True)
+    if agent.settings.mode == "code":
+        warning = residency.dense_warning(agent.ollama, agent.settings.model, agent.settings.context, hardware)
+        if warning:
+            agent.say(warning, warning=True)
     session = build_session(agent)
     if agent.settings.mode == "code":
         preload(agent, session)
     else:
-        agent.console.print(f"[yellow]{escape(modes.COMING[agent.settings.mode])}[/]")
+        warming = media.warm(agent) if agent.settings.mode == "image" else None
+        if warming:
+            agent.say(warming)
+        agent.console.print(f"[yellow]{escape(modes.ready(agent))}[/]")
     while True:
         try:
             agent.console.print()
@@ -1330,11 +1350,41 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
 
 def respond(agent: Agent, line: str) -> None:
     """What a typed request does: the coding agent works on it, or image and video mode take it."""
-    if agent.settings.mode != "code":  # image and video: no coding model involved
-        agent.console.print(f"[yellow]{escape(modes.COMING[agent.settings.mode])}[/]")
+    if agent.settings.mode == "image":  # no coding model involved
+        make_image(agent, line)
+        return
+    if agent.settings.mode != "code":
+        agent.console.print(f"[yellow]{escape(modes.ready(agent))}[/]")
         return
     agent.console.print(Rule(style="dim"))
     run_safely(agent, line)
+
+
+def make_image(agent: Agent, prompt: str) -> None:
+    """Image mode: ComfyUI makes the image; Esc or Ctrl+C cancels it there too."""
+    steering = Steering()
+    reader = KeyReader(steering)
+    reading = agent.interactive and reader.start()  # Esc sets steering.pause: here it cancels
+
+    def ask(question: str) -> bool:
+        answer = steering.ask(f"  {question} [y/N] ") if reading else input(f"  {question} [y/N] ")
+        return answer.strip().lower() in ("y", "yes")
+
+    try:
+        media.generate_image(agent, prompt, cancelled=lambda: steering.pause, ask=ask if agent.interactive else None)
+    except media.MediaError as e:
+        agent.console.print(f"[yellow]{escape(str(e))}[/]")
+    except KeyboardInterrupt:  # while ComfyUI was starting: nothing queued yet
+        agent.console.print("[yellow]⏹ Cancelled.[/]")
+    except EOFError:
+        pass
+    finally:
+        if reading:
+            reader.stop()
+        typed = steering.leftover()  # the next prompt, typed while this one was being made
+        if typed:
+            agent.unsent = typed
+            agent.console.print(Text("✎ What you typed is in the prompt below.", style="cyan"))
 
 
 def preload(agent: Agent, session: PromptSession | None = None) -> None:
