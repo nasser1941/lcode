@@ -6,6 +6,25 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Modes: code, image and video** (#148). `/mode image`, `/mode video` and `/mode code` switch
+  what lcode makes. `lcode --mode` starts in one, and the `mode` setting is the default. The
+  banner, status bar and prompt show the mode, and sessions keep theirs.
+  - **The GPU goes to one model at a time:** switching to image or video mode unloads the coding
+    model, and switching back asks ComfyUI to free its memory.
+  - **Image and video mode don't generate yet:** they say what's coming (#149–#157) instead of
+    sending your words to the coding model. See [Modes](https://nasser1941.github.io/lcode/modes/).
+
+### Changed
+
+- **Code mode makes code only.** The MCP servers that generated images and videos (`comfyui`,
+  `xai`) are out of the MCP catalog, and lcode doesn't load them in code mode even if they're
+  still in `mcp.json` (it says so once). Image and video generation are moving to their own modes.
+- **`/mode` switches code, image and video.** The permission mode is set with `/permissions` now;
+  `/mode yolo` and the like still work, with a note. Shift+Tab cycles the permission mode as
+  before.
+
 ## [0.38.0] - 2026-10-21
 
 ### Added

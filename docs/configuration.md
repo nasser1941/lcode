@@ -23,6 +23,8 @@ lcode config path                      # print the file location
 | `backend` | `ollama` | The model server: `ollama`, `lmstudio`, `llama.cpp`, `vllm`, `mlx` or `openai` (any OpenAI-compatible API); see [Other model servers](servers.md) |
 | `base_url` | the backend's | The server's OpenAI-compatible address, e.g. `http://localhost:1234/v1` |
 | `permission_mode` | `ask` | `ask`, `plan`, `auto-edit` or `yolo` |
+| `mode` | `code` | What lcode makes when it starts: `code`, `image` or `video` ([modes](modes.md)) |
+| `comfyui_url` | `http://127.0.0.1:8188` | ComfyUI's address, for image and video mode |
 | `think` | `true` | Let the model reason before answering |
 | `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |
 | `search_backend` | `auto` | `auto`, `ollama`, `brave`, `tavily` or `searxng`; `auto` uses the first one configured |

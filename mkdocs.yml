@@ -92,6 +92,7 @@ nav:
       - Quickstart: quickstart.md
   - Guide:
       - Using lcode: usage.md
+      - Modes (code, image, video): modes.md
       - Memory: memory.md
       - Subagents: agents.md
       - Commands and skills: commands.md

@@ -304,6 +304,8 @@ class Progress:
 class Settings:
     model: str  # Ollama model name to call
     context: int
+    mode: str = "code"  # what lcode makes: code, image or video (lcode.modes)
+    comfyui_url: str = "http://127.0.0.1:8188"
     num_batch: int | None = None
     keep_alive: str = "30m"
     think: bool = True
@@ -680,6 +682,7 @@ class Agent:
         data = {
             "cwd": str(self.workspace),  # where `lcode -c` there finds it, wherever the shell moved
             "model": self.settings.model,
+            "mode": self.settings.mode,
             "name": self.session_name,
             "title": self.session_title,
             "messages": self.messages,
@@ -726,6 +729,8 @@ class Agent:
         self.session_id = info.id
         self.checkpoints.load(info.id, data.get("checkpoints") or [])
         self.session_name = data.get("name", "")
+        if data.get("mode") in ("code", "image", "video"):
+            self.settings.mode = data["mode"]  # a session belongs to the mode it was made in
         self.session_title = data.get("title") or sessions.title_from(self.messages)
         self.tools.read_mtimes.clear()  # files may have changed since; the model must read them again
         self.tools.todos = list(data.get("todos") or [])

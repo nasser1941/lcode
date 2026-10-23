@@ -6,7 +6,6 @@ from typing import ClassVar
 
 import pytest
 
-from lcode.mcp import catalog
 from lcode.servers import xai
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"pixels"
@@ -151,13 +150,3 @@ def test_xai_errors_reach_the_model(api, tmp_path):
     bad = xai.XAI("wrong", api.base, tmp_path)
     text, error = call(xai.build(bad), "text_to_speech", text="hi")
     assert error and "xAI refused the request (401): Incorrect API key provided" in text and "XAI_API_KEY" in text
-
-
-def test_the_preset_asks_for_the_key():
-    preset = catalog.load()["xai"]
-    [key] = preset.inputs
-    assert key.var == "XAI_API_KEY" and key.secret
-    server = catalog.build(preset, {"XAI_API_KEY": "typed-" + "key"})
-    assert server["env"] == {"XAI_API_KEY": "typed-key"} and server["args"][-1] == "lcode-mcp-xai"
-    assert catalog.build(preset, {"XAI_API_KEY": None})["env"] == {"XAI_API_KEY": "${XAI_API_KEY}"}
-    assert server["timeout"] == 900

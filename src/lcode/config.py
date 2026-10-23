@@ -23,6 +23,7 @@ else:
 
 DEFAULT_MODEL = "qwen3.6-35b"
 PERMISSION_MODES = ("ask", "plan", "auto-edit", "yolo")  # Shift+Tab cycles in this order
+WORK_MODES = ("code", "image", "video")  # what lcode makes (lcode.modes)
 WEB_MODES = ("on", "ask", "off")
 SEARCH_BACKENDS = ("auto", "ollama", "brave", "tavily", "searxng")
 MCP_TOOL_MODES = ("auto", "direct", "search")
@@ -40,6 +41,8 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "backend": ("ollama", str, "model server: ollama | lmstudio | llama.cpp | vllm | mlx | openai (any OpenAI API)"),
     "base_url": (None, str, "OpenAI-compatible server address, e.g. http://localhost:1234/v1 (default: the backend's)"),
     "permission_mode": ("ask", str, "ask | plan | auto-edit | yolo"),
+    "mode": ("code", str, "what lcode makes when it starts: code | image | video"),
+    "comfyui_url": ("http://127.0.0.1:8188", str, "ComfyUI, for image and video mode"),
     "think": (True, bool, "let the model reason before answering (slower, better)"),
     "web": ("on", str, "web search and page fetching for the model: on | ask | off"),
     "search_backend": ("auto", str, "auto | ollama | brave | tavily | searxng (keys come from environment variables)"),
@@ -203,6 +206,8 @@ def coerce(key: str, value: object) -> object:
         raise ConfigError(f"search_backend must be one of {', '.join(SEARCH_BACKENDS)}")
     if key == "permission_mode" and value not in PERMISSION_MODES:
         raise ConfigError(f"permission_mode must be one of {', '.join(PERMISSION_MODES)}")
+    if key == "mode" and value not in WORK_MODES:
+        raise ConfigError(f"mode must be one of {', '.join(WORK_MODES)}")
     if typ is bool and isinstance(value, str):
         if value.lower() not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
             raise ConfigError(f"{key} must be true or false")
