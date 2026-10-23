@@ -27,6 +27,7 @@ lcode config path                      # print the file location
 | `comfyui_url` | `http://127.0.0.1:8188` | ComfyUI's address, for image and video mode |
 | `comfyui_path` | (found) | Your ComfyUI folder, if lcode doesn't find it; lcode starts it when needed ([ComfyUI](modes.md#comfyui)) |
 | `media_dir` | `.lcode/media` | Where images and videos go: a folder in the project, or an absolute path |
+| `image_model` | `flux2-klein-4b` | The model image mode uses: a key from `lcode media` ([image models](modes.md#image-models)) |
 | `think` | `true` | Let the model reason before answering |
 | `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |
 | `search_backend` | `auto` | `auto`, `ollama`, `brave`, `tavily` or `searxng`; `auto` uses the first one configured |

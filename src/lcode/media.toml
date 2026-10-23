@@ -1,0 +1,73 @@
+# Image and video models lcode can run through ComfyUI (lcode.media_catalog).
+#
+# [files.<key>]  one file in ComfyUI's model folders, listed once: models share text encoders and VAEs.
+#   folder        ComfyUI's model folder (diffusion_models, text_encoders, vae, loras, …)
+#   name          the file name there
+#   url           where lcode downloads it from (Hugging Face; HF_TOKEN is used for gated files)
+#   gb            its size in GB (10^9 bytes)
+#   alternatives  other file names that do the same job: an installed one is used instead of downloading
+#
+# [models.<key>]  one model.
+#   mode          image or video
+#   tasks         text-to-image, edit, inpaint, text-to-video, image-to-video, first-last-frame, reference-to-video, audio
+#   workflow      lcode's workflow for it (lcode/workflows/<workflow>.json)
+#   files         role -> file key; the workflow's $role placeholders get the file names
+#   gpu_gb        GPU memory a 1024×1024 image (or the default video) needed at its peak, measured with nvidia-smi
+#   measured      what it did on real hardware; models without it haven't been run yet
+
+[files.flux-2-klein-4b-fp8]
+folder = "diffusion_models"
+name = "flux-2-klein-4b-fp8.safetensors"
+url = "https://huggingface.co/black-forest-labs/FLUX.2-klein-4b-fp8/resolve/main/flux-2-klein-4b-fp8.safetensors"
+gb = 4.07
+alternatives = ["flux-2-klein-4b.safetensors"]
+
+[files.qwen-3-4b]
+folder = "text_encoders"
+name = "qwen_3_4b.safetensors"
+url = "https://huggingface.co/Comfy-Org/flux2-klein/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors"
+gb = 8.04
+alternatives = ["qwen_3_4b_fp8_mixed.safetensors"]
+
+[files.flux2-vae]
+folder = "vae"
+name = "flux2-vae.safetensors"
+url = "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors"
+gb = 0.34
+
+[files.z-image-turbo-int8]
+folder = "diffusion_models"
+name = "z_image_turbo_int8_convrot.safetensors"
+url = "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/diffusion_models/z_image_turbo_int8_convrot.safetensors"
+gb = 6.20
+alternatives = ["z_image_turbo_bf16.safetensors"]
+
+[files.flux-ae]
+folder = "vae"
+name = "ae.safetensors"
+url = "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors"
+gb = 0.34
+
+[models.flux2-klein-4b]
+name = "FLUX.2 klein 4B"
+mode = "image"
+publisher = "Black Forest Labs"
+license = "Apache 2.0"
+tasks = ["text-to-image"]
+workflow = "flux2-klein-4b-t2i"
+files = { model = "flux-2-klein-4b-fp8", text_encoder = "qwen-3-4b", vae = "flux2-vae" }
+gpu_gb = 0.0
+measured = ""
+notes = "fast and small: 4 steps"
+
+[models.z-image-turbo]
+name = "Z-Image Turbo"
+mode = "image"
+publisher = "Tongyi-MAI (Alibaba)"
+license = "Apache 2.0"
+tasks = ["text-to-image"]
+workflow = "z-image-turbo-t2i"
+files = { model = "z-image-turbo-int8", text_encoder = "qwen-3-4b", vae = "flux-ae" }
+gpu_gb = 0.0
+measured = ""
+notes = "photorealistic, writes text well: 8 steps"

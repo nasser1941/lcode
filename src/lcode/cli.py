@@ -777,9 +777,10 @@ def exit_on_hangup() -> None:
 
 def comfyui_status(cfg: dict) -> tuple[str, bool | None]:
     """lcode doctor's ComfyUI line: running or found, and whether the image model is there."""
-    from lcode import comfy, media
+    from lcode import comfy
+    from lcode import media_catalog as catalog
 
-    workflow = comfy.load_workflow(media.IMAGE_WORKFLOW)
+    model = catalog.load().find(cfg.get("image_model") or "") or catalog.load().models[catalog.DEFAULT_IMAGE]
     server = comfy.Server(cfg["comfyui_url"])
     stats = server.stats()
     install = None if stats else comfy.find_install(cfg["comfyui_path"])
@@ -787,14 +788,13 @@ def comfyui_status(cfg: dict) -> tuple[str, bool | None]:
         return "not found: image mode offers to install it (or lcode config set comfyui_path <folder>)", None
     if stats:
         where = f"{(stats.get('system') or {}).get('comfyui_version', '?')} running at {server.url}"
-        installed = {folder: set(server.models(folder)) for folder in workflow.models}
     else:
         where = f"{install.path} (lcode starts it in image mode)"
-        installed = {folder: set(comfy.local_models(install, folder)) for folder in workflow.models}
-    missing = [f"{f}/{names[0]}" for f, names in workflow.models.items() if not installed[f] & set(names)]
+    _, missing = catalog.chosen_files(model, catalog.lister(server if stats else None, install))
     if missing:
-        return f"{where} · {workflow.name} not installed (missing {', '.join(missing)})", None
-    return f"{where} · image model: {workflow.name}", True
+        size = sum(f.gb for f in missing)
+        return f"{where} · {model.name} not installed: lcode media install {model.key} ({size:.1f} GB)", None
+    return f"{where} · image model: {model.name}", True
 
 
 def media_request(agent, prompt: str, out: Console, quiet: bool) -> None:
@@ -909,6 +909,13 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     subs["setup"] = p
     subs["models"] = argparse.ArgumentParser(prog="lcode models", description="List models and how they fit here.")
     subs["doctor"] = argparse.ArgumentParser(prog="lcode doctor", description="Check the installation.")
+    p = argparse.ArgumentParser(
+        prog="lcode media", description="Image and video models: list them, with how they fit here, or install one."
+    )
+    p.add_argument("action", nargs="?", choices=["list", "install"], default="list")
+    p.add_argument("model", nargs="?", help="with install: a model key from the list, e.g. z-image-turbo")
+    p.add_argument("-y", "--yes", action="store_true", help="don't ask before downloading")
+    subs["media"] = p
     p = argparse.ArgumentParser(prog="lcode config", description="Show or change settings.")
     p.add_argument("action", nargs="?", choices=["show", "set", "unset", "path"], default="show")
     p.add_argument("key", nargs="?", choices=list(config.SETTINGS))
@@ -1065,6 +1072,55 @@ def cmd_index(args) -> None:
     )
 
 
+def cmd_media(args) -> None:
+    """lcode media [list] | install <model>: the media catalog, what's installed in ComfyUI, downloads."""
+    from rich.prompt import Confirm
+
+    from lcode import comfy, media
+    from lcode import media_catalog as catalog
+
+    try:
+        cfg = config.load()
+    except ConfigError as e:
+        fail(str(e))
+    cat, hw = catalog.load(), detect()
+    server = comfy.Server(cfg["comfyui_url"])
+    install = comfy.find_install(cfg["comfyui_path"])
+    running = server.stats() is not None
+    installed = catalog.lister(server if running else None, install) if running or install else None
+    if args.action == "install":
+        model = cat.find(args.model or "")
+        if model is None:
+            fail(f"no media model {args.model!r}: lcode media lists them")
+        if not running and install is None:
+            fail(f"lcode needs ComfyUI to install models into. {comfy.install_hint()}")
+        ask = None if args.yes else (lambda q: Confirm.ask(q, default=True, console=console))
+        try:
+            saved = catalog.install(model, server if running else None, install, console, ask)
+        except catalog.CatalogError as e:
+            fail(str(e))
+        how = f" ({len(saved)} file(s) downloaded)." if saved else "."
+        console.print(f"[green]{model.name} is installed[/]{how}")
+        return
+    where = (
+        f"ComfyUI at {server.url}" if running else (f"{install.path} (not running)" if install else "no ComfyUI found")
+    )
+    console.print(f"[dim]{hw.describe()} · {where} · image model: {cfg['image_model']}[/]\n")
+    for mode in ("image", "video"):
+        models = cat.for_mode(mode)
+        console.print(f"[bold]{mode.capitalize()} models[/]")
+        if not models:
+            console.print(f"  [dim]{media.SOON[mode]}[/]\n")
+            continue
+        for m in models:
+            line = escape(catalog.describe(m, hw, installed))
+            console.print(f"  [bold]{m.key:<16}[/] {escape(m.name)} [dim]· {line}[/]")
+            if m.measured:
+                console.print(f"  {'':<16} [dim]{escape(m.measured)}[/]")
+        console.print()
+    console.print("[dim]Install one: lcode media install <model> · choose in image mode: /model <model>[/]")
+
+
 def cmd_mcp(args) -> None:
     from lcode.mcp.commands import run
 
@@ -1075,6 +1131,7 @@ COMMANDS = {
     "setup": cmd_setup,
     "models": cmd_models,
     "doctor": cmd_doctor,
+    "media": cmd_media,
     "config": cmd_config,
     "bench": cmd_bench,
     "mcp": cmd_mcp,

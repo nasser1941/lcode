@@ -218,9 +218,9 @@ def model_lines(agent: Agent) -> str:
     """The banner's model lines: the coding model and its context, or the mode's own model."""
     s = agent.settings
     if s.mode == "image":
-        return f"[dim]model[/]    {escape(media.image_model())} [dim]· ComfyUI · {escape(s.media_dir)}[/]\n"
+        return f"[dim]model[/]    {escape(media.current(agent).name)} [dim]· ComfyUI · {escape(s.media_dir)}[/]\n"
     if s.mode == "video":
-        return "[dim]model[/]    [dim]video models come with #150 and #153[/]\n"
+        return "[dim]model[/]    [dim]video models come with video generation (#153)[/]\n"
     server = f" [dim]· {escape(agent.ollama.describe())}[/]" if backends.is_openai(agent.ollama) else ""
     return f"[dim]model[/]    {escape(s.model)}{server}\n[dim]context[/]  {format_tokens(s.context)} tokens\n"
 
@@ -891,6 +891,45 @@ def model_command(agent: Agent, arg: str, hardware: Hardware) -> None:
     switch_model(agent, arg, hardware)
 
 
+def media_model_command(agent: Agent, arg: str, hardware: Hardware) -> None:
+    """/models and /model in image or video mode: the catalog's models for the mode, numbered; pick one."""
+    from lcode import media_catalog as catalog
+
+    c, s = agent.console, agent.settings
+    choices = catalog.load().for_mode(s.mode)
+    if not choices:
+        c.print(f"[yellow]{escape(media.SOON.get(s.mode, modes.ready(agent)))}[/]")
+        return
+    current = media.current(agent)
+    installed = media.installed_lister(agent)
+    if not arg:
+        for i, m in enumerate(choices, 1):
+            mark = "[green]●[/]" if m.key == current.key else " "
+            c.print(
+                f"  {i}. {mark} [bold]{escape(m.name)}[/] [dim]({m.key})[/]  "
+                f"{escape(catalog.describe(m, hardware, installed))}"
+            )
+            if m.measured:
+                c.print(f"        [dim]{escape(m.measured)}[/]")
+        try:
+            arg = input(f"  Switch to which model? (number or name, Enter to keep {current.name}): ").strip()
+        except EOFError:
+            return
+        if not arg:
+            return
+    model = catalog.load().find(arg, s.mode)
+    if model is None:
+        c.print(f"[red]There's no {s.mode} model {escape(arg)!r}: choose 1 to {len(choices)}, or a name.[/]")
+        return
+    s.image_model = model.key
+    c.print(f"[green]Image model: {escape(model.name)}.[/]")
+    if installed is not None:
+        _, missing = catalog.chosen_files(model, installed)
+        if missing:
+            size = sum(f.gb for f in missing)
+            c.print(f"[dim]Not installed yet: {size:.1f} GB download with your next image (you're asked first).[/]")
+
+
 def switch_model(agent: Agent, wanted: str, hardware: Hardware) -> None:
     """Switch to a catalog key or an installed model, and size the context for it."""
     from lcode.cli import NotInstalled, resolve_model
@@ -1116,13 +1155,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
     elif cmd in ("/context", "/ctx"):
         context_command(agent, arg, hardware)
     elif cmd in ("/models", "/model"):
-        if s.mode == "image":
-            c.print(
-                f"Image model: [bold]{media.image_model()}[/], through ComfyUI. "
-                "[dim]More image models, and installing them from lcode, come with #150.[/]"
-            )
-        elif s.mode != "code":
-            c.print(f"[yellow]{escape(modes.ready(agent))}[/]")
+        if s.mode != "code":
+            media_model_command(agent, arg, hardware)
         else:
             model_command(agent, arg, hardware)
     elif cmd == "/think":

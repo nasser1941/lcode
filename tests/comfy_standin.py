@@ -33,8 +33,9 @@ def tiny_png() -> bytes:
 class StandIn:
     """Start with `with StandIn() as comfy:`; comfy.url is its address. Set the attributes to shape the next jobs."""
 
-    def __init__(self, models: dict | None = None, websocket: bool = True):
+    def __init__(self, models: dict | None = None, websocket: bool = True, models_root=None):
         self.models = dict(FLUX if models is None else models)
+        self.models_root = models_root  # a folder: its subfolders are the model folders, read on each request
         self.websocket = websocket  # False: no websocket, so lcode has to poll the history
         self.steps = 4
         self.ahead = 0  # jobs before the next one in the queue (they "finish" while it waits)
@@ -174,7 +175,16 @@ class StandIn:
                 if path == "/system_stats":
                     return self.reply(200, {"system": {"comfyui_version": "0.38.0"}, "devices": []})
                 if path.startswith("/models/"):
-                    return self.reply(200, standin.models.get(path.removeprefix("/models/"), []))
+                    folder = path.removeprefix("/models/")
+                    if standin.models_root is not None:
+                        where = standin.models_root / folder
+                        names = sorted(p.name for p in where.iterdir() if p.is_file()) if where.is_dir() else []
+                        return self.reply(200, [n for n in names if not n.endswith(".part")])
+                    return self.reply(200, standin.models.get(folder, []))
+                if path == "/internal/folder_paths":
+                    root = standin.models_root
+                    folders = ("diffusion_models", "text_encoders", "vae", "loras")
+                    return self.reply(200, {f: [str(root / f)] for f in folders} if root else {})
                 if path == "/queue":
                     running = [[0, standin.running, {}, {}, []]] if standin.running else []
                     pending = [[i + 1, pid, {}, {}, []] for i, pid in enumerate(standin.queue)]

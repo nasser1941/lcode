@@ -95,7 +95,7 @@ def test_the_job_is_followed_on_the_websocket(standin):
 
 
 def stand_values() -> dict:
-    files = {"diffusion_models": "f.safetensors", "text_encoders": "t.safetensors", "vae": "v.safetensors"}
+    files = {"model": "f.safetensors", "text_encoder": "t.safetensors", "vae": "v.safetensors"}
     return {**files, "width": 512, "height": 512, "steps": 4, "batch": 1, "seed": 1}
 
 
@@ -132,7 +132,7 @@ def test_a_missing_model_is_named(make_agent):
         agent = make_agent(comfyui_url=server.url)
         with pytest.raises(media.MediaError) as e:
             media.generate_image(agent, "a fox")
-    assert "diffusion_models/flux-2-klein-4b-fp8.safetensors" in str(e.value) and "#150" in str(e.value)
+    assert "FLUX.2 klein 4B isn't installed (12.1 GB to download): lcode media install flux2-klein-4b" in str(e.value)
 
 
 def test_results_that_finished_while_lcode_was_away_are_collected(image_agent, standin, repo):
@@ -311,8 +311,6 @@ def test_a_request_in_image_mode_makes_an_image(image_agent, standin):
     image_agent.interactive = False
     respond(image_agent, "a lighthouse in a storm")
     assert "a-lighthouse-in-a-storm-1.png" in text(image_agent) and image_agent.ollama.payloads == []
-    handle_command(image_agent, "/models", LAPTOP)
-    assert "Image model: FLUX.2 klein 4B" in text(image_agent)
 
 
 def test_an_image_from_the_command_line(tmp_path, monkeypatch, capsys, standin, repo):
@@ -340,7 +338,8 @@ def test_doctor_reports_comfyui(standin, tmp_path):
     (install / "main.py").write_text("")
     cfg = {"comfyui_url": "http://127.0.0.1:9", "comfyui_path": str(install)}
     status, good = cli.comfyui_status(cfg)
-    assert "lcode starts it in image mode" in status and "missing diffusion_models/" in status and good is None
+    assert "lcode starts it in image mode" in status and good is None
+    assert "FLUX.2 klein 4B not installed: lcode media install flux2-klein-4b (12.4 GB)" in status
     for folder, names in FLUX.items():
         (install / "models" / folder).mkdir(parents=True)
         (install / "models" / folder / names[0]).write_text("")

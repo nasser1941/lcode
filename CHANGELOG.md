@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Image models to choose from, installed by lcode** (#150). lcode's media catalog lists the image
+  models it can run, with their size, license, measured speed and whether they fit your GPU.
+  **Z-Image Turbo** joins FLUX.2 klein 4B. See
+  [Image models](https://nasser1941.github.io/lcode/modes/#image-models).
+  - **Choose one:** `/models` in image mode (numbered) or `/model z-image-turbo` switches; the
+    `image_model` setting is the default, and sessions keep theirs.
+  - **Installed on demand:** a model that isn't installed downloads with your next image, after you
+    say yes, or ahead with `lcode media install <model>`. lcode downloads only the missing files
+    (models share text encoders and VAEs) into ComfyUI's model folders, checks the disk first,
+    verifies each file's SHA-256, and resumes interrupted downloads. `HF_TOKEN` works for gated
+    models.
+  - **`lcode media`** lists image and video models with what fits and what's installed, and
+    `lcode doctor` says how to install the image model when it's missing.
+
 ## [0.40.0] - 2026-10-23
 
 ### Added

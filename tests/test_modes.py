@@ -53,7 +53,8 @@ def test_a_request_in_image_or_video_mode_never_reaches_the_coding_model(make_ag
     agent.settings.mode = "video"
     respond(agent, "a red fox running")
     handle_command(agent, "/models", LAPTOP)
-    assert text(agent).count("Video mode doesn't generate yet") == 2 and agent.ollama.payloads == []
+    assert "Video mode doesn't generate yet" in text(agent) and agent.ollama.payloads == []
+    assert "Video models come with video generation (#153)" in text(agent)
 
 
 def test_the_permission_mode_has_its_own_command_now(agent):
