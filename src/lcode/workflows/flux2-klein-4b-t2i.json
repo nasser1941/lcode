@@ -1,0 +1,38 @@
+{
+  "name": "FLUX.2 klein 4B",
+  "task": "text-to-image",
+  "source": "ComfyUI's template image_flux2_klein_text_to_image (the distilled 4B subgraph), in API format",
+  "models": {
+    "diffusion_models": ["flux-2-klein-4b-fp8.safetensors", "flux-2-klein-4b.safetensors"],
+    "text_encoders": ["qwen_3_4b.safetensors"],
+    "vae": ["flux2-vae.safetensors"]
+  },
+  "defaults": {"width": 1024, "height": 1024, "steps": 4, "batch": 1},
+  "labels": {
+    "1": "loading the model",
+    "2": "loading the text encoder",
+    "3": "loading the VAE",
+    "4": "reading the prompt",
+    "11": "drawing",
+    "12": "decoding the image",
+    "13": "saving"
+  },
+  "graph": {
+    "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "$diffusion_models", "weight_dtype": "default"}},
+    "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "$text_encoders", "type": "flux2", "device": "default"}},
+    "3": {"class_type": "VAELoader", "inputs": {"vae_name": "$vae"}},
+    "4": {"class_type": "CLIPTextEncode", "inputs": {"text": "$prompt", "clip": ["2", 0]}},
+    "5": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["4", 0]}},
+    "6": {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": ["4", 0], "negative": ["5", 0], "cfg": 1}},
+    "7": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+    "8": {"class_type": "Flux2Scheduler", "inputs": {"steps": "$steps", "width": "$width", "height": "$height"}},
+    "9": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": "$width", "height": "$height", "batch_size": "$batch"}},
+    "10": {"class_type": "RandomNoise", "inputs": {"noise_seed": "$seed"}},
+    "11": {
+      "class_type": "SamplerCustomAdvanced",
+      "inputs": {"noise": ["10", 0], "guider": ["6", 0], "sampler": ["7", 0], "sigmas": ["8", 0], "latent_image": ["9", 0]}
+    },
+    "12": {"class_type": "VAEDecode", "inputs": {"samples": ["11", 0], "vae": ["3", 0]}},
+    "13": {"class_type": "SaveImage", "inputs": {"images": ["12", 0], "filename_prefix": "lcode/image"}}
+  }
+}

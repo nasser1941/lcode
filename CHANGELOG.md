@@ -6,6 +6,32 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Image mode makes images** (#149). In image mode, what you type becomes a picture, made by
+  FLUX.2 klein 4B on your GPU in about 8 seconds, with no language model involved. lcode drives
+  ComfyUI itself. See [Modes](https://nasser1941.github.io/lcode/modes/#image-mode).
+  - **ComfyUI is found or started:** lcode uses a running ComfyUI as it is. Otherwise it starts
+    yours in the background when you enter image mode (`comfyui_path`, the `comfy` CLI's folder or
+    a usual one). It stops that ComfyUI when you quit, go back to code mode or close the terminal.
+    With none, it offers to install ComfyUI with comfy-cli.
+  - **Progress, cancel and type-ahead:** the status line shows the step, the time left and your
+    place in ComfyUI's queue. Esc or Ctrl+C cancels the job in ComfyUI too. What you type
+    meanwhile waits in the next prompt.
+  - **Files with their settings:** images go to `.lcode/media/` (the `media_dir` setting), each
+    with a JSON file of its prompt, model, seed and size, also stored in the PNG itself. Images
+    that finish after a crash are saved the next time.
+  - `lcode --mode image -p "…"` makes an image from a script, and `--output json` gives the paths.
+    `lcode doctor` reports ComfyUI and the image model.
+  - **No Ollama needed for images:** lcode starts in image mode without Ollama or the coding
+    model; `/mode code` says what's missing.
+
+### Fixed
+
+- **lcode cleans up when its terminal closes.** A closed terminal or a `kill` used to end lcode
+  without stopping what it had started. Now it saves the session and stops its background jobs and
+  servers. On Linux, a ComfyUI lcode started also stops if lcode is killed outright.
+
 ## [0.39.0] - 2026-10-23
 
 ### Added

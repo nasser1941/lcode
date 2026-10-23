@@ -43,6 +43,8 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "permission_mode": ("ask", str, "ask | plan | auto-edit | yolo"),
     "mode": ("code", str, "what lcode makes when it starts: code | image | video"),
     "comfyui_url": ("http://127.0.0.1:8188", str, "ComfyUI, for image and video mode"),
+    "comfyui_path": (None, str, "your ComfyUI folder, if lcode doesn't find it (lcode starts it when needed)"),
+    "media_dir": (".lcode/media", str, "where images and videos go: a folder in the project, or an absolute path"),
     "think": (True, bool, "let the model reason before answering (slower, better)"),
     "web": ("on", str, "web search and page fetching for the model: on | ask | off"),
     "search_backend": ("auto", str, "auto | ollama | brave | tavily | searxng (keys come from environment variables)"),

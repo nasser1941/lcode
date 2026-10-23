@@ -32,23 +32,28 @@ def test_mode_shows_itself_and_switches(agent, monkeypatch):
     handle_command(agent, "/mode image", LAPTOP)
     assert agent.settings.mode == "image" and agent.ollama.unloaded == ["lcode-qwen3.6-35b"]
     assert "Unloaded lcode-qwen3.6-35b to free the GPU for images" in text(agent)
-    assert "Image mode doesn't generate yet" in text(agent)
+    assert "ComfyUI isn't installed; lcode offers to install it when you make your first image" in text(agent)
+    assert "Describe an image and press Enter: FLUX.2 klein 4B makes it on your GPU, into .lcode/media" in text(agent)
     handle_command(agent, "/mode video", LAPTOP)  # no coding model to unload from image mode
     assert agent.settings.mode == "video" and agent.ollama.unloaded == ["lcode-qwen3.6-35b"]
+    assert "Video mode doesn't generate yet" in text(agent)
     handle_command(agent, "/mode code", LAPTOP)
-    assert agent.settings.mode == "code" and freed == ["http://127.0.0.1:8188"]
+    assert agent.settings.mode == "code" and freed == [agent.settings.comfyui_url]
     assert "ComfyUI gave the GPU back" in text(agent)
     handle_command(agent, "/mode cinema", LAPTOP)
     assert "Unknown mode 'cinema'" in text(agent) and agent.settings.mode == "code"
 
 
-def test_a_request_in_image_mode_doesnt_reach_the_coding_model(make_agent):
+def test_a_request_in_image_or_video_mode_never_reaches_the_coding_model(make_agent):
     agent = make_agent([], mode="yolo")  # no scripted replies: a request to the model would fail
+    agent.interactive = False
     agent.settings.mode = "image"
-    respond(agent, "a red fox in the snow")
-    assert "Image mode doesn't generate yet" in text(agent) and agent.ollama.payloads == []
+    respond(agent, "a red fox in the snow")  # no ComfyUI here: image mode says how to get it
+    assert "no install found" in text(agent) and agent.ollama.payloads == []
+    agent.settings.mode = "video"
+    respond(agent, "a red fox running")
     handle_command(agent, "/models", LAPTOP)
-    assert text(agent).count("Image mode doesn't generate yet") == 2
+    assert text(agent).count("Video mode doesn't generate yet") == 2 and agent.ollama.payloads == []
 
 
 def test_the_permission_mode_has_its_own_command_now(agent):
@@ -140,15 +145,21 @@ def test_the_mode_setting(tmp_path, monkeypatch):
     assert config.load()["mode"] == "video"
 
 
-def test_a_request_from_the_command_line_in_image_mode_says_whats_coming(tmp_path, monkeypatch, capsys):
+def test_a_request_from_the_command_line_in_video_mode_says_whats_coming(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
+    cli.main(["config", "set", "comfyui_url", "http://127.0.0.1:9"])
     monkeypatch.setattr(cli, "Ollama", lambda host: FakeOllama())
     monkeypatch.setattr(cli, "detect", lambda: LAPTOP)
     monkeypatch.setattr("lcode.api.check_server", lambda *args: "0.35.1")
     monkeypatch.setattr(cli, "resolve_model", lambda ollama, name: (name, catalog.find(name)))
     monkeypatch.setattr(cli, "choose_context", lambda *args: (32768, ""))
     with pytest.raises(SystemExit) as done:
-        cli.main(["--mode", "image", "-p", "a red fox", "--output", "json", "--no-mcp"])
+        cli.main(["--mode", "video", "-p", "a red fox running", "--output", "json", "--no-mcp"])
     assert done.value.code == 2
     result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert result["status"] == "error" and "Image mode doesn't generate yet" in result["error"]
+    assert result["status"] == "error" and "Video mode doesn't generate yet" in result["error"]
+    with pytest.raises(SystemExit) as done:  # image mode makes images now, given a ComfyUI (tests/test_comfy.py)
+        cli.main(["--mode", "image", "-p", "a red fox", "--output", "json", "--no-mcp"])
+    assert done.value.code == 1
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert result["status"] == "error" and "no install found" in result["error"]
