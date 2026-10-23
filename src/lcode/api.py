@@ -54,6 +54,7 @@ class Options:
     model: str | None = None
     context: int | str | None = None
     permission_mode: str | None = None  # ask, plan, auto-edit or yolo
+    mode: str | None = None  # code, image or video
     allowed_tools: list[str] | None = None  # only these tools (default: all)
     max_steps: int | None = None  # model steps per request
     think: bool | None = None
@@ -179,6 +180,8 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         think=cfg["think"] if options.think is None else options.think,
         show_thinking=options.show_thinking,
         permission_mode=options.permission_mode or cfg["permission_mode"],
+        mode=options.mode or cfg["mode"],
+        comfyui_url=cfg["comfyui_url"],
         web=switch(options.web, cfg["web"], "on"),
         search_backend=cfg["search_backend"],
         searxng_url=cfg["searxng_url"],

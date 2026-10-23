@@ -79,7 +79,8 @@ reasoning is on.
 | `/models`, `/model [number or name]` | List the models and how they fit this machine, numbered: type a number to switch, or `/model 2`, `/model qwen3.5-9b` |
 | `/think [on\|off]` | Toggle reasoning |
 | `/verbose` | Toggle showing the reasoning text |
-| `/mode [ask\|plan\|auto-edit\|yolo]` | Set the permission mode |
+| `/mode [code\|image\|video]` | Switch what lcode makes: [code, images or videos](modes.md) |
+| `/permissions [ask\|plan\|auto-edit\|yolo]` | Set the permission mode |
 | `/cd DIR` | Change the working directory |
 | `/todos` | Show the model's task list |
 | `/status` | The task sheet: your latest requests, the plan and the model's notes, files changed, the last check |
@@ -315,7 +316,7 @@ stays loaded:
 | The model was loaded | `◆ Loaded qwen3.6-35b in 15s: 22.3 GB, 45% on the GPU and the rest in system RAM.`, and a warning when less of it is on the GPU than usual, because another program or model is using GPU memory |
 | A dense model doesn't fit on the GPU (at startup and on `/model`) | `⚠ qwen3.8-27b is a dense model: all 27B parameters work on every token. It's capable, but slow here. Only about 61% of it fits in the 12 GB of GPU memory…`, with what to do instead |
 | The model that looks at images needs the memory | `Loading the vision model … to look at bug.png; qwen3.6-35b makes room and reloads afterwards`, then `◆ qwen3.6-35b was unloaded to make room…`, and the next step says `Reloading qwen3.6-35b into memory (it made room for the vision model …)` |
-| A tool needs the GPU to itself, such as image generation | `◆ Unloaded qwen3.6-35b so comfyui can use the GPU; it reloads afterwards.` |
+| A tool needs the GPU to itself (an MCP server with `free_gpu`) | `◆ Unloaded qwen3.6-35b so the server can use the GPU; it reloads afterwards.` |
 | Ollama ran out of memory | `⚠` what ran out (the prompt batch, or the context next to the model), what lcode retries with, and what it remembers for next time |
 
 While the model loads in the background at startup, the status bar says
@@ -470,7 +471,7 @@ a screen and sees what you would, measured:
 | `auto-edit` | automatic | ask, except read-only commands |
 | `yolo` | automatic | automatic |
 
-++shift+tab++ cycles through them in this order, `/mode` sets one, and `--plan`, `--auto-edit` and
+++shift+tab++ cycles through them in this order, `/permissions` sets one, and `--plan`, `--auto-edit` and
 `--yolo` start in one.
 
 Read-only commands run without asking: `ls`, `cat`, `head`, `tail`, `grep`, `rg`, `find`, `tree`,

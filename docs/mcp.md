@@ -28,8 +28,6 @@ and find the code for the top one."*
 | `gcp` | `gcloud` commands on your Google Cloud projects | `npx` and the `gcloud` CLI, signed in |
 | `github` | Repositories, issues, pull requests, Actions | a GitHub token (or the GitHub CLI) |
 | `playwright` | A real (headless) browser: open pages, click, fill forms | `npx` |
-| `comfyui` | Generate and edit images with local models (FLUX, SDXL, SD 1.5, Qwen-Image) | `uvx` and [ComfyUI](#images-with-comfyui) running locally |
-| `xai` | Generate and edit images, and generate videos and speech, with xAI's Grok Imagine (paid, in the cloud) | `uvx`, an xAI API key ([below](#images-videos-and-speech-with-xai)) |
 | `context7` | Up-to-date docs and examples for thousands of libraries | nothing (an API key is optional) |
 | `sentry` | Errors, issues, traces and releases | a Sentry account (browser sign-in) |
 | `postgres` | Schemas, read-only queries, query performance | `uvx`, a connection URL |
@@ -87,86 +85,12 @@ Google Cloud project:
 See [Google's guide](https://developers.google.com/workspace/guides/configure-mcp-servers) for
 details.
 
-### Images with ComfyUI
+### Images and videos
 
-[ComfyUI](https://github.com/comfyanonymous/ComfyUI) runs image generation and editing models
-locally; its official MCP server lets lcode use it, for app icons, illustrations, mockups or
-placeholder art.
-
-```bash
-uv tool install comfy-cli && comfy install                 # ComfyUI, once
-comfy launch --background -- --disable-smart-memory          # start it (http://127.0.0.1:8188)
-lcode mcp add comfyui
-```
-
-Then add models in ComfyUI (its model manager, or ask lcode: *"download FLUX.2 Klein 4B in
-ComfyUI"*), and ask for images: *"make a 512×512 app icon of a paper plane and save it in
-assets/"*. To edit an image, ask lcode to upload it and run an editing workflow (Kontext or
-Qwen-Image-Edit).
-
-| Model | Good for | On a 12 GB GPU |
-|---|---|---|
-| FLUX.2 Klein 4B | Generation and editing, fast | Fits (about 8 GB) |
-| SDXL and its community models | Generation, inpainting | Fits |
-| Stable Diffusion 1.5 and its community models | Light generation, inpainting | Fits easily |
-| FLUX.1 Dev and finetunes | High-quality generation | Needs an fp8 or GGUF version; slower |
-| FLUX.1 Kontext Dev | Editing an image from instructions | Needs an fp8 or GGUF version; slower |
-| Qwen-Image / Qwen-Image-Edit | Generation and editing, good text in images | Heavy: a GGUF version and RAM offloading |
-
-Only ComfyUI's local tools are turned on; Comfy Cloud's partner tools are left out, so prompts and
-images stay on your machine.
-
-**Sharing one GPU.** A GPU rarely holds a coding model and an image model at the same time, so the
-two take turns: before ComfyUI generates, lcode unloads its own model (the `free_gpu` setting), and
-ComfyUI started with `--disable-smart-memory` gives the GPU back after each image. lcode's model
-then reloads for the next step, which adds a few seconds to half a minute per image request. With
-enough GPU memory for both (or on a Mac with plenty of memory), remove `free_gpu` from the server's
-settings in `mcp.json`. lcode can also look at the results ([Images](usage.md#images)).
-
-Measured on an RTX 4080 Laptop GPU (12 GB) with qwen3.6-35b at 64K context and FLUX.2 Klein Base 4B
-(fp8, 512×512, 20 steps):
-
-| | |
-|---|---|
-| Generating while lcode's model is loaded | Fails: ComfyUI runs out of GPU memory |
-| Freeing the GPU (lcode unloads its model) | 0.2 s |
-| Generating one image | about 12 s |
-| Reloading lcode's model afterwards | about 20 s |
-
-The first time, the model has to find the right template and fill in its settings (model file names,
-size, prompt), which can take several minutes of trial and error. Once an image comes out right, ask
-lcode to save that workflow in your project (for example `assets/icon.workflow.json`) and reuse it:
-later images are a single `run_workflow` call.
-
-### Images, videos and speech with xAI
-
-xAI's [Grok Imagine](https://docs.x.ai/developers/model-capabilities/imagine) and
-[text to speech](https://docs.x.ai/developers/models/text-to-speech) APIs make images, videos and
-speech in the cloud: no GPU needed, but each call is billed to your xAI account. lcode ships an MCP
-server for them, `lcode-mcp-xai`.
-
-```bash
-lcode mcp add xai             # asks for your xAI API key (create one at https://console.x.ai)
-```
-
-The key is typed hidden and kept in `~/.config/lcode/mcp.json`, readable only by you. If
-`XAI_API_KEY` is already set in your environment, lcode uses that and doesn't store the key.
-
-| Tool | | Costs |
-|---|---|---|
-| `generate_image` | Images from a description: 1–10 at a time, aspect ratio, 1k or 2k | $0.02–0.05 an image |
-| `edit_image` | Change a local image as described | the same |
-| `generate_video` | A 1–15 second MP4 from a description, optionally starting from a local image, up to 1080p. Waits for it (a minute or more) | $0.02–0.08 a second |
-| `video_status` | Fetch a video that wasn't ready within 10 minutes | |
-| `text_to_speech` | Speech in one of 26 voices and 20 languages, as MP3 or WAV | per character |
-
-Files are saved in `generated/` in the project, or where you ask (*"generate an app icon and save
-it as assets/icon.png"*). xAI has no music generation API.
-
-Your prompts, and the images you edit or animate, go to xAI. lcode asks before each call, since each
-one costs money. To stop asking for some tools, list them under `"allow"` for the server in
-`mcp.json`, for example `"allow": ["generate_image", "text_to_speech"]`. xAI applies its own usage
-policies to what it generates; when it refuses a prompt, lcode passes its message to the model.
+Code mode makes code only, so the servers that generated images and videos in earlier versions
+(`comfyui`, `xai`) aren't in the catalog any more, and lcode doesn't load them in code mode if
+they're still in your `mcp.json`. Image and video generation get their own [modes](modes.md),
+with their own models and controls.
 
 ### Metabase
 

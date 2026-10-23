@@ -36,6 +36,7 @@ from lcode import (
     extensions,
     gitflow,
     limits,
+    modes,
     residency,
     sessions,
     web,
@@ -75,7 +76,8 @@ COMMANDS = {
     "/think": "Toggle model reasoning on/off",
     "/verbose": "Toggle showing the model's reasoning text",
     "/plan": "Plan before changing anything: /plan <request>, or /plan to show the approved plan",
-    "/mode": "Permission mode: ask | plan | auto-edit | yolo (Shift+Tab cycles)",
+    "/mode": "What lcode makes: code, image or video, e.g. /mode image",
+    "/permissions": "Permission mode: ask | plan | auto-edit | yolo (Shift+Tab cycles)",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
     "/status": "The task sheet: your requests, the plan and notes, files changed, the last check",
@@ -193,7 +195,7 @@ def build_session(agent: Agent) -> PromptSession:
         color = {"ask": "ansigreen", "plan": "ansicyan", "auto-edit": "ansiyellow", "yolo": "ansired"}[agent.perms.mode]
         return HTML(
             f" <b>{html.escape(s.model)}</b> · ctx {format_tokens(agent.ctx_used)}/{format_tokens(s.context)} "
-            f"({pct:.0f}%) · mode <{color}>{agent.perms.mode}</{color}> (shift+tab) · "
+            f"({pct:.0f}%) · <b>{s.mode}</b> · <{color}>{agent.perms.mode}</{color}> (shift+tab) · "
             f"think {'on' if s.think else 'off'} · {html.escape(agent.cwd.name)}/"
             + (" · <ansiyellow>loading the model into memory…</ansiyellow>" if agent.load_state == "loading" else "")
             + (f" · <b>{html.escape(agent.session_name)}</b>" if agent.session_name else "")
@@ -216,14 +218,15 @@ def banner(agent: Agent) -> None:
     agent.console.print(
         Panel(
             Group(
-                Text.from_markup(f"[bold cyan]lcode[/] [dim]v{__version__}[/] — local coding agent\n"),
+                Text.from_markup(f"[bold cyan]lcode[/] [dim]v{__version__}[/] — {modes.TITLES[s.mode]}\n"),
                 Text.from_markup(
                     f"[dim]model[/]    {escape(s.model)}"
                     + (f" [dim]· {escape(agent.ollama.describe())}[/]" if backends.is_openai(agent.ollama) else "")
                     + "\n"
                     f"[dim]context[/]  {format_tokens(s.context)} tokens\n"
                     f"[dim]cwd[/]      {agent.cwd}\n"
-                    f"[dim]mode[/]     {agent.perms.mode} [dim](Shift+Tab to cycle)[/]\n"
+                    f"[dim]mode[/]     {s.mode} [dim](/mode code, image or video)[/]\n"
+                    f"[dim]perms[/]    {agent.perms.mode} [dim](Shift+Tab to cycle)[/]\n"
                     f"[dim]web[/]      {web_status(agent)}\n"
                     + (f"[dim]mcp[/]      {escape(', '.join(agent.mcp.servers))} [dim](/mcp)[/]\n" if agent.mcp else "")
                     + (
@@ -826,6 +829,30 @@ def restore_checkpoint(agent: Agent, target: Checkpoint, rewind: bool) -> None:
     agent.save()
 
 
+def mode_command(agent: Agent, arg: str) -> None:
+    """/mode: show the mode, or switch to code, image or video (handing the GPU over)."""
+    c = agent.console
+    if not arg:
+        c.print(
+            f"Mode: [bold]{agent.settings.mode}[/] ({modes.TITLES[agent.settings.mode]}). Switch with /mode code, "
+            "/mode image or /mode video. The permission mode is /permissions."
+        )
+        return
+    if arg in PERMISSION_MODES:  # what /mode used to set
+        agent.perms.mode = arg
+        c.print(f"Permission mode: {arg}. [dim](/permissions sets it now; /mode switches code, image and video.)[/]")
+        return
+    if arg not in modes.MODES:
+        c.print(f"[red]Unknown mode {escape(arg)!r}: choose code, image or video.[/]")
+        return
+    lines = modes.switch(agent, arg)
+    c.print(f"[green]{escape(lines[0])}[/]")
+    for line in lines[1:]:
+        c.print(f"[dim]{escape(line)}[/]")
+    if arg == "code":
+        preload(agent)  # the coding model loads in the background, as at the start
+
+
 def model_command(agent: Agent, arg: str, hardware: Hardware) -> None:
     """/models and /model: the numbered list to pick from, or straight to a number or a name (/model 2)."""
     from lcode.cli import model_choices, print_models
@@ -1081,7 +1108,10 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
     elif cmd in ("/context", "/ctx"):
         context_command(agent, arg, hardware)
     elif cmd in ("/models", "/model"):
-        model_command(agent, arg, hardware)
+        if s.mode != "code":
+            c.print(f"[yellow]{escape(modes.COMING[s.mode])}[/]")
+        else:
+            model_command(agent, arg, hardware)
     elif cmd == "/think":
         s.think = (arg == "on") if arg in ("on", "off") else not s.think
         c.print(f"Reasoning {'on' if s.think else 'off'}.")
@@ -1103,10 +1133,12 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         c.print(Rule(style="dim"))
         run_safely(agent, arg)
     elif cmd == "/mode":
+        mode_command(agent, arg.strip().lower())
+    elif cmd == "/permissions":
         if arg in PERMISSION_MODES:
             agent.perms.mode = arg
         elif arg:
-            c.print(f"[red]Unknown mode; choose from {', '.join(PERMISSION_MODES)}[/]")
+            c.print(f"[red]Unknown permission mode; choose from {', '.join(PERMISSION_MODES)}[/]")
         c.print(f"Permission mode: {agent.perms.mode}")
     elif cmd == "/cd":
         p = Path(os.path.expanduser(arg or "~"))
@@ -1256,6 +1288,9 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
         if info:
             resume_session(agent, info)
     session_start(agent)
+    if prompt and agent.settings.mode != "code":
+        agent.console.print(f"[yellow]{escape(modes.COMING[agent.settings.mode])}[/]")
+        prompt = None
     if prompt:
         run_safely(agent, prompt)
         return
@@ -1266,12 +1301,16 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
     if warning:
         agent.say(warning, warning=True)
     session = build_session(agent)
-    preload(agent, session)
+    if agent.settings.mode == "code":
+        preload(agent, session)
+    else:
+        agent.console.print(f"[yellow]{escape(modes.COMING[agent.settings.mode])}[/]")
     while True:
         try:
             agent.console.print()
             unsent, agent.unsent = agent.unsent, ""
-            line = session.prompt(HTML("<ansicyan><b>❯ </b></ansicyan>"), default=unsent).strip()
+            marker = "❯ " if agent.settings.mode == "code" else f"{agent.settings.mode} ❯ "
+            line = session.prompt(HTML(f"<ansicyan><b>{marker}</b></ansicyan>"), default=unsent).strip()
         except KeyboardInterrupt:
             continue
         except EOFError:
@@ -1284,10 +1323,18 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
             if not handle_command(agent, line, hardware):
                 break
             continue
-        agent.console.print(Rule(style="dim"))
-        run_safely(agent, line)
+        respond(agent, line)
     memory_notes.reflect(agent)
     agent.console.print("[dim]Bye.[/]")
+
+
+def respond(agent: Agent, line: str) -> None:
+    """What a typed request does: the coding agent works on it, or image and video mode take it."""
+    if agent.settings.mode != "code":  # image and video: no coding model involved
+        agent.console.print(f"[yellow]{escape(modes.COMING[agent.settings.mode])}[/]")
+        return
+    agent.console.print(Rule(style="dim"))
+    run_safely(agent, line)
 
 
 def preload(agent: Agent, session: PromptSession | None = None) -> None:

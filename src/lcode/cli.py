@@ -714,6 +714,7 @@ def cmd_chat(args) -> None:
         model=args.model,
         context=args.context,
         permission_mode=mode,
+        mode=args.mode,
         allowed_tools=tools,
         max_steps=args.max_steps,
         think=False if args.no_think else None,
@@ -733,6 +734,16 @@ def cmd_chat(args) -> None:
             sys.exit(1)
         fail(str(e))
     exit_code = 0
+    if args.prompt and agent.settings.mode != "code":
+        from lcode import modes
+
+        message = modes.COMING[agent.settings.mode]
+        if quiet:
+            print(json.dumps({"type": "result", "status": "error", "error": message}), flush=True)
+        else:
+            out.print(f"[yellow]{escape(message)}[/]")
+        api.close_agent(agent)
+        sys.exit(2)
     if args.escalate and args.prompt:
         agent.escalate_approved = True  # the flag is the user's OK for this run
     try:
@@ -798,6 +809,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="work in a git worktree of its own, on branch NAME (new, or continue one); removed if nothing changed",
     )
     parser.add_argument("--plan", action="store_true", help="start in plan mode: agree on a plan before any change")
+    parser.add_argument("--mode", choices=config.WORK_MODES, help="what lcode makes: code (default), image or video")
     parser.add_argument("--auto-edit", action="store_true", help="apply file edits without asking")
     parser.add_argument("--yolo", action="store_true", help="never ask for permission (edits and commands)")
     parser.add_argument(

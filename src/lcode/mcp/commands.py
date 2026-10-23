@@ -60,6 +60,12 @@ def start_session(cwd: Path, tool_mode: str, console: Console, interactive: bool
     servers, problems = mcp_config.load_all(cwd, include_project=use_project)
     for problem in problems:
         console.print(f"[yellow]MCP: {escape(problem)}[/]")
+    from lcode import modes
+
+    servers, left_out = modes.code_mode_servers(servers)  # images and videos have their own modes
+    note = modes.note_once(left_out)
+    if note and interactive:
+        console.print(f"[dim]{escape(note)}[/]")
     if not servers:
         return None
     manager = McpManager(cwd, servers, tool_mode)
