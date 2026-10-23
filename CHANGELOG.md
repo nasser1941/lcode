@@ -10,7 +10,8 @@ All notable changes to lcode are documented here. The format follows
 
 - **Image models to choose from, installed by lcode** (#150). lcode's media catalog lists the image
   models it can run, with their size, license, measured speed and whether they fit your GPU.
-  **Z-Image Turbo** joins FLUX.2 klein 4B. See
+  **Z-Image Turbo** (photorealistic) joins FLUX.2 klein 4B (fast): 17 s and 3.5 s per 1024×1024
+  image on a 12 GB laptop GPU. See
   [Image models](https://nasser1941.github.io/lcode/modes/#image-models).
   - **Choose one:** `/models` in image mode (numbered) or `/model z-image-turbo` switches; the
     `image_model` setting is the default, and sessions keep theirs.

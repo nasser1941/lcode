@@ -83,9 +83,10 @@ z-image-turbo`. `lcode config set image_model z-image-turbo` makes one the defau
 
 ```text
 image ❯ /models
-  1. ● FLUX.2 klein 4B (flux2-klein-4b)  text-to-image · 12.4 GB · installed · fits (~7 GB of 12 GB GPU memory)
-        1024×1024 in 2.6 s (8 s with loading), RTX 4080 Laptop 12 GB
+  1. ● FLUX.2 klein 4B (flux2-klein-4b)  text-to-image · 12.4 GB · installed · fits (~9 GB of 12 GB GPU memory)
+        1024×1024: 3.5 s per image, 14 s for the first with ComfyUI starting (RTX 4080 Laptop, 12 GB)
   2.   Z-Image Turbo (z-image-turbo)  text-to-image · 14.6 GB · 6.5 GB to download · fits (~9 GB of 12 GB GPU memory)
+        1024×1024: 17 s per image (1.9 s per step), 23 s for the first (RTX 4080 Laptop, 12 GB)
   Switch to which model? (number or name, Enter to keep FLUX.2 klein 4B): 2
 Image model: Z-Image Turbo.
 Not installed yet: 6.5 GB download with your next image (you're asked first).
@@ -93,8 +94,8 @@ Not installed yet: 6.5 GB download with your next image (you're asked first).
 
 | Model | Made by | License | Steps | Good at |
 |---|---|---|---|---|
-| **FLUX.2 klein 4B** (default) | Black Forest Labs | Apache 2.0 | 4 | Fast and small |
-| **Z-Image Turbo** | Tongyi-MAI (Alibaba) | Apache 2.0 | 8 | Photorealism, text in images |
+| **FLUX.2 klein 4B** (default) | Black Forest Labs | Apache 2.0 | 4 | Speed: a few seconds per image |
+| **Z-Image Turbo** | Tongyi-MAI (Alibaba) | Apache 2.0 | 8 | Photorealism, text in images; slower |
 
 Measured speeds are in the list (`/models`, `lcode media`) and in [Measured](#measured).
 
@@ -109,11 +110,11 @@ Measured speeds are in the list (`/models`, `lcode media`) and in [Measured](#me
   again and it continues where it stopped (a `.part` file holds what arrived).
 - **Gated models:** for a model whose license you must accept on Hugging Face, accept it there
   and set `HF_TOKEN`. lcode sends the token to huggingface.co only.
-- **Will it fit?** On NVIDIA GPUs the list compares the model's peak GPU memory with your GPU.
-  The peak is measured for tested models and estimated for the others: ComfyUI loads the text
-  encoder, the model and the VAE one after another, so the largest file sets it. A model too big
-  for the GPU still runs, slower: ComfyUI keeps part of it in RAM. On Apple Silicon, the list
-  compares it with unified memory.
+- **Will it fit?** On NVIDIA GPUs the list compares an estimate of the GPU memory the model needs
+  with your GPU: the largest of its files plus 1.5 GB. ComfyUI loads the text encoder, the model and
+  the VAE one after another, so the largest file sets the need. A model too big for the GPU still
+  runs, slower, because ComfyUI keeps part of it in RAM. On Apple Silicon, the list compares it
+  with unified memory.
 
 ```bash
 lcode media                        # image and video models, what fits, what's installed
@@ -122,12 +123,16 @@ lcode media install z-image-turbo  # download what's missing (asks first; --yes 
 
 ### Measured
 
-On an RTX 4080 Laptop GPU (12 GB) with 32 GB of RAM, ComfyUI 0.38, 1024×1024:
+On an RTX 4080 Laptop GPU (12 GB) with 32 GB of RAM, ComfyUI 0.38, 1024×1024, four different
+prompts each:
 
-| Model | First image (loading included) | Next images | Peak GPU memory |
+| Model | First image (ComfyUI starting, model loading) | Each next image | Per step |
 |---|---|---|---|
-| FLUX.2 klein 4B | — | — | — |
-| Z-Image Turbo | — | — | — |
+| FLUX.2 klein 4B (fp8) | 14.3 s | 3.5 s | 0.6 s (4 steps) |
+| Z-Image Turbo (int8) | 22.9 s | 17.4 s | 1.9 s (8 steps) |
+
+ComfyUI uses whatever GPU memory is free to keep models loaded (11.3 to 11.5 GB here), so the
+memory a model *needs* is lower than what `nvidia-smi` shows while it runs.
 
 ## One model on the GPU at a time
 
