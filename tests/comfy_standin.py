@@ -112,6 +112,9 @@ class StandIn:
             for node in ("12", "13"):
                 self.send(client_id, {"type": "executing", "data": {"node": node, **sid}})
             outputs = {"13": {"images": [{"filename": "lcode/image_00001_.png", "subfolder": "", "type": "output"}]}}
+            for node_id, node in graph.items():  # previews: temporary images, like ComfyUI's PreviewImage
+                if node.get("class_type") == "PreviewImage":
+                    outputs[node_id] = {"images": [{"filename": "preview_00001_.png", "subfolder": "", "type": "temp"}]}
         self.history[prompt_id] = {
             "prompt": [0, prompt_id, graph, {}, ["13"]],
             "outputs": outputs,

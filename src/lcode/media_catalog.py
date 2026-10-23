@@ -67,6 +67,13 @@ class MediaModel:
     gpu_gb: float = 0.0  # measured peak GPU memory; 0 when not measured yet
     measured: str = ""
     notes: str = ""
+    quality: dict[str, tuple[int, float]] = field(default_factory=dict, hash=False)  # preset -> (steps, megapixels)
+    negative: bool = False  # whether it uses a negative prompt
+
+    def preset(self, quality: str) -> tuple[int | None, float]:
+        """(steps, megapixels) for a quality preset: None steps keeps the workflow's."""
+        steps, megapixels = self.quality.get(quality) or self.quality.get("balanced") or (None, 1.0)
+        return (int(steps) if steps else None), float(megapixels)
 
     @property
     def size_gb(self) -> float:
@@ -137,6 +144,8 @@ def load() -> Catalog:
             float(m.get("gpu_gb", 0.0)),
             m.get("measured", ""),
             m.get("notes", ""),
+            {name: (int(v[0]), float(v[1])) for name, v in (m.get("quality") or {}).items()},
+            bool(m.get("negative", False)),
         )
     return Catalog(files, models)
 

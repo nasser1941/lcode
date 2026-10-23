@@ -15,7 +15,7 @@ Unloaded qwen3.6-35b to free the GPU for images.
 Starting ComfyUI (~/comfy/ComfyUI) in the background.
 Describe an image and press Enter: FLUX.2 klein 4B makes it on your GPU, into .lcode/media.
 image ❯ a red fox sitting in fresh snow at dusk
-◆ .lcode/media/20261023-184531-a-red-fox-sitting-in-fresh-snow-at-dusk-1.png  1024×1024 · FLUX.2 klein 4B · seed 3714779554 · 8.0 s
+◆ #1 .lcode/media/20261023-184531-a-red-fox-sitting-in-fresh-snow-at-dusk.png  1024×1024 · FLUX.2 klein 4B · seed 3714779554 · 8.0 s
 ```
 
 - **Switching:** `/mode code`, `/mode image` and `/mode video` switch in a session. `lcode --mode image`
@@ -33,9 +33,53 @@ in code mode even if they're still in your `mcp.json`. It says so once.
 ## Image mode
 
 In image mode, what you type is a description, and lcode makes the picture. No language model is
-involved: lcode fills in its own ComfyUI workflow for the image model and follows the job itself.
-For now that's one image per request, 1024×1024, with the image model you choose (see
-[Image models](#image-models)). Sizes, seeds and variations come next (#151).
+involved: lcode fills in its own ComfyUI workflow for the image model and follows the job itself,
+with the image model you choose (see [Image models](#image-models)).
+
+```text
+image ❯ a red fox in fresh snow --n 2 --ar 16:9 --seed 7
+◆ #1 .lcode/media/20261023-194019-a-red-fox-in-fresh-snow.png  1360×768 · FLUX.2 klein 4B · seed 7 · 4.9 s
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀   (the picture, in colour)
+◆ #2 .lcode/media/20261023-194024-a-red-fox-in-fresh-snow.png  1360×768 · FLUX.2 klein 4B · seed 8 · 2.7 s
+image ❯ /vary 1 --n 2
+Variations of #1: a red fox in fresh snow
+◆ #3 …
+```
+
+### Options
+
+Add them to a request, or set them for the session with `/options` (`/options n=4 ar=16:9
+quality=best style=photo`). A flag in a request wins over `/options` for that request. `/options`
+alone shows them.
+
+| Flag | `/options` | What it does |
+|---|---|---|
+| `--n 4` | `n=4` | How many images: 1 to 8. Each gets its own seed. |
+| `--ar 16:9` | `ar=16:9` | The shape: a ratio (`3:2`, `9:16`, up to 4:1), a name (`square`, `portrait`, `landscape`, `wide`, `tall`, `photo`, `cinema`), or pixels (`--size 1344x768`). |
+| `--seed 42` | `seed=42` | The same seed and settings make the same image. With `--n`, the seeds count up (42, 43, …). `seed=random` goes back to a new one each time. |
+| `--quality best` | `quality=best` | `fast` (about 0.5 megapixels, fewer steps for models that allow it), `balanced` (1 megapixel, the default), `best` (2 megapixels, more steps where they help). |
+| `--style photo` | `style=photo` | Adds a style to the description: `photo`, `cinematic`, `anime`, `watercolor`, `oil`, `pixel`, `3d`, `sketch`, `comic`, `flat`. `style=none` takes it off. |
+| `--no "text, people"` | `no="text"` | A negative prompt, for models that use one. FLUX.2 klein and Z-Image Turbo don't (they're distilled), and lcode says so: describe what you want instead. |
+
+### Results
+
+- **Numbered:** every image in the session gets a number (`#3`), shown with its file, size, model,
+  seed and time.
+- **Shown in the terminal:** in kitty, Ghostty, iTerm2 and WezTerm the picture itself appears
+  under its line. Other terminals get a small colour preview drawn with half blocks. The
+  `preview` setting chooses: `auto`, `kitty`, `iterm`, `blocks` or `off`. Inside tmux or screen,
+  lcode draws the half-block preview.
+- **Follow-ups:**
+
+| Command | What it does |
+|---|---|
+| `/again` | The last request again with new seeds; flags change it (`/again --n 4 --ar 9:16`) |
+| `/vary 3` | Four variations of image #3: its prompt and options, new seeds (`/vary 3 --n 2`; the last image without a number) |
+| `/gallery` | The session's images with their prompt, size, model and seed; `/gallery all` lists the latest 50 in the media folder |
+| `/open 3` | Opens image #3 in your image viewer (the last one without a number) |
+
+- **Sessions:** the gallery and `/options` are saved with the session, so `lcode -c` or `/resume`
+  brings them back. An image session is listed under its first prompt.
 
 - **Progress:** the status line says what ComfyUI is doing (loading the model, reading the
   prompt, drawing, decoding), the step, the time left and the time so far. If other jobs are ahead
@@ -43,14 +87,15 @@ For now that's one image per request, 1024×1024, with the image model you choos
 - **Cancel** with Esc or Ctrl+C: lcode cancels the job in ComfyUI too, so it stops using the GPU.
 - **Type ahead:** what you type while an image is being made waits in the next prompt.
 - **Files:** each image goes to `.lcode/media/` in the project (the `media_dir` setting), named
-  after the time and the prompt, with a `.json` next to it holding the prompt, model, seed, size and
-  steps. PNGs carry the same in their own metadata (an `lcode` text chunk), and ComfyUI's workflow
+  after the time and the prompt, with a `.json` next to it holding the prompt, model, seed, size,
+  steps, quality and style. PNGs carry the same in their own metadata (an `lcode` text chunk), and ComfyUI's workflow
   as well. `.lcode/media/` keeps itself out of git; a folder of your own (`lcode config set
   media_dir assets/generated`) doesn't.
 - **Nothing is lost:** lcode writes each job down while it runs. If lcode crashes or the terminal
   closes before an image arrives, the next request in image mode saves it.
-- **From scripts:** `lcode --mode image -p "a red fox in the snow"` makes one image and exits;
-  with `--output json` it prints a result with the file paths, model, seed, size and time.
+- **From scripts:** `lcode --mode image -p "a red fox in the snow --n 2"` makes the images and
+  exits; with `--output json` it prints a result with the file paths, the model, the seeds, the size
+  and the time.
 - **No Ollama needed:** `lcode --mode image` starts even when Ollama isn't running or the coding
   model isn't installed; `/mode code` then says what's missing.
 
@@ -122,6 +167,10 @@ lcode media install z-image-turbo  # download what's missing (asks first; --yes 
 ```
 
 ### Measured
+
+On an RTX 4080 Laptop GPU (12 GB), FLUX.2 klein 4B makes a 1360×768 image in 2.6 to 2.8 s and a
+`--quality fast` image (720×720) in 1.3 to 2.0 s once it's loaded.
+
 
 On an RTX 4080 Laptop GPU (12 GB) with 32 GB of RAM, ComfyUI 0.38, 1024×1024, four different
 prompts each:

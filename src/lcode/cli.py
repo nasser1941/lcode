@@ -812,7 +812,7 @@ def media_request(agent, prompt: str, out: Console, quiet: bool) -> None:
         api.close_agent(agent)
         sys.exit(2)
     try:
-        made = media.generate_image(agent, prompt)
+        made = media.request(agent, prompt)
     except (media.MediaError, KeyboardInterrupt) as e:
         message = str(e) or "Cancelled."
         if quiet:
@@ -826,12 +826,13 @@ def media_request(agent, prompt: str, out: Console, quiet: bool) -> None:
             "type": "result",
             "status": "success",
             "mode": "image",
-            "files": [str(path) for path in made.files],
-            "model": made.model,
-            "seed": made.seed,
-            "width": made.width,
-            "height": made.height,
-            "seconds": round(made.seconds, 1),
+            "files": [str(path) for one in made for path in one.files],
+            "model": made[0].model,
+            "seed": made[0].seed,
+            "seeds": [one.seed for one in made],
+            "width": made[0].width,
+            "height": made[0].height,
+            "seconds": round(sum(one.seconds for one in made), 1),
         }
         print(json.dumps(result, ensure_ascii=False), flush=True)
     api.close_agent(agent)

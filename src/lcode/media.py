@@ -6,16 +6,21 @@ sizes, variations and a gallery come with #151, video with #153.
 
 from __future__ import annotations
 
+import os
 import random
+import shutil
+import subprocess
+import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import requests
 from rich.text import Text
 
-from lcode import comfy
+from lcode import comfy, imageopts, preview
 from lcode import media_catalog as catalog
 
 if TYPE_CHECKING:
@@ -52,6 +57,9 @@ class Made:
     width: int
     height: int
     seconds: float
+    prompt: str = ""
+    numbers: list[int] = field(default_factory=list)  # in the session's gallery
+    thumbnail: bytes = b""  # a small PNG, for the half-block preview
 
 
 # ----------------------------------------------------------------------------- ComfyUI, started and stopped
@@ -217,13 +225,79 @@ def ensure_installed(
     return files
 
 
+THUMB_NODES = ("9001", "9002")  # the thumbnail lcode adds to a workflow, for the half-block preview
+
+
+def add_thumbnail(graph: dict, width: int, height: int) -> None:
+    """Have ComfyUI also make a small copy of the image (not saved, a preview), for the half-block preview."""
+    save = next((nid for nid, node in graph.items() if node.get("class_type") == "SaveImage"), None)
+    if save is None:
+        return
+    tw, th = preview.thumbnail_size(width, height)
+    scale, show = THUMB_NODES
+    graph[scale] = {
+        "class_type": "ImageScale",
+        "inputs": {"image": graph[save]["inputs"]["images"], "upscale_method": "area", "width": tw, "height": th,
+                   "crop": "disabled"},
+    }  # fmt: skip
+    graph[show] = {"class_type": "PreviewImage", "inputs": {"images": [scale, 0]}}
+
+
+def thumbnail(server: comfy.Server, outputs: dict) -> bytes:
+    for item in (outputs.get(THUMB_NODES[1]) or {}).get("images", []):
+        try:
+            return server.fetch(item)
+        except (comfy.ComfyError, OSError, requests.RequestException):
+            return b""
+    return b""
+
+
+def request(
+    agent: Agent, text: str, cancelled: Callable[[], bool] = lambda: False, ask: Callable[[str], bool] | None = None
+) -> list[Made]:
+    """A typed request: the prompt and its flags (--n 4 --ar 16:9 …, over the session's /options), then the images."""
+    try:
+        prompt, options = imageopts.parse(text, agent.image_options)
+    except imageopts.OptionError as e:
+        raise MediaError(str(e)) from e
+    return make(agent, prompt, options, cancelled, ask)
+
+
+def make(
+    agent: Agent,
+    prompt: str,
+    options: imageopts.Options,
+    cancelled: Callable[[], bool] = lambda: False,
+    ask: Callable[[str], bool] | None = None,
+) -> list[Made]:
+    """`options.n` images of the prompt; a fixed seed counts up from image to image."""
+    if not prompt.strip():
+        raise MediaError("Describe the image you want.")
+    model = current(agent)
+    if options.negative and not model.negative:
+        agent.say(f"{model.name} doesn't use a negative prompt: describe what you want instead (--no is ignored).")
+    agent.last_request = (prompt, options)
+    made = []
+    for i in range(options.n):
+        seed = None if options.seed is None else options.seed + i
+        label = f"{i + 1} of {options.n}" if options.n > 1 else ""
+        made.append(generate_image(agent, prompt, cancelled, ask, replace(options, seed=seed, n=1), label))
+    return made
+
+
 def generate_image(
-    agent: Agent, prompt: str, cancelled: Callable[[], bool] = lambda: False, ask: Callable[[str], bool] | None = None
+    agent: Agent,
+    prompt: str,
+    cancelled: Callable[[], bool] = lambda: False,
+    ask: Callable[[str], bool] | None = None,
+    options: imageopts.Options | None = None,
+    label: str = "",
 ) -> Made:
-    """One image from the prompt, saved in the media folder. Raises MediaError with what to do."""
+    """One image from the prompt, saved in the media folder and numbered. Raises MediaError with what to do."""
     prompt = prompt.strip()
     if not prompt:
         raise MediaError("Describe the image you want.")
+    options = options or imageopts.Options()
     server = engine(agent, ask, cancelled)
     for path in comfy.collect(server):
         agent.say(f"Saved {shown(agent, path)}: it finished while lcode wasn't watching.")
@@ -231,25 +305,40 @@ def generate_image(
     files = ensure_installed(agent, model, server, ask)
     workflow = comfy.load_workflow(model.workflow)
     free_gpu(agent)
-    seed = random.randrange(2**32)
-    values = {**workflow.defaults, **files, "prompt": prompt, "seed": seed}
+    seed = options.seed if options.seed is not None else random.randrange(2**32)
+    steps, megapixels = model.preset(options.quality)
+    width, height = imageopts.dimensions(options.size, megapixels)
+    text = imageopts.styled(prompt, options.style)
+    values = {**workflow.defaults, **files, "prompt": text, "seed": seed, "width": width, "height": height}
+    if steps:
+        values["steps"] = steps
+    if model.negative:
+        values["negative"] = options.negative
     graph = comfy.fill(workflow.graph, values)
+    add_thumbnail(graph, width, height)
     meta = {
         "prompt": prompt,
         "model": model.name,
         "model_key": model.key,
         "workflow": workflow.key,
         "seed": seed,
-        "width": values["width"],
-        "height": values["height"],
+        "width": width,
+        "height": height,
         "steps": values["steps"],
+        "quality": options.quality,
+        "style": options.style,
+        "negative": options.negative if model.negative else "",
+        "full_prompt": text,
         "files": files,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     }
     out = folder(agent)
     stem = f"{time.strftime('%Y%m%d-%H%M%S')}-{comfy.slug(prompt)}"
-    line = Line(model.name, "Esc or Ctrl+C cancels" if agent.interactive else "")
+    line = Line(
+        f"{model.name} ({label})" if label else model.name, "Esc or Ctrl+C cancels" if agent.interactive else ""
+    )
     job = {"id": ""}
+    labels = {**workflow.labels, THUMB_NODES[0]: "making the preview", THUMB_NODES[1]: "making the preview"}
 
     def on_event(event: comfy.Event) -> None:
         if event.kind == "queued":
@@ -258,9 +347,9 @@ def generate_image(
         elif event.kind == "waiting":
             line.doing = f"waiting: {event.value} job(s) ahead in ComfyUI's queue"
         elif event.kind == "node":
-            line.doing, line.step = workflow.labels.get(event.node, "working"), None
+            line.doing, line.step = labels.get(event.node, "working"), None
         elif event.kind == "progress" and event.total:
-            line.doing = workflow.labels.get(event.node, line.doing)
+            line.doing = labels.get(event.node, line.doing)
             line.progress(event.value, event.total)
 
     try:
@@ -283,11 +372,102 @@ def generate_image(
     comfy.forget(prompt_id)
     if not saved:
         raise MediaError("ComfyUI finished but returned no image.")
-    made = Made(saved, model.name, seed, values["width"], values["height"], time.monotonic() - line.started)
-    for path in saved:
+    made = Made(saved, model.name, seed, width, height, time.monotonic() - line.started, prompt)
+    made.thumbnail = thumbnail(server, outputs)
+    made.numbers = record(agent, made, meta, options)
+    show(agent, made)
+    return made
+
+
+# ----------------------------------------------------------------------------- results: numbered, shown, opened
+
+
+def record(agent: Agent, made: Made, meta: dict, options: imageopts.Options) -> list[int]:
+    """Number the images in the session's gallery, with what made them (for /gallery, /vary, /open)."""
+    numbers = []
+    for path in made.files:
+        number = len(agent.media_results) + 1
+        agent.media_results.append(
+            {
+                "n": number,
+                "path": str(path),
+                "prompt": made.prompt,
+                "model": made.model,
+                "seed": made.seed,
+                "width": made.width,
+                "height": made.height,
+                "steps": meta["steps"],
+                "seconds": round(made.seconds, 1),
+                "options": options.to_json(),
+            }
+        )
+        numbers.append(number)
+    return numbers
+
+
+def show(agent: Agent, made: Made) -> None:
+    for path, number in zip(made.files, made.numbers or [0] * len(made.files), strict=False):
         agent.console.print(
             Text("◆ ", style="green")
+            + Text(f"#{number} " if number else "", style="bold green")
             + Text(shown(agent, path), style="bold")
-            + Text(f"  {made.width}×{made.height} · {made.model} · seed {seed} · {made.seconds:.1f} s", style="dim")
+            + Text(
+                f"  {made.width}×{made.height} · {made.model} · seed {made.seed} · {made.seconds:.1f} s", style="dim"
+            )
         )
-    return made
+    if made.files:
+        show_preview(agent, made.files[0], made.thumbnail)
+
+
+def show_preview(agent: Agent, path: Path, thumb: bytes = b"") -> None:
+    """The image in the terminal: itself where the terminal can show pictures, else a half-block preview."""
+    setting = agent.settings.preview
+    how = preview.protocol(setting)
+    if how == "off" or (setting == "auto" and not agent.console.is_terminal):
+        return
+    try:
+        if how in ("kitty", "iterm"):
+            data = path.read_bytes()
+            sequence = preview.kitty(data) if how == "kitty" else preview.iterm(data)
+            agent.console.file.write(sequence)
+            agent.console.file.flush()
+        elif thumb:
+            agent.console.print(preview.blocks(thumb))
+    except (OSError, preview.PngError):
+        pass
+
+
+def result(agent: Agent, which: str) -> dict:
+    """A gallery entry by its number (#3 or 3), or the last one."""
+    if not agent.media_results:
+        raise MediaError("No images in this session yet.")
+    key = which.strip().lstrip("#")
+    if not key:
+        return agent.media_results[-1]
+    if not key.isdigit() or not 1 <= int(key) <= len(agent.media_results):
+        raise MediaError(f"There's no image #{key}: this session has #1 to #{len(agent.media_results)} (/gallery).")
+    return agent.media_results[int(key) - 1]
+
+
+def open_file(path: Path) -> str:
+    """Open a file in the system's viewer. An error message, or empty."""
+    if not path.exists():
+        return f"{path} isn't there any more."
+    if sys.platform == "darwin":
+        command = ["open", str(path)]
+    elif sys.platform.startswith("win"):
+        os.startfile(str(path))  # type: ignore[attr-defined]
+        return ""
+    else:
+        opener = shutil.which("xdg-open") or shutil.which("gio")
+        if not opener:
+            return "No program to open it with (xdg-open isn't installed): open the file yourself."
+        command = [opener, str(path)] if opener.endswith("xdg-open") else [opener, "open", str(path)]
+    try:
+        subprocess.Popen(
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )  # fmt: skip
+    except OSError as e:
+        return f"Couldn't open it: {e}"
+    return ""

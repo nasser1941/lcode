@@ -15,6 +15,8 @@
 #   gpu_gb        GPU memory it needs, when known better than lcode's estimate (the largest file + 1.5 GB); ComfyUI
 #                 fills whatever is free with cached models, so nvidia-smi's peak doesn't tell
 #   measured      what it did on real hardware; models without it haven't been run yet
+#   quality       per preset (fast, balanced, best): [steps, megapixels]
+#   negative      whether it uses a negative prompt (distilled models don't)
 
 [files.flux-2-klein-4b-fp8]
 folder = "diffusion_models"
@@ -60,6 +62,8 @@ files = { model = "flux-2-klein-4b-fp8", text_encoder = "qwen-3-4b", vae = "flux
 gpu_gb = 0.0
 measured = "1024×1024: 3.5 s per image, 14 s for the first with ComfyUI starting (RTX 4080 Laptop, 12 GB)"
 notes = "fast and small: 4 steps"
+quality = { fast = [4, 0.5], balanced = [4, 1.0], best = [4, 2.0] }
+negative = false
 
 [models.z-image-turbo]
 name = "Z-Image Turbo"
@@ -72,3 +76,5 @@ files = { model = "z-image-turbo-int8", text_encoder = "qwen-3-4b", vae = "flux-
 gpu_gb = 0.0
 measured = "1024×1024: 17 s per image (1.9 s per step), 23 s for the first (RTX 4080 Laptop, 12 GB)"
 notes = "photorealistic, writes text well: 8 steps"
+quality = { fast = [6, 0.5], balanced = [8, 1.0], best = [9, 2.0] }
+negative = false

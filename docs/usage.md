@@ -81,6 +81,7 @@ reasoning is on.
 | `/think [on\|off]` | Toggle reasoning |
 | `/verbose` | Toggle showing the reasoning text |
 | `/mode [code\|image\|video]` | Switch what lcode makes: [code, images or videos](modes.md) |
+| `/options`, `/again`, `/vary N`, `/gallery`, `/open N` | Image mode: [options for the session, follow-ups on results](modes.md#results) |
 | `/permissions [ask\|plan\|auto-edit\|yolo]` | Set the permission mode |
 | `/cd DIR` | Change the working directory |
 | `/todos` | Show the model's task list |
