@@ -27,6 +27,10 @@ def text(agent):
     return " ".join(output(agent).split())
 
 
+def squeezed(value: str) -> str:
+    return "".join(value.split())
+
+
 def chunks(png: bytes) -> list[tuple[bytes, bytes]]:
     """A PNG's chunks, each checked against its CRC."""
     found, i = [], 8
@@ -296,7 +300,8 @@ def test_saying_yes_installs_it(make_agent, monkeypatch, tmp_path):
     monkeypatch.setattr(comfy.Server, "wait", lambda self, p, cancelled=None: {"system": {"comfyui_version": "0.38"}})
     with pytest.raises(media.MediaError):  # it "started", but nothing answers on port 9 for the job itself
         media.generate_image(agent, "a fox", ask=lambda q: True)
-    assert installed == [LAPTOP] and agent.comfy_process is proc and f"Installed ComfyUI into {tmp_path}" in text(agent)
+    assert installed == [LAPTOP] and agent.comfy_process is proc
+    assert squeezed(f"Installed ComfyUI into {tmp_path}") in squeezed(output(agent))  # long paths wrap mid-word
 
 
 # ----------------------------------------------------------------------------- the REPL, -p and doctor
