@@ -6,8 +6,6 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.43.0] - 2026-10-24
-
 ### Added
 
 - **Video mode makes videos** (#153). Describe a clip, or start it from a picture (`@photo.png`),
@@ -20,6 +18,10 @@ All notable changes to lcode are documented here. The format follows
   - **`/animate 3`** in image mode makes a clip from image #3. `lcode media` lists video models, and
     `/models` in video mode picks one (the `video_model` setting).
   - With `notify` on, a long render ends with a desktop notification.
+
+### Added
+
+## [0.43.0] - 2026-10-24
 
 ### Added
 
