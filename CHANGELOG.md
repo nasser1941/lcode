@@ -6,15 +6,6 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- **Films:** things and places no longer become cast members. A kite in the cast got a "character" picture
-  (a person behind a kite) and walked on legs in every shot. The storyboard now keeps the cast to living
-  characters and describes things in the shots: in 12 storyboards for ideas with props, things in the cast
-  went from 6 to 1 (a plant).
-
-## [0.48.0] - 2026-10-24
-
 ### Added
 
 - **Cloud generation in image and video mode** (#157): xAI's Grok Imagine as cloud models,
@@ -28,6 +19,15 @@ All notable changes to lcode are documented here. The format follows
 ### Changed
 
 - The README no longer says code mode makes images through MCP servers (it hasn't since 0.40.0).
+
+### Fixed
+
+- **Films:** things and places no longer become cast members. A kite in the cast got a "character" picture
+  (a person behind a kite) and walked on legs in every shot. The storyboard now keeps the cast to living
+  characters and describes things in the shots: in 12 storyboards for ideas with props, things in the cast
+  went from 6 to 1 (a plant).
+
+## [0.48.0] - 2026-10-24
 
 ### Added
 
