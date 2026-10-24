@@ -123,7 +123,7 @@ def test_a_failed_job_says_which_node_and_why(image_agent, standin):
 
 def test_a_refused_workflow_says_what_comfyui_objected_to(standin):
     standin.reject = True
-    with pytest.raises(comfy.ComfyError, match=r"UNETLoader \(1\): unet_name: 'x' not in \[\]"):
+    with pytest.raises(comfy.ComfyError, match=r"UNETLoader \(1\): Value not in list: unet_name: 'x' not in \[\]"):
         comfy.Server(standin.url).queue({}, "client")
 
 

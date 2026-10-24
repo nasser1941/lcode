@@ -33,12 +33,21 @@ def test_every_model_has_a_workflow_its_files_fill():
     for model in cat.models.values():
         workflow = comfy.load_workflow(model.workflow)
         names = {role: f.name for role, f in model.files.items()}
-        graph = comfy.fill(workflow.graph, {**workflow.defaults, **names, "prompt": "a fox", "seed": 1})
+        values = {**workflow.defaults, **names, "prompt": "a fox", "seed": 1, "image": "input.png"}
+        graph = comfy.fill(workflow.graph, values)
         assert "$" not in json.dumps(graph), model.key  # every placeholder has a value
-        assert model.mode in ("image", "video") and model.tasks and model.license
+        assert model.mode in ("image", "video", "tool") and model.tasks and model.license
     for f in cat.files.values():
         assert f.url.startswith("https://huggingface.co/") and f.url.endswith(f.name) and f.gb > 0
-        assert f.folder in ("diffusion_models", "text_encoders", "vae", "loras", "checkpoints")
+        assert f.folder in (
+            "diffusion_models",
+            "text_encoders",
+            "vae",
+            "loras",
+            "checkpoints",
+            "upscale_models",
+            "background_removal",
+        )
 
 
 def test_files_are_shared_and_counted_once():

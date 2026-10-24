@@ -69,6 +69,7 @@ class MediaModel:
     notes: str = ""
     quality: dict[str, tuple[int, float]] = field(default_factory=dict, hash=False)  # preset -> (steps, megapixels)
     negative: bool = False  # whether it uses a negative prompt
+    edit: str = ""  # how it edits images ("reference-latent"), or empty: it doesn't
 
     def preset(self, quality: str) -> tuple[int | None, float]:
         """(steps, megapixels) for a quality preset: None steps keeps the workflow's."""
@@ -110,6 +111,16 @@ class Catalog:
     def for_mode(self, mode: str) -> list[MediaModel]:
         return [m for m in self.models.values() if m.mode == mode]
 
+    def tool(self, task: str) -> MediaModel:
+        """The tool for a task (upscale, remove-background)."""
+        return next(m for m in self.models.values() if m.mode == "tool" and task in m.tasks)
+
+    def editor(self, preferred: MediaModel) -> MediaModel | None:
+        """A model that edits: the preferred one if it can, else the first image model that can."""
+        if preferred.edit:
+            return preferred
+        return next((m for m in self.for_mode("image") if m.edit), None)
+
     def find(self, wanted: str, mode: str | None = None) -> MediaModel | None:
         """A model by key or name (any case), or by its number in the mode's list."""
         candidates = self.for_mode(mode) if mode else list(self.models.values())
@@ -146,6 +157,7 @@ def load() -> Catalog:
             m.get("notes", ""),
             {name: (int(v[0]), float(v[1])) for name, v in (m.get("quality") or {}).items()},
             bool(m.get("negative", False)),
+            m.get("edit", ""),
         )
     return Catalog(files, models)
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -20,7 +21,7 @@ from typing import TYPE_CHECKING
 import requests
 from rich.text import Text
 
-from lcode import comfy, imageopts, preview
+from lcode import comfy, edits, imageopts, preview
 from lcode import media_catalog as catalog
 
 if TYPE_CHECKING:
@@ -252,15 +253,55 @@ def thumbnail(server: comfy.Server, outputs: dict) -> bytes:
     return b""
 
 
+SIZE_FLAG = re.compile(r"(?:^|\s)--?(ar|aspect|size)\b")
+MASK_FLAG = re.compile(r'(?:^|\s)--mask\s+("[^"]+"|\S+)')
+
+
 def request(
     agent: Agent, text: str, cancelled: Callable[[], bool] = lambda: False, ask: Callable[[str], bool] | None = None
 ) -> list[Made]:
-    """A typed request: the prompt and its flags (--n 4 --ar 16:9 …, over the session's /options), then the images."""
+    """A typed request: its @references (images to edit or follow), --mask, and flags (--n 4 --ar 16:9 …, over
+    the session's /options), then the images."""
+    mask = None
+    m = MASK_FLAG.search(text)
+    if m:
+        mask = resolve(agent, m.group(1).strip('"'))
+        text = MASK_FLAG.sub(" ", text)
+    text, refs = edits.split_references(text)
     try:
         prompt, options = imageopts.parse(text, agent.image_options)
     except imageopts.OptionError as e:
         raise MediaError(str(e)) from e
-    return make(agent, prompt, options, cancelled, ask)
+    sources = [resolve(agent, ref) for ref in refs] + [Path(p) for p in agent.image_refs if Path(p).exists()]
+    if mask and not sources:
+        raise MediaError("--mask needs the image it masks: @photo.png --mask mask.png make the sky purple")
+    job = {"kind": "edit" if sources else "image", "prompt": prompt, "options": options,
+           "sources": [str(p) for p in sources], "mask": str(mask) if mask else None, "pads": None,
+           "keep_shape": not SIZE_FLAG.search(text)}  # fmt: skip
+    return redo(agent, job, cancelled, ask)
+
+
+def redo(
+    agent: Agent, job: dict, cancelled: Callable[[], bool] = lambda: False, ask: Callable[[str], bool] | None = None
+) -> list[Made]:
+    """Make what `job` describes (also what /again and /vary repeat): images, or edits of its sources."""
+    prompt, options = job["prompt"], job["options"]
+    if not prompt.strip() and job["kind"] in ("image", "edit") and not job.get("pads"):
+        raise MediaError("Describe the image you want." if job["kind"] == "image" else "Say what to change.")
+    model = current(agent)
+    if options.negative and not model.negative:
+        agent.say(f"{model.name} doesn't use a negative prompt: describe what you want instead (--no is ignored).")
+    agent.last_request = job
+    made = []
+    for i in range(options.n):
+        seed = None if options.seed is None else options.seed + i
+        label = f"{i + 1} of {options.n}" if options.n > 1 else ""
+        one = replace(options, seed=seed, n=1)
+        if job["kind"] == "image":
+            made.append(generate_image(agent, prompt, cancelled, ask, one, label))
+        else:
+            made.append(edit_image(agent, job, one, cancelled, ask, label))
+    return made
 
 
 def make(
@@ -271,18 +312,46 @@ def make(
     ask: Callable[[str], bool] | None = None,
 ) -> list[Made]:
     """`options.n` images of the prompt; a fixed seed counts up from image to image."""
-    if not prompt.strip():
-        raise MediaError("Describe the image you want.")
-    model = current(agent)
-    if options.negative and not model.negative:
-        agent.say(f"{model.name} doesn't use a negative prompt: describe what you want instead (--no is ignored).")
-    agent.last_request = (prompt, options)
-    made = []
-    for i in range(options.n):
-        seed = None if options.seed is None else options.seed + i
-        label = f"{i + 1} of {options.n}" if options.n > 1 else ""
-        made.append(generate_image(agent, prompt, cancelled, ask, replace(options, seed=seed, n=1), label))
-    return made
+    job = {"kind": "image", "prompt": prompt, "options": options, "sources": [], "mask": None, "pads": None}
+    return redo(agent, job, cancelled, ask)
+
+
+def resolve(agent: Agent, ref: str) -> Path:
+    """An image the user points at: #3 (a result) or a file path."""
+    ref = ref.strip()
+    if re.fullmatch(r"#?\d+", ref) and ref.startswith("#"):
+        return Path(result(agent, ref)["path"])
+    path = Path(ref).expanduser()
+    path = path if path.is_absolute() else agent.cwd / path
+    if not path.is_file():
+        raise MediaError(f"There's no image {ref}: give a file (@photo.png) or a result's number (@#3).")
+    if not edits.is_image(path):
+        raise MediaError(f"{ref} isn't an image lcode can use: PNG, JPEG, WebP or BMP.")
+    return path
+
+
+@dataclass
+class Plan:
+    """A job ready for ComfyUI: the graph, what to call it, and what goes in its JSON file."""
+
+    model: catalog.MediaModel
+    workflow: comfy.Workflow
+    graph: dict
+    meta: dict
+    prompt: str
+    seed: int
+    options: imageopts.Options
+    kind: str = "image"
+    sources: list[str] = field(default_factory=list)
+    job: dict = field(default_factory=dict)  # what made it, for /vary (prompt, sources, mask, pads)
+    stem: str = ""  # the file name without its extension, when not the time and the prompt
+
+
+def prepare(agent: Agent, ask, cancelled) -> comfy.Server:
+    server = engine(agent, ask, cancelled)
+    for path in comfy.collect(server):
+        agent.say(f"Saved {shown(agent, path)}: it finished while lcode wasn't watching.")
+    return server
 
 
 def generate_image(
@@ -298,13 +367,10 @@ def generate_image(
     if not prompt:
         raise MediaError("Describe the image you want.")
     options = options or imageopts.Options()
-    server = engine(agent, ask, cancelled)
-    for path in comfy.collect(server):
-        agent.say(f"Saved {shown(agent, path)}: it finished while lcode wasn't watching.")
+    server = prepare(agent, ask, cancelled)
     model = current(agent)
     files = ensure_installed(agent, model, server, ask)
     workflow = comfy.load_workflow(model.workflow)
-    free_gpu(agent)
     seed = options.seed if options.seed is not None else random.randrange(2**32)
     steps, megapixels = model.preset(options.quality)
     width, height = imageopts.dimensions(options.size, megapixels)
@@ -316,15 +382,145 @@ def generate_image(
         values["negative"] = options.negative
     graph = comfy.fill(workflow.graph, values)
     add_thumbnail(graph, width, height)
+    meta = describe_job(model, workflow, prompt, text, seed, values, options, files)
+    return run_plan(agent, server, Plan(model, workflow, graph, meta, prompt, seed, options), cancelled, label)
+
+
+def edit_image(
+    agent: Agent,
+    job: dict,
+    options: imageopts.Options,
+    cancelled: Callable[[], bool] = lambda: False,
+    ask: Callable[[str], bool] | None = None,
+    label: str = "",
+) -> Made:
+    """An edit of the job's source images: by instruction, through a mask (inpainting), or on a bigger canvas
+    (outpainting). The first source sets the shape unless the request gave one."""
+    server = prepare(agent, ask, cancelled)
+    chosen = current(agent)
+    model = catalog.load().editor(chosen)
+    if model is None:
+        raise MediaError("None of lcode's image models edits pictures yet.")
+    if model.key != chosen.key:
+        agent.say(f"{chosen.name} doesn't edit pictures: {model.name} makes this one.")
+    files = ensure_installed(agent, model, server, ask)
+    workflow = comfy.load_workflow(model.workflow)
+    sources = [Path(p) for p in job["sources"]]
+    try:
+        names = [server.upload(p) for p in sources]
+        mask_name = server.upload(Path(job["mask"])) if job.get("mask") else None
+        first_w, first_h = edits.image_size(sources[0])
+    except (comfy.ComfyError, OSError, edits.EditError) as e:
+        raise MediaError(f"Couldn't hand the images to ComfyUI: {e}") from e
+    pads = job.get("pads")
+    if pads:
+        first_w, first_h = first_w + pads[0] + pads[2], first_h + pads[1] + pads[3]
+    seed = options.seed if options.seed is not None else random.randrange(2**32)
+    steps, megapixels = model.preset(options.quality)
+    keep_shape = bool(job.get("keep_shape", True) or job.get("mask") or pads)
+    ratio = f"{first_w}x{first_h}" if keep_shape else options.size
+    width, height = shape(ratio, megapixels)
+    instruction = job["prompt"] if not pads else f"{edits.EXTEND_HINT} {job['prompt']}".strip()
+    text = imageopts.styled(instruction, options.style)
+    values = {**workflow.defaults, **files, "prompt": text, "seed": seed, "width": width, "height": height}
+    if steps:
+        values["steps"] = steps
+    if model.negative:
+        values["negative"] = options.negative
+    graph = comfy.fill(workflow.graph, values)
+    try:
+        links = edits.load_images(graph, names)
+        if pads:  # the original is the reference; the picture is the padded canvas, painted only in its border
+            canvas, border = edits.pad_canvas(graph, links[0], pads)
+            canvas = edits.add_references(graph, [canvas, *links[1:]], megapixels, size_from_first=True)
+            edits.outpaint(graph, canvas, border, megapixels)
+        else:
+            first = edits.add_references(graph, links, megapixels, size_from_first=keep_shape)
+            if mask_name:
+                edits.inpaint(graph, first, mask_name)
+    except edits.EditError as e:
+        raise MediaError(f"{model.name} can't do that edit: {e}") from e
+    add_thumbnail(graph, width, height)
+    meta = describe_job(model, workflow, job["prompt"], text, seed, values, options, files)
+    meta.update(
+        {"edit_of": [shown(agent, p) for p in sources], "mask": shown(agent, Path(job["mask"])) if job.get("mask")
+         else "", "extend": list(pads) if pads else []}
+    )  # fmt: skip
+    kind = "extend" if pads else ("inpaint" if job.get("mask") else "edit")
+    remembered = {k: job.get(k) for k in ("kind", "prompt", "sources", "mask", "pads", "keep_shape")}
+    plan = Plan(model, workflow, graph, meta, job["prompt"] or "extended", seed, options, kind, job["sources"],
+                remembered, f"{sources[0].stem}-extended" if pads else "")  # fmt: skip
+    return run_plan(agent, server, plan, cancelled, label)
+
+
+def apply_tool(
+    agent: Agent,
+    task: str,
+    source: Path,
+    scale: int = 2,
+    cancelled: Callable[[], bool] = lambda: False,
+    ask: Callable[[str], bool] | None = None,
+) -> Made:
+    """/upscale and /nobg: a tool model on one image (no seed, no prompt)."""
+    server = prepare(agent, ask, cancelled)
+    model = catalog.load().tool(task)
+    files = ensure_installed(agent, model, server, ask)
+    workflow = comfy.load_workflow(model.workflow)
+    try:
+        name = server.upload(source)
+        width, height = edits.image_size(source)
+    except (comfy.ComfyError, OSError, edits.EditError) as e:
+        raise MediaError(f"Couldn't hand the image to ComfyUI: {e}") from e
+    values = {**workflow.defaults, **files, "image": name}
+    if task == "upscale":
+        values["scale_by"] = scale / 4  # Real-ESRGAN makes 4 times the size; scaled back for 2
+        width, height = width * scale, height * scale
+    graph = comfy.fill(workflow.graph, values)
+    add_thumbnail(graph, width, height)
+    what = f"upscaled {scale}×" if task == "upscale" else "background removed"
+    prompt = f"{what}: {shown(agent, source)}"
     meta = {
         "prompt": prompt,
         "model": model.name,
         "model_key": model.key,
         "workflow": workflow.key,
+        "source": shown(agent, source),
+        "files": files,
+        "created": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
+    suffix = f"upscaled-{scale}x" if task == "upscale" else "nobg"
+    plan = Plan(model, workflow, graph, meta, prompt, 0, imageopts.Options(), task, [str(source)], {},
+                f"{source.stem}-{suffix}")  # fmt: skip
+    return run_plan(agent, server, plan, cancelled, "")
+
+
+def shape(size: str, megapixels: float) -> tuple[int, int]:
+    """Pixels for an edit: a ratio or a source's own pixels, brought to the quality's megapixels."""
+    m = edits.re.fullmatch(r"(\d+)x(\d+)", size)
+    if m:
+        w, h = int(m.group(1)), int(m.group(2))
+        return imageopts.dimensions(f"{w}:{h}" if w < 100 and h < 100 else ratio_of(w, h), megapixels)
+    return imageopts.dimensions(size, megapixels)
+
+
+def ratio_of(width: int, height: int) -> str:
+    """A ratio string close to width:height, with small numbers (for imageopts.dimensions)."""
+    from fractions import Fraction
+
+    f = Fraction(width, height).limit_denominator(32)
+    return f"{f.numerator}:{f.denominator}" if f.numerator < 100 else f"{round(width / height * 16)}:16"
+
+
+def describe_job(model, workflow, prompt, text, seed, values, options, files) -> dict:
+    return {
+        "prompt": prompt,
+        "model": model.name,
+        "model_key": model.key,
+        "workflow": workflow.key,
         "seed": seed,
-        "width": width,
-        "height": height,
-        "steps": values["steps"],
+        "width": values["width"],
+        "height": values["height"],
+        "steps": values.get("steps"),
         "quality": options.quality,
         "style": options.style,
         "negative": options.negative if model.negative else "",
@@ -332,18 +528,22 @@ def generate_image(
         "files": files,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     }
+
+
+def run_plan(agent: Agent, server: comfy.Server, plan: Plan, cancelled, label: str) -> Made:
+    """Queue the plan, follow it, save what it made, number it, show it."""
+    free_gpu(agent)
     out = folder(agent)
-    stem = f"{time.strftime('%Y%m%d-%H%M%S')}-{comfy.slug(prompt)}"
-    line = Line(
-        f"{model.name} ({label})" if label else model.name, "Esc or Ctrl+C cancels" if agent.interactive else ""
-    )
+    stem = plan.stem or f"{time.strftime('%Y%m%d-%H%M%S')}-{comfy.slug(plan.prompt)}"
+    hint = "Esc or Ctrl+C cancels" if agent.interactive else ""
+    line = Line(f"{plan.model.name} ({label})" if label else plan.model.name, hint)
     job = {"id": ""}
-    labels = {**workflow.labels, THUMB_NODES[0]: "making the preview", THUMB_NODES[1]: "making the preview"}
+    labels = {**plan.workflow.labels, THUMB_NODES[0]: "making the preview", THUMB_NODES[1]: "making the preview"}
 
     def on_event(event: comfy.Event) -> None:
         if event.kind == "queued":
             job["id"] = event.prompt_id
-            comfy.remember(event.prompt_id, server.url, out, stem, meta)
+            comfy.remember(event.prompt_id, server.url, out, stem, plan.meta)
         elif event.kind == "waiting":
             line.doing = f"waiting: {event.value} job(s) ahead in ComfyUI's queue"
         elif event.kind == "node":
@@ -354,7 +554,7 @@ def generate_image(
 
     try:
         with agent.console.status(line, spinner="dots"):
-            prompt_id, outputs = comfy.run(server, graph, on_event, cancelled)
+            prompt_id, outputs = comfy.run(server, plan.graph, on_event, cancelled)
     except (KeyboardInterrupt, comfy.Cancelled) as e:
         if job["id"]:
             if isinstance(e, KeyboardInterrupt):  # run() cancels it in ComfyUI itself for Esc
@@ -366,15 +566,21 @@ def generate_image(
             comfy.forget(job["id"])
         raise MediaError(str(e)) from e
     try:
-        saved = comfy.save(server, outputs, out, stem, {**meta, "comfyui_prompt_id": prompt_id})
+        saved = comfy.save(server, outputs, out, stem, {**plan.meta, "comfyui_prompt_id": prompt_id})
     except (comfy.ComfyError, OSError) as e:
         raise MediaError(f"ComfyUI made it, but lcode couldn't save it: {e}") from e
     comfy.forget(prompt_id)
     if not saved:
         raise MediaError("ComfyUI finished but returned no image.")
-    made = Made(saved, model.name, seed, width, height, time.monotonic() - line.started, prompt)
+    width, height = plan.meta.get("width") or 0, plan.meta.get("height") or 0
+    if plan.kind != "image":  # an edit's or a tool's size comes from its source: read what ComfyUI made
+        try:
+            width, height = edits.image_size(saved[0])
+        except (OSError, edits.EditError):
+            pass
+    made = Made(saved, plan.model.name, plan.seed, width, height, time.monotonic() - line.started, plan.prompt)
     made.thumbnail = thumbnail(server, outputs)
-    made.numbers = record(agent, made, meta, options)
+    made.numbers = record(agent, made, plan)
     show(agent, made)
     return made
 
@@ -382,7 +588,7 @@ def generate_image(
 # ----------------------------------------------------------------------------- results: numbered, shown, opened
 
 
-def record(agent: Agent, made: Made, meta: dict, options: imageopts.Options) -> list[int]:
+def record(agent: Agent, made: Made, plan: Plan) -> list[int]:
     """Number the images in the session's gallery, with what made them (for /gallery, /vary, /open)."""
     numbers = []
     for path in made.files:
@@ -396,9 +602,14 @@ def record(agent: Agent, made: Made, meta: dict, options: imageopts.Options) -> 
                 "seed": made.seed,
                 "width": made.width,
                 "height": made.height,
-                "steps": meta["steps"],
+                "steps": plan.meta.get("steps"),
                 "seconds": round(made.seconds, 1),
-                "options": options.to_json(),
+                "options": plan.options.to_json(),
+                "kind": plan.kind,
+                "sources": plan.sources,
+                "mask": plan.meta.get("mask", ""),
+                "extend": plan.meta.get("extend", []),
+                "job": plan.job,
             }
         )
         numbers.append(number)
@@ -406,14 +617,13 @@ def record(agent: Agent, made: Made, meta: dict, options: imageopts.Options) -> 
 
 
 def show(agent: Agent, made: Made) -> None:
+    seed = f" · seed {made.seed}" if made.seed else ""  # tools (upscaling, cut-outs) have none
     for path, number in zip(made.files, made.numbers or [0] * len(made.files), strict=False):
         agent.console.print(
             Text("◆ ", style="green")
             + Text(f"#{number} " if number else "", style="bold green")
             + Text(shown(agent, path), style="bold")
-            + Text(
-                f"  {made.width}×{made.height} · {made.model} · seed {made.seed} · {made.seconds:.1f} s", style="dim"
-            )
+            + Text(f"  {made.width}×{made.height} · {made.model}{seed} · {made.seconds:.1f} s", style="dim")
         )
     if made.files:
         show_preview(agent, made.files[0], made.thumbnail)

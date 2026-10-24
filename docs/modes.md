@@ -5,7 +5,7 @@ lcode makes three kinds of things, each in its own mode with its own models:
 | Mode | What it makes | The model doing the work |
 |---|---|---|
 | **code** (default) | Code: it reads, writes, runs and checks your project | A coding language model in Ollama (or another server) |
-| **image** | Images from a description and reference images | An image model, run by ComfyUI on your GPU |
+| **image** | Images from a description, edits of your images (references, inpainting, outpainting), upscales and cut-outs | An image model, run by ComfyUI on your GPU |
 | **video** | Videos from a description, a start image or references | A video model, run by ComfyUI on your GPU |
 
 ```text
@@ -81,6 +81,8 @@ alone shows them.
 - **Sessions:** the gallery and `/options` are saved with the session, so `lcode -c` or `/resume`
   brings them back. An image session is listed under its first prompt.
 
+### While it works
+
 - **Progress:** the status line says what ComfyUI is doing (loading the model, reading the
   prompt, drawing, decoding), the step, the time left and the time so far. If other jobs are ahead
   in ComfyUI's queue, it says how many.
@@ -98,6 +100,42 @@ alone shows them.
   and the time.
 - **No Ollama needed:** `lcode --mode image` starts even when Ollama isn't running or the coding
   model isn't installed; `/mode code` then says what's missing.
+
+### Editing
+
+FLUX.2 klein 4B edits pictures as well as making them: it takes images as references and an
+instruction as the prompt. When the chosen model can't edit (Z-Image Turbo), lcode hands edits to
+FLUX.2 klein and says so.
+
+```text
+image ❯ /edit 1 make the mug matte black with a small gold star
+◆ #2 .lcode/media/20261024-100504-make-the-mug-matte-black-with-a-small-go.png  1024×1024 · FLUX.2 klein 4B · seed 1798225303 · 6.1 s
+image ❯ /extend 1 --ar 16:9
+Extending #1 from 1024×1024 to 1824×1024 before scaling.
+◆ #4 .lcode/media/…-extended.png  1360×768 · FLUX.2 klein 4B · seed 2994584653 · 6.4 s
+image ❯ /nobg 2
+◆ #6 .lcode/media/…-nobg.png  1024×1024 · BiRefNet · 0.7 s
+```
+
+| What | How | What happens |
+|---|---|---|
+| **Edit by instruction** | `/edit 3 make the sky purple` (the last image without a number), or `@photo.png make the sky purple` | The image goes in as a reference, the instruction is the prompt. The result keeps the image's shape unless you give one (`--ar`). |
+| **References** | `@photo.png @#3 put the mug from image 1 on the table in image 2`, or `/edit 3 … @style.png` | Several images, in order ("image 1", "image 2" in the instruction): a subject, a style, a place. `@"a file with spaces.png"` works too. |
+| **Keep following an image** | `/use 3` (or `/use photo.png`), then plain requests; `/use off` | Every request is an edit of those images until you stop it: handy for one subject in many scenes. |
+| **Inpaint** | `@photo.png --mask mask.png make the sky purple` | Only where the mask image is white changes (with a soft edge); the rest stays exactly as it was. |
+| **Outpaint** | `/extend 3 --ar 16:9`, or `/extend 3 --left 256 --top 128`, plus words about the new part | The canvas grows, the model paints only the new border, and the original is pasted back as it was. |
+| **Upscale** | `/upscale 3` (2×) or `/upscale 3 4` | Real-ESRGAN, a few seconds: a 1024×1024 image becomes 2048×2048. |
+| **Remove the background** | `/nobg 3` | BiRefNet cuts out the subject: a PNG with a transparent background. |
+
+- **Follow-ups work on edits too:** `/vary` on an edit makes new edits of the same images with the
+  same instruction, and `/again` repeats the last request, edit or not.
+- **The tools install on first use,** after you agree: Real-ESRGAN (0.07 GB) and BiRefNet (0.44 GB).
+  `lcode media` lists them under "Tools for images".
+- **Text in images:** FLUX.2 klein and Z-Image Turbo write short text you put in quotes
+  (`a café sign that says "OPEN"`).
+- **Measured** on the RTX 4080 Laptop GPU (12 GB): an edit takes 5 to 7 s, two references 10 s,
+  inpainting and outpainting 6 to 12 s, a 2× upscale 6 s, and a background cut-out under a second
+  once the tools are loaded.
 
 ## ComfyUI
 
@@ -198,10 +236,7 @@ themselves:
 
 Video mode doesn't generate yet: a request there says what's coming instead of going anywhere.
 
-- **#150 Media model catalog** (image models done; video models come with video generation).
-- **#151, #152 Image mode:** generating, variations, sizes and seeds, a gallery, editing,
-  references, inpainting, upscaling.
-- **#153, #154 Video mode:** from text or a start image, first and last frames, several
+- **#153, #154 Video mode:** with video models in the catalog, from text or a start image, first and last frames, several
   references, camera moves, longer clips, sound.
 - **#155 Movies:** storyboards with a consistent cast, shots stitched into one film.
 - **#156 Prompt assistant:** a small local model for prompts and follow-ups.

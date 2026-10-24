@@ -84,6 +84,11 @@ COMMANDS = {
     "/vary": "Image mode: variations of an image, new seeds, e.g. /vary 3 (default: the last; --n 2)",
     "/gallery": "Image mode: this session's images with their settings (/gallery all: every image here)",
     "/open": "Open an image in your viewer, e.g. /open 3 (default: the last)",
+    "/edit": "Image mode: change an image by instruction, e.g. /edit 3 make the sky purple (@photo.png: references)",
+    "/use": "Image mode: images the next requests follow, e.g. /use 3 or /use photo.png (/use off)",
+    "/extend": "Image mode: outpaint an image to a shape or by sides, e.g. /extend 3 --ar 16:9 (or --left 256)",
+    "/upscale": "Image mode: 2 or 4 times the pixels, e.g. /upscale 3 4",
+    "/nobg": "Image mode: remove the background (a transparent PNG), e.g. /nobg 3",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
     "/status": "The task sheet: your requests, the plan and notes, files changed, the last check",
@@ -1186,7 +1191,7 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         run_safely(agent, arg)
     elif cmd == "/mode":
         mode_command(agent, arg.strip().lower())
-    elif cmd in ("/options", "/again", "/vary", "/gallery", "/open"):
+    elif cmd in IMAGE_COMMANDS:
         image_command(agent, cmd, arg)
     elif cmd == "/permissions":
         if arg in PERMISSION_MODES:
@@ -1401,9 +1406,16 @@ def respond(agent: Agent, line: str) -> None:
     run_safely(agent, line)
 
 
+IMAGE_COMMANDS = ("/options", "/again", "/vary", "/gallery", "/open", "/edit", "/use", "/extend", "/upscale", "/nobg")
+NUMBER = re.compile(r"^#?(\d+)$")
+
+
 def image_command(agent: Agent, cmd: str, arg: str) -> None:
-    """/options, /again, /vary, /gallery and /open: image mode's follow-ups on its results."""
-    from lcode import imageopts
+    """Image mode's commands: /options, follow-ups on results (/again, /vary, /edit, /extend, /upscale, /nobg),
+    references (/use), /gallery and /open."""
+    from dataclasses import replace
+
+    from lcode import edits, imageopts
 
     c = agent.console
     if cmd == "/options":
@@ -1424,41 +1436,96 @@ def image_command(agent: Agent, cmd: str, arg: str) -> None:
     if cmd == "/gallery":
         gallery(agent, everything=arg.strip() == "all")
         return
-    if cmd == "/open":
-        try:
-            entry = media.result(agent, arg)
-        except media.MediaError as e:
-            c.print(f"[yellow]{escape(str(e))}[/]")
-            return
-        problem = media.open_file(Path(entry["path"]))
-        c.print(f"[yellow]{escape(problem)}[/]" if problem else f"[dim]Opened #{entry['n']}.[/]")
+    if agent.settings.mode != "image" and cmd != "/open":
+        c.print(f"[yellow]{cmd} works in image mode: /mode image.[/]")
         return
-    if agent.settings.mode != "image":
-        c.print("[yellow]/again and /vary work in image mode: /mode image.[/]")
-        return
+    first, _, rest = arg.strip().partition(" ")
+    number = first if NUMBER.match(first) else ""
+    rest = rest if number else arg.strip()
     try:
-        number, _ = imageopts.parse(arg, imageopts.Options())  # what isn't a flag: the image's number
-    except imageopts.OptionError as e:
-        c.print(f"[red]{escape(str(e))}[/]")
+        if cmd == "/use":
+            use_references(agent, arg.strip())
+            return
+        if cmd == "/again":
+            if agent.last_request is None:
+                c.print("[yellow]Nothing to do again yet: describe an image first.[/]")
+                return
+            job = dict(agent.last_request)
+            _, job["options"] = imageopts.parse(arg, imageopts.replace_seed(job["options"]))
+            make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
+            return
+        entry = media.result(agent, f"#{NUMBER.match(number).group(1)}" if number else "")
+        source = Path(entry["path"])
+        if cmd == "/open":
+            problem = media.open_file(source)
+            c.print(f"[yellow]{escape(problem)}[/]" if problem else f"[dim]Opened #{entry['n']}.[/]")
+            return
+        if cmd == "/vary":
+            job = dict(entry.get("job") or {"kind": "image", "sources": [], "mask": None, "pads": None})
+            if entry.get("kind") in ("upscale", "remove-background") or job["kind"] not in ("image", "edit"):
+                c.print(f"[yellow]#{entry['n']} is {escape(entry['prompt'])}: /vary the image it came from.[/]")
+                return
+            job["prompt"] = entry["prompt"] if job["kind"] == "image" else job.get("prompt", entry["prompt"])
+            options = imageopts.replace_seed(imageopts.Options.from_json(entry.get("options") or {}), n=4)
+            _, job["options"] = imageopts.parse(rest, options)
+            c.print(f"[dim]Variations of #{entry['n']}: {escape(entry['prompt'])}[/]")
+            make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
+            return
+        if cmd == "/edit":
+            text, refs = edits.split_references(rest)
+            instruction, options = imageopts.parse(text, imageopts.replace_seed(agent.image_options))
+            if not instruction:
+                c.print("[yellow]Say what to change: /edit 3 make the sky purple[/]")
+                return
+            sources = [str(source)] + [str(media.resolve(agent, r)) for r in refs]
+            job = {"kind": "edit", "prompt": instruction, "options": options, "sources": sources, "mask": None,
+                   "pads": None, "keep_shape": "--ar" not in rest and "--size" not in rest}  # fmt: skip
+            make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
+            return
+        if cmd == "/extend":
+            width, height = edits.image_size(source)
+            pads, text = edits.parse_extend(rest, width, height)
+            text, options = imageopts.parse(text, imageopts.replace_seed(agent.image_options, n=1))
+            job = {"kind": "edit", "prompt": text, "options": replace(options, size="1:1"), "sources": [str(source)],
+                   "mask": None, "pads": pads, "keep_shape": True}  # fmt: skip
+            grown = f"{width + pads[0] + pads[2]}×{height + pads[1] + pads[3]}"
+            c.print(f"[dim]Extending #{entry['n']} from {width}×{height} to {grown} before scaling.[/]")
+            make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
+            return
+        if cmd == "/upscale":
+            scale = rest.strip().lower().rstrip("x×") or "2"
+            if scale not in ("2", "4"):
+                c.print("[yellow]/upscale makes 2 or 4 times the size: /upscale 3 4[/]")
+                return
+            make_image(
+                agent, run=lambda cancel, ask: media.apply_tool(agent, "upscale", source, int(scale), cancel, ask)
+            )
+            return
+        if cmd == "/nobg":
+            make_image(
+                agent, run=lambda cancel, ask: media.apply_tool(agent, "remove-background", source, 2, cancel, ask)
+            )
+            return
+    except (media.MediaError, edits.EditError, imageopts.OptionError) as e:
+        c.print(f"[yellow]{escape(str(e))}[/]")
+
+
+def use_references(agent: Agent, arg: str) -> None:
+    """/use 3 @photo.png: images every next request follows (as references) until /use off."""
+    c = agent.console
+    if arg in ("off", "none", "clear"):
+        agent.image_refs = []
+        c.print("[dim]No reference images now.[/]")
         return
-    if cmd == "/again":
-        if agent.last_request is None:
-            c.print("[yellow]Nothing to do again yet: describe an image first.[/]")
-            return
-        prompt, options = agent.last_request
-        options = imageopts.replace_seed(options)
-    else:
-        try:
-            entry = media.result(agent, number)
-        except media.MediaError as e:
-            c.print(f"[yellow]{escape(str(e))}[/]")
-            return
-        prompt = entry["prompt"]
-        options = imageopts.Options.from_json(entry.get("options") or {})
-        options = imageopts.replace_seed(options, n=4)
-        c.print(f"[dim]Variations of #{entry['n']}: {escape(prompt)}[/]")
-    _, options = imageopts.parse(arg, options)  # flags given here win
-    make_image(agent, prompt, options)
+    if arg:
+        refs = [r.lstrip("@") for r in arg.split()]
+        paths = [media.resolve(agent, f"#{NUMBER.match(r).group(1)}" if NUMBER.match(r) else r) for r in refs]
+        agent.image_refs = [str(p) for p in paths]
+    if not agent.image_refs:
+        c.print("[dim]No reference images. /use 3 (or /use photo.png) makes the next requests follow one.[/]")
+        return
+    shown = ", ".join(media.shown(agent, Path(p)) for p in agent.image_refs)
+    c.print(f"References for the next requests: [bold]{escape(shown)}[/] [dim](/use off stops)[/]")
 
 
 def gallery(agent: Agent, everything: bool = False) -> None:
@@ -1493,8 +1560,9 @@ def gallery(agent: Agent, everything: bool = False) -> None:
         )
 
 
-def make_image(agent: Agent, prompt: str, options=None) -> None:
-    """Image mode: ComfyUI makes the images; Esc or Ctrl+C cancels them there too."""
+def make_image(agent: Agent, prompt: str = "", options=None, run=None) -> None:
+    """Image mode: ComfyUI makes the images (a request, or `run(cancelled, ask)`); Esc or Ctrl+C cancels them
+    there too."""
     steering = Steering()
     reader = KeyReader(steering)
     reading = agent.interactive and reader.start()  # Esc sets steering.pause: here it cancels
@@ -1505,7 +1573,9 @@ def make_image(agent: Agent, prompt: str, options=None) -> None:
 
     try:
         asking = ask if agent.interactive else None
-        if options is None:
+        if run is not None:
+            run(lambda: steering.pause, asking)
+        elif options is None:
             media.request(agent, prompt, cancelled=lambda: steering.pause, ask=asking)
         else:
             media.make(agent, prompt, options, cancelled=lambda: steering.pause, ask=asking)

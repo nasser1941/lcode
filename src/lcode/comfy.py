@@ -336,8 +336,9 @@ def describe_rejection(r: requests.Response) -> str:
     lines = [str((data.get("error") or {}).get("message") or "ComfyUI refused the workflow")]
     for node, info in (data.get("node_errors") or {}).items():
         for err in info.get("errors", [])[:3]:
-            detail = err.get("details") or err.get("message") or ""
-            lines.append(f"{info.get('class_type', 'node')} ({node}): {detail}")
+            message, detail = err.get("message") or "", err.get("details") or ""
+            why = f"{message}: {detail}" if message and detail and detail not in message else (detail or message)
+            lines.append(f"{info.get('class_type', 'node')} ({node}): {why}")
     return "; ".join(lines)
 
 

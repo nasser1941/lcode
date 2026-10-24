@@ -6,6 +6,18 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Image mode edits pictures** (#152). See [Editing](https://nasser1941.github.io/lcode/modes/#editing).
+  - **Edit by instruction** (`/edit 3 make the sky purple`, or `@photo.png make the sky purple`)
+    and **references** (`@photo.png @#3 put the mug from image 1 on the table in image 2`), with
+    FLUX.2 klein 4B. `/use 3` makes every next request follow an image until `/use off`.
+  - **Inpainting** (`--mask mask.png`: only the white part changes) and **outpainting** (`/extend 3
+    --ar 16:9`, or by sides: only the new border is painted, the original stays as it was).
+  - **`/upscale 3`** (Real-ESRGAN, 2× or 4×) and **`/nobg 3`** (BiRefNet, a transparent PNG), installed
+    on first use. `/vary` on an edit makes new edits of the same images.
+  - ComfyUI's reasons for refusing a workflow now include its explanation, not just the input's name.
+
 ## [0.42.0] - 2026-10-24
 
 ### Added

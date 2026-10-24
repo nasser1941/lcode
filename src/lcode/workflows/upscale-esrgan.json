@@ -1,0 +1,12 @@
+{
+  "source": "ComfyUI's template utility-gan_upscaler (for images), in API format",
+  "defaults": {"scale_by": 0.5},
+  "labels": {"1": "loading the image", "2": "loading the upscaler", "3": "upscaling", "4": "resizing", "5": "saving"},
+  "graph": {
+    "1": {"class_type": "LoadImage", "inputs": {"image": "$image"}},
+    "2": {"class_type": "UpscaleModelLoader", "inputs": {"model_name": "$model"}},
+    "3": {"class_type": "ImageUpscaleWithModel", "inputs": {"upscale_model": ["2", 0], "image": ["1", 0]}},
+    "4": {"class_type": "ImageScaleBy", "inputs": {"image": ["3", 0], "upscale_method": "lanczos", "scale_by": "$scale_by"}},
+    "5": {"class_type": "SaveImage", "inputs": {"images": ["4", 0], "filename_prefix": "lcode/image"}}
+  }
+}
