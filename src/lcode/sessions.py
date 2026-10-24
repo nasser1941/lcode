@@ -24,7 +24,7 @@ class SessionInfo:
     title: str  # the first request, shortened
     model: str
     updated: float  # modification time of the session file
-    turns: int  # number of requests from the user
+    turns: int  # number of requests from the user (and images made, in image mode)
 
     @property
     def label(self) -> str:
@@ -69,7 +69,7 @@ def read_info(path: Path) -> SessionInfo | None:
         title=data.get("title") or title_from(messages),
         model=data.get("model", ""),
         updated=updated,
-        turns=sum(1 for m in messages if m.get("role") == "user"),
+        turns=sum(1 for m in messages if m.get("role") == "user") + len((data.get("media") or {}).get("results") or []),
     )
 
 

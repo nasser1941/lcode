@@ -309,6 +309,7 @@ class Settings:
     comfyui_path: str | None = None  # a ComfyUI install lcode doesn't find by itself (lcode.comfy)
     media_dir: str = ".lcode/media"  # where image and video mode save their files (lcode.media)
     image_model: str = "flux2-klein-4b"  # the media catalog's model image mode uses (lcode.media_catalog)
+    preview: str = "auto"  # images in the terminal: auto, kitty, iterm, blocks or off (lcode.preview)
     num_batch: int | None = None
     keep_alive: str = "30m"
     think: bool = True
@@ -375,6 +376,11 @@ class Agent:
         self.interactive = True  # False for `lcode -p`: no end-of-session questions
         self.comfy_process = None  # the ComfyUI lcode started for image and video mode, stopped when it exits
         self.no_coding_model = ""  # why there's no coding model, when lcode started in image or video mode without
+        from lcode.imageopts import Options as ImageOptions
+
+        self.image_options = ImageOptions()  # image mode's defaults for this session (/options)
+        self.media_results: list[dict] = []  # the session's images, numbered (/gallery, /vary, /open)
+        self.last_request: tuple[str, ImageOptions] | None = None  # for /again
         self.reflected = 0  # messages before this index were already checked for notes to remember
         self._memory: memory_notes.Memory | None = None
         self._agent_types: tuple[Path, dict[str, subagents.AgentType], list[str]] | None = None
@@ -679,8 +685,10 @@ class Agent:
         return any(m.get("role") == "user" for m in self.messages)
 
     def save(self) -> None:
-        if not (self.has_conversation() or self.session_name):
+        if not (self.has_conversation() or self.session_name or self.media_results):
             return  # nothing worth resuming
+        if not self.session_title and not self.has_conversation() and self.media_results:
+            self.session_title = " ".join(self.media_results[0]["prompt"].split())[:60]  # an image session
         self.session_title = self.session_title or sessions.title_from(self.messages)
         f = self.session_file()
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -689,6 +697,7 @@ class Agent:
             "model": self.settings.model,
             "mode": self.settings.mode,
             "image_model": self.settings.image_model,
+            "media": {"results": self.media_results, "options": self.image_options.to_json()},
             "name": self.session_name,
             "title": self.session_title,
             "messages": self.messages,
@@ -739,6 +748,9 @@ class Agent:
             self.settings.mode = data["mode"]  # a session belongs to the mode it was made in
         if isinstance(data.get("image_model"), str):
             self.settings.image_model = data["image_model"]
+        media = data.get("media") or {}
+        self.media_results = [r for r in media.get("results") or [] if isinstance(r, dict) and "path" in r]
+        self.image_options = type(self.image_options).from_json(media.get("options") or {})
         self.session_title = data.get("title") or sessions.title_from(self.messages)
         self.tools.read_mtimes.clear()  # files may have changed since; the model must read them again
         self.tools.todos = list(data.get("todos") or [])

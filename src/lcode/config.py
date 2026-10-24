@@ -46,6 +46,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "comfyui_path": (None, str, "your ComfyUI folder, if lcode doesn't find it (lcode starts it when needed)"),
     "media_dir": (".lcode/media", str, "where images and videos go: a folder in the project, or an absolute path"),
     "image_model": ("flux2-klein-4b", str, "the model image mode uses: a key from `lcode media`"),
+    "preview": ("auto", str, "images in the terminal: auto | kitty | iterm | blocks (colour text) | off"),
     "think": (True, bool, "let the model reason before answering (slower, better)"),
     "web": ("on", str, "web search and page fetching for the model: on | ask | off"),
     "search_backend": ("auto", str, "auto | ollama | brave | tavily | searxng (keys come from environment variables)"),
@@ -211,6 +212,11 @@ def coerce(key: str, value: object) -> object:
         raise ConfigError(f"permission_mode must be one of {', '.join(PERMISSION_MODES)}")
     if key == "mode" and value not in WORK_MODES:
         raise ConfigError(f"mode must be one of {', '.join(WORK_MODES)}")
+    if key == "preview":
+        from lcode.preview import PROTOCOLS
+
+        if value not in PROTOCOLS:
+            raise ConfigError(f"preview must be one of {', '.join(PROTOCOLS)}")
     if key == "image_model":
         from lcode import media_catalog
 

@@ -560,13 +560,15 @@ def describe_history_error(entry: dict) -> str:
 
 
 def save(server: Server, outputs: dict, folder: Path, stem: str, meta: dict) -> list[Path]:
-    """Fetch the job's files into `folder`: stem-1.png, … with stem-1.json next to each."""
+    """Fetch the job's files into `folder`: stem.png (stem-2.png if that's taken), or stem-1.png, … for several,
+    each with its settings in a .json next to it."""
     folder.mkdir(parents=True, exist_ok=True)
     items = [item for node in outputs.values() for kind in OUTPUT_KINDS for item in node.get(kind, [])]
+    items = [it for it in items if it.get("type", "output") == "output"]
     saved = []
-    for i, item in enumerate((it for it in items if it.get("type", "output") == "output"), 1):
+    for i, item in enumerate(items, 1):
         ext = Path(item["filename"]).suffix or ".png"
-        path = unique(folder / f"{stem}-{i}{ext}")
+        path = unique(folder / (f"{stem}{ext}" if len(items) == 1 else f"{stem}-{i}{ext}"))
         data = server.fetch(item)
         if ext.lower() == ".png":
             data = with_text(data, "lcode", json.dumps(meta, ensure_ascii=False))

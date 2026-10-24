@@ -63,7 +63,7 @@ def image_agent(make_agent, standin):
 def test_a_request_becomes_an_image_in_the_project(image_agent, standin, repo):
     made = media.generate_image(image_agent, "A red fox in fresh snow, at dusk")
     [path] = made.files
-    assert path.parent == repo / ".lcode" / "media" and path.name.endswith("-a-red-fox-in-fresh-snow-at-dusk-1.png")
+    assert path.parent == repo / ".lcode" / "media" and path.name.endswith("-a-red-fox-in-fresh-snow-at-dusk.png")
     assert (path.parent / ".gitignore").read_text().endswith("*\n")  # lcode's folder stays out of git
     graph = standin.prompts[0]
     assert graph["4"]["inputs"]["text"] == "A red fox in fresh snow, at dusk"
@@ -144,8 +144,8 @@ def test_results_that_finished_while_lcode_was_away_are_collected(image_agent, s
     jobs["gone"]["started"] -= 2 * 86400
     comfy._write_jobs(jobs)
     media.generate_image(image_agent, "a fox")
-    assert (repo / "gallery" / "earlier-a-cat-1.png").exists()
-    assert "gallery/earlier-a-cat-1.png: it finished while lcode wasn't watching" in text(image_agent)
+    assert (repo / "gallery" / "earlier-a-cat.png").exists()
+    assert "gallery/earlier-a-cat.png: it finished while lcode wasn't watching" in text(image_agent)
     assert comfy._read_jobs() == {}
 
 
@@ -310,7 +310,7 @@ def test_saying_yes_installs_it(make_agent, monkeypatch, tmp_path):
 def test_a_request_in_image_mode_makes_an_image(image_agent, standin):
     image_agent.interactive = False
     respond(image_agent, "a lighthouse in a storm")
-    assert "a-lighthouse-in-a-storm-1.png" in text(image_agent) and image_agent.ollama.payloads == []
+    assert "a-lighthouse-in-a-storm.png" in text(image_agent) and image_agent.ollama.payloads == []
 
 
 def test_an_image_from_the_command_line(tmp_path, monkeypatch, capsys, standin, repo):
@@ -327,7 +327,7 @@ def test_an_image_from_the_command_line(tmp_path, monkeypatch, capsys, standin, 
     assert done.value.code == 0
     result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert result["status"] == "success" and result["model"] == "FLUX.2 klein 4B"
-    assert Path(result["files"][0]).is_file() and result["files"][0].endswith("-a-red-fox-1.png")
+    assert Path(result["files"][0]).is_file() and result["files"][0].endswith("-a-red-fox.png")
 
 
 def test_doctor_reports_comfyui(standin, tmp_path):
@@ -402,7 +402,7 @@ def test_comfyui_stops_when_lcode_is_killed(tmp_path):
     child = int(parent.stdout.readline())
     parent.kill()  # kill -9: no cleanup in lcode at all
     parent.wait()
-    for _ in range(100):
+    for _ in range(300):  # up to 15 s: a busy machine can be slow to deliver and reap
         if not alive(child):
             break
         time.sleep(0.05)

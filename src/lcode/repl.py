@@ -79,6 +79,11 @@ COMMANDS = {
     "/plan": "Plan before changing anything: /plan <request>, or /plan to show the approved plan",
     "/mode": "What lcode makes: code, image or video, e.g. /mode image",
     "/permissions": "Permission mode: ask | plan | auto-edit | yolo (Shift+Tab cycles)",
+    "/options": "Image mode's options for this session, e.g. /options n=4 ar=16:9 quality=best style=photo",
+    "/again": "Image mode: the last request again, with new seeds (flags work: /again --n 4)",
+    "/vary": "Image mode: variations of an image, new seeds, e.g. /vary 3 (default: the last; --n 2)",
+    "/gallery": "Image mode: this session's images with their settings (/gallery all: every image here)",
+    "/open": "Open an image in your viewer, e.g. /open 3 (default: the last)",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
     "/status": "The task sheet: your requests, the plan and notes, files changed, the last check",
@@ -1181,6 +1186,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         run_safely(agent, arg)
     elif cmd == "/mode":
         mode_command(agent, arg.strip().lower())
+    elif cmd in ("/options", "/again", "/vary", "/gallery", "/open"):
+        image_command(agent, cmd, arg)
     elif cmd == "/permissions":
         if arg in PERMISSION_MODES:
             agent.perms.mode = arg
@@ -1394,8 +1401,100 @@ def respond(agent: Agent, line: str) -> None:
     run_safely(agent, line)
 
 
-def make_image(agent: Agent, prompt: str) -> None:
-    """Image mode: ComfyUI makes the image; Esc or Ctrl+C cancels it there too."""
+def image_command(agent: Agent, cmd: str, arg: str) -> None:
+    """/options, /again, /vary, /gallery and /open: image mode's follow-ups on its results."""
+    from lcode import imageopts
+
+    c = agent.console
+    if cmd == "/options":
+        if not arg.strip():
+            c.print(f"Image options: [bold]{escape(agent.image_options.describe())}[/]")
+            c.print(
+                '[dim]Set them with /options n=4 ar=16:9 seed=42 quality=best style=photo no="text"; '
+                f"styles: {', '.join(imageopts.STYLES)}. Flags in a request (--n 4) win for that request.[/]"
+            )
+            return
+        try:
+            agent.image_options = imageopts.set_values(agent.image_options, imageopts.parse_assignments(arg))
+        except imageopts.OptionError as e:
+            c.print(f"[red]{escape(str(e))}[/]")
+            return
+        c.print(f"Image options: [bold]{escape(agent.image_options.describe())}[/]")
+        return
+    if cmd == "/gallery":
+        gallery(agent, everything=arg.strip() == "all")
+        return
+    if cmd == "/open":
+        try:
+            entry = media.result(agent, arg)
+        except media.MediaError as e:
+            c.print(f"[yellow]{escape(str(e))}[/]")
+            return
+        problem = media.open_file(Path(entry["path"]))
+        c.print(f"[yellow]{escape(problem)}[/]" if problem else f"[dim]Opened #{entry['n']}.[/]")
+        return
+    if agent.settings.mode != "image":
+        c.print("[yellow]/again and /vary work in image mode: /mode image.[/]")
+        return
+    try:
+        number, _ = imageopts.parse(arg, imageopts.Options())  # what isn't a flag: the image's number
+    except imageopts.OptionError as e:
+        c.print(f"[red]{escape(str(e))}[/]")
+        return
+    if cmd == "/again":
+        if agent.last_request is None:
+            c.print("[yellow]Nothing to do again yet: describe an image first.[/]")
+            return
+        prompt, options = agent.last_request
+        options = imageopts.replace_seed(options)
+    else:
+        try:
+            entry = media.result(agent, number)
+        except media.MediaError as e:
+            c.print(f"[yellow]{escape(str(e))}[/]")
+            return
+        prompt = entry["prompt"]
+        options = imageopts.Options.from_json(entry.get("options") or {})
+        options = imageopts.replace_seed(options, n=4)
+        c.print(f"[dim]Variations of #{entry['n']}: {escape(prompt)}[/]")
+    _, options = imageopts.parse(arg, options)  # flags given here win
+    make_image(agent, prompt, options)
+
+
+def gallery(agent: Agent, everything: bool = False) -> None:
+    """The session's images (or every image in the media folder), with what made them."""
+    import json as json_module
+
+    c = agent.console
+    if everything:
+        folder = media.folder(agent)
+        entries = []
+        for sidecar in sorted(folder.glob("*.json"), reverse=True)[:50]:
+            try:
+                meta = json_module.loads(sidecar.read_text())
+            except (OSError, ValueError):
+                continue
+            entries.append({"path": str(sidecar.with_name(meta.get("file", sidecar.stem + ".png"))), **meta})
+        if not entries:
+            c.print(f"[dim]No images in {media.shown(agent, folder)} yet.[/]")
+            return
+        c.print(f"[bold]{len(entries)} latest image(s) in {escape(media.shown(agent, folder))}[/]")
+    else:
+        entries = agent.media_results
+        if not entries:
+            c.print("[dim]No images in this session yet: describe one. /gallery all lists every image here.[/]")
+            return
+    for entry in entries:
+        number = f"#{entry['n']:<3}" if "n" in entry else "    "
+        c.print(
+            f"  [bold green]{number}[/] {escape(media.shown(agent, Path(entry['path'])))}\n"
+            f"       [dim]{escape(entry.get('prompt', ''))} · {entry.get('width')}×{entry.get('height')} · "
+            f"{escape(str(entry.get('model', '')))} · seed {entry.get('seed')}[/]"
+        )
+
+
+def make_image(agent: Agent, prompt: str, options=None) -> None:
+    """Image mode: ComfyUI makes the images; Esc or Ctrl+C cancels them there too."""
     steering = Steering()
     reader = KeyReader(steering)
     reading = agent.interactive and reader.start()  # Esc sets steering.pause: here it cancels
@@ -1405,7 +1504,11 @@ def make_image(agent: Agent, prompt: str) -> None:
         return answer.strip().lower() in ("y", "yes")
 
     try:
-        media.generate_image(agent, prompt, cancelled=lambda: steering.pause, ask=ask if agent.interactive else None)
+        asking = ask if agent.interactive else None
+        if options is None:
+            media.request(agent, prompt, cancelled=lambda: steering.pause, ask=asking)
+        else:
+            media.make(agent, prompt, options, cancelled=lambda: steering.pause, ask=asking)
     except media.MediaError as e:
         agent.console.print(f"[yellow]{escape(str(e))}[/]")
     except KeyboardInterrupt:  # while ComfyUI was starting: nothing queued yet
@@ -1419,6 +1522,7 @@ def make_image(agent: Agent, prompt: str) -> None:
         if typed:
             agent.unsent = typed
             agent.console.print(Text("✎ What you typed is in the prompt below.", style="cyan"))
+        agent.save()  # the gallery and options carry over when the session is resumed
 
 
 def preload(agent: Agent, session: PromptSession | None = None) -> None:

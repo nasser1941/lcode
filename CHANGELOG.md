@@ -6,6 +6,21 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Image mode's options, results and follow-ups** (#151). See
+  [Image mode](https://nasser1941.github.io/lcode/modes/#image-mode).
+  - **Options in a request** (`a red fox --n 4 --ar 16:9 --seed 42 --quality best --style photo`)
+    or for the session (`/options n=4 ar=16:9`): how many images, the shape, the seed (counting up
+    over several images), a quality preset (0.5, 1 or 2 megapixels), ten style presets, and a
+    negative prompt for models that use one.
+  - **Numbered results, shown in the terminal:** the picture itself in kitty, Ghostty, iTerm2 and
+    WezTerm, and a half-block colour preview elsewhere (the `preview` setting).
+  - **Follow-ups:** `/again` (new seeds), `/vary 3` (four variations of image #3), `/gallery` and
+    `/open 3`. The gallery and options are saved with the session.
+  - `lcode --mode image -p "… --n 2"` reports every image's file and seed.
+  - One image is now named `<time>-<prompt>.png` (no `-1`).
+
 ## [0.41.0] - 2026-10-23
 
 ### Added
