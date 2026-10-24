@@ -196,6 +196,50 @@ video ❯ /play
 - **Long renders:** progress shows the step and the time left. With `notify` on, lcode sends a
   desktop notification when a clip that took longer than `notify_after` seconds is done.
 
+## Films
+
+From one idea, lcode makes a short film with the same characters in every shot:
+
+```text
+video ❯ /film a red fox finds a lost white kitten in a snowy forest and they walk home together --shots 3 --seconds 3 --transition fade --sound "soft wind and footsteps in snow"
+The Fox and the Kitten  (.lcode/media/films/the-fox-and-the-kitten)
+  look: cinematic realism, soft winter light, cool blues and warm oranges, shallow depth of field
+  cast: Fox — a red fox with a white chest and bushy tail
+  cast: Kitten — a small white kitten with large ears
+  1. The Fox spots the shivering Kitten trapped under a snowbank in a dense pine forest. [Fox, Kitten] — static low angle shot, 3 s
+  2. The Fox gently nudges the Kitten free and they stand side by side facing the camera. [Fox, Kitten] — slow push in, 3 s
+  3. The pair trots away from the forest into a warm, lit doorway together. [Fox, Kitten] — tracking shot, 3 s
+…
+◆ The Fox and the Kitten: .lcode/media/films/the-fox-and-the-kitten/film-sound.mp4
+```
+
+![The cast's reference pictures (right) and a frame from each of the three shots](assets/film-fox-and-kitten.jpg)
+
+1. **The storyboard:** the [prompt assistant](#the-prompt-assistant) writes it from your idea: the
+   look of the whole film, the cast (each character described once) and the shots (what happens,
+   the camera, who's in it, how long). It's saved as `storyboard.json` (and a readable
+   `storyboard.md`) in the film's folder.
+2. **The cast:** each character gets a reference picture, made once, in `cast/`.
+3. **The shots:** each starts as a keyframe made with the cast's pictures as references, so the
+   characters look the same in every shot, and is then animated by video mode's model (`shots/`).
+4. **The film:** the shots are joined into `film.mp4` with cuts or fades (ffmpeg), and
+   `--sound "…"` adds a sound track for the whole film (`film-sound.mp4`).
+
+| Command | What it does |
+|---|---|
+| `/film <idea>` | The storyboard, then the film. Options: `--shots 3` (1 to 8), `--seconds 4` per shot, `--quality fast`, `--transition cut` or `fade`, `--sound "…"` |
+| `/film plan <idea>` | Only the storyboard, to read or edit before making it |
+| `/film make [name]` | The film from its storyboard (the latest film without a name) |
+| `/film shot 2 [name]` | Shot 2 made again, and the film joined again |
+| `/film stitch [name]` | The shots joined again (after editing the transition or the sound) |
+| `/film show [name]`, `/film list` | One film's storyboard, or all the films here |
+
+- **Needs:** the prompt assistant's model (`ollama pull qwen3.5:4b`), FLUX.2 klein 4B, video
+  mode's model, and ffmpeg.
+- **Measured** on the RTX 4080 Laptop GPU (12 GB): the 3-shot film above (3 s shots at `fast`, two
+  cast members, fades and sound) took 4 minutes, after a 5-second storyboard. The fox and the
+  kitten look the same in all three shots.
+
 ## The prompt assistant
 
 Image and video models do better with some prompts than others. A small local language model,
@@ -339,7 +383,6 @@ themselves:
 
 ## Coming next
 
-- **#155 Movies:** storyboards with a consistent cast, shots stitched into one film.
 - **#157 Cloud generation**, with costs shown (Grok Imagine first).
 
 The permission mode (`ask`, `plan`, `auto-edit`, `yolo`) is a different setting: `/permissions`

@@ -6,6 +6,15 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Films** (#155): `/film a fox finds a lost kitten --shots 3` makes a short film with the same
+  characters in every shot. The prompt assistant writes the storyboard (saved, editable); each
+  character gets a reference picture; each shot starts from a keyframe made with the cast as
+  references and is animated; the shots are joined with cuts or fades, with an optional sound
+  track. `/film shot 2` remakes one shot, `/film stitch` joins again. A real 3-shot film took 4
+  minutes on a 12 GB laptop GPU. See [Films](https://nasser1941.github.io/lcode/modes/#films).
+
 ## [0.47.0] - 2026-10-24
 
 ### Added
