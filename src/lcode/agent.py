@@ -310,6 +310,8 @@ class Settings:
     media_dir: str = ".lcode/media"  # where image and video mode save their files (lcode.media)
     image_model: str = "flux2-klein-4b"  # the media catalog's model image mode uses (lcode.media_catalog)
     video_model: str = "wan22-ti2v-5b"  # and video mode's
+    prompt_assistant: str = "video"  # video, all, off or an Ollama model: writes fuller prompts (lcode.assistant)
+    check_results: bool = False  # the prompt assistant checks each image against the request
     preview: str = "auto"  # images in the terminal: auto, kitty, iterm, blocks or off (lcode.preview)
     num_batch: int | None = None
     keep_alive: str = "30m"

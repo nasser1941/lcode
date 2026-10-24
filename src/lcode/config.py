@@ -47,6 +47,8 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "media_dir": (".lcode/media", str, "where images and videos go: a folder in the project, or an absolute path"),
     "image_model": ("flux2-klein-4b", str, "the model image mode uses: a key from `lcode media`"),
     "video_model": ("wan22-ti2v-5b", str, "the model video mode uses: a key from `lcode media`"),
+    "prompt_assistant": ("video", str, "a small model writes fuller prompts: video | all | off | an Ollama model"),
+    "check_results": (False, bool, "the prompt assistant checks each image against the request"),
     "preview": ("auto", str, "images in the terminal: auto | kitty | iterm | blocks (colour text) | off"),
     "think": (True, bool, "let the model reason before answering (slower, better)"),
     "web": ("on", str, "web search and page fetching for the model: on | ask | off"),
