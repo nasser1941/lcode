@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-10-24
+
 ### Added
 
 - **Video mode: first and last frames, camera moves, longer clips** (#154, part 1). See
@@ -980,7 +982,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.44.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.45.0...HEAD
+[0.45.0]: https://github.com/nasser1941/lcode/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/nasser1941/lcode/compare/v0.43.0...v0.44.0
 [0.43.0]: https://github.com/nasser1941/lcode/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/nasser1941/lcode/compare/v0.41.0...v0.42.0
