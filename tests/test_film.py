@@ -78,6 +78,7 @@ def test_a_storyboard_is_written_and_saved(agent):
     )
     chat = agent.ollama.chats[0]
     assert chat["format"] == "json" and "3 shots, each about 3 seconds" in chat["messages"][0]["content"]
+    assert "Things and places are never cast members" in chat["messages"][0]["content"]  # a kite isn't a character
     _, again = film.plan(agent, "a fox finds a lost kitten", 3, 3)
     assert again.name == "the-fox-and-the-kitten-2"  # a second film doesn't overwrite the first
 
@@ -102,6 +103,8 @@ def test_the_cast_stays_the_same_from_shot_to_shot(agent, standin):
     board = film.with_options(board, "fade", "wind in the pines")
     result = film.make(agent, board, folder)
     assert sorted(p.name for p in (folder / "cast").iterdir()) == ["fox.png", "kitten.png"]
+    portrait = next(n["inputs"]["text"] for n in standin.prompts[0].values() if n["class_type"] == "CLIPTextEncode")
+    assert "Character reference of Fox, alone: a red fox. Full body" in portrait
     keyframes = graphs_of(standin, "ReferenceLatent")
     assert len(keyframes) == 2  # the two shots with cast members, each made with their pictures as references
     loads = [n["inputs"]["image"] for n in keyframes[0].values() if n["class_type"] == "LoadImage"]
