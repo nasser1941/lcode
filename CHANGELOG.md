@@ -6,8 +6,6 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.47.0] - 2026-10-24
-
 ### Added
 
 - **Films** (#155): `/film a fox finds a lost kitten --shots 3` makes a short film with the same
@@ -16,6 +14,8 @@ All notable changes to lcode are documented here. The format follows
   references and is animated; the shots are joined with cuts or fades, with an optional sound
   track. `/film shot 2` remakes one shot, `/film stitch` joins again. A real 3-shot film took 4
   minutes on a 12 GB laptop GPU. See [Films](https://nasser1941.github.io/lcode/modes/#films).
+
+## [0.47.0] - 2026-10-24
 
 ### Added
 
