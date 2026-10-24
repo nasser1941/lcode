@@ -296,7 +296,8 @@ def test_lcode_media_lists_and_installs(tmp_path, monkeypatch, capsys):
         cli.main(["media"])
         listing = " ".join(capsys.readouterr().out.split())
         assert "Image models" in listing and "z-image-turbo Z-Image Turbo · text-to-image" in listing
-        assert "14.6 GB to download" in listing and "Video models come with video generation (#153)" in listing
+        assert "14.6 GB to download" in listing
+        assert "wan22-ti2v-5b Wan 2.2 TI2V 5B · text-to-video, image-to-video" in listing
         cli.main(["media", "install", "z-image-turbo", "--yes"])
         assert "Z-Image Turbo is installed (3 file(s) downloaded)" in " ".join(capsys.readouterr().out.split())
         with pytest.raises(SystemExit):

@@ -28,6 +28,7 @@ lcode config path                      # print the file location
 | `comfyui_path` | (found) | Your ComfyUI folder, if lcode doesn't find it; lcode starts it when needed ([ComfyUI](modes.md#comfyui)) |
 | `media_dir` | `.lcode/media` | Where images and videos go: a folder in the project, or an absolute path |
 | `preview` | `auto` | Images in the terminal: `auto`, `kitty`, `iterm`, `blocks` (colour text) or `off` ([results](modes.md#results)) |
+| `video_model` | `wan22-ti2v-5b` | The model video mode uses: a key from `lcode media` ([video mode](modes.md#video-mode)) |
 | `image_model` | `flux2-klein-4b` | The model image mode uses: a key from `lcode media` ([image models](modes.md#image-models)) |
 | `think` | `true` | Let the model reason before answering |
 | `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |

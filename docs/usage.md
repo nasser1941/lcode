@@ -83,6 +83,7 @@ reasoning is on.
 | `/mode [code\|image\|video]` | Switch what lcode makes: [code, images or videos](modes.md) |
 | `/options`, `/again`, `/vary N`, `/gallery`, `/open N` | Image mode: [options for the session, follow-ups on results](modes.md#results) |
 | `/edit N`, `/use N`, `/extend N`, `/upscale N`, `/nobg N` | Image mode: [edit, follow, outpaint, upscale, cut out](modes.md#editing) |
+| `/animate N`, `/play N` | [Video mode](modes.md#video-mode): animate image N; play a clip |
 | `/permissions [ask\|plan\|auto-edit\|yolo]` | Set the permission mode |
 | `/cd DIR` | Change the working directory |
 | `/todos` | Show the model's task list |

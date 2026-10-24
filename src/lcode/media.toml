@@ -113,3 +113,36 @@ tasks = ["remove-background"]
 workflow = "remove-background"
 files = { model = "birefnet" }
 notes = "/nobg: a transparent PNG"
+
+[files.wan22-ti2v-5b]
+folder = "diffusion_models"
+name = "wan2.2_ti2v_5B_fp16.safetensors"
+url = "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors"
+gb = 10.00
+
+[files.umt5-xxl-fp8]
+folder = "text_encoders"
+name = "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+url = "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+gb = 6.74
+alternatives = ["umt5_xxl_fp16.safetensors"]
+
+[files.wan22-vae]
+folder = "vae"
+name = "wan2.2_vae.safetensors"
+url = "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors"
+gb = 1.41
+
+[models.wan22-ti2v-5b]
+name = "Wan 2.2 TI2V 5B"
+mode = "video"
+publisher = "Wan-AI (Alibaba)"
+license = "Apache 2.0"
+tasks = ["text-to-video", "image-to-video"]
+workflow = "wan22-ti2v-5b"
+files = { model = "wan22-ti2v-5b", text_encoder = "umt5-xxl-fp8", vae = "wan22-vae" }
+gpu_gb = 0.0
+measured = "5 s clip: 100 s fast, 150 s balanced (864×480), 10.5 min best (1280×704) on an RTX 4080 Laptop, 12 GB"
+notes = "5 s at 24 fps, up to 1280×704; text or a start image"
+quality = { fast = [12, 0.4], balanced = [20, 0.4], best = [30, 0.859] }
+negative = true

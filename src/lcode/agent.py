@@ -309,6 +309,7 @@ class Settings:
     comfyui_path: str | None = None  # a ComfyUI install lcode doesn't find by itself (lcode.comfy)
     media_dir: str = ".lcode/media"  # where image and video mode save their files (lcode.media)
     image_model: str = "flux2-klein-4b"  # the media catalog's model image mode uses (lcode.media_catalog)
+    video_model: str = "wan22-ti2v-5b"  # and video mode's
     preview: str = "auto"  # images in the terminal: auto, kitty, iterm, blocks or off (lcode.preview)
     num_batch: int | None = None
     keep_alive: str = "30m"
@@ -698,6 +699,7 @@ class Agent:
             "model": self.settings.model,
             "mode": self.settings.mode,
             "image_model": self.settings.image_model,
+            "video_model": self.settings.video_model,
             "media": {"results": self.media_results, "options": self.image_options.to_json(), "refs": self.image_refs},
             "name": self.session_name,
             "title": self.session_title,
@@ -749,6 +751,8 @@ class Agent:
             self.settings.mode = data["mode"]  # a session belongs to the mode it was made in
         if isinstance(data.get("image_model"), str):
             self.settings.image_model = data["image_model"]
+        if isinstance(data.get("video_model"), str):
+            self.settings.video_model = data["video_model"]
         media = data.get("media") or {}
         self.media_results = [r for r in media.get("results") or [] if isinstance(r, dict) and "path" in r]
         self.image_options = type(self.image_options).from_json(media.get("options") or {})

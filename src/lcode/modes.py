@@ -27,22 +27,22 @@ TITLES = {"code": "local coding agent", "image": "local image generation", "vide
 MEDIA_SERVERS = frozenset({"comfyui", "xai"})  # the MCP catalog's image and video servers
 MEDIA_COMMANDS = ("comfy-mcp", "lcode-mcp-xai")  # the same servers, under any name
 NOTED_FILE = "media-servers-noted"
-COMING = {
-    "video": (
-        "Video mode doesn't generate yet: the video models (#150) and video generation (#153) come next. "
-        "/mode image makes images now; /mode code switches back."
-    ),
-}
+COMING: dict[str, str] = {}
 
 
 def ready(agent: Agent) -> str:
     """What to do in the agent's mode, said on entering it."""
-    if agent.settings.mode == "image":
-        from lcode import media
+    from lcode import media
 
+    if agent.settings.mode == "image":
         return (
             f"Describe an image and press Enter: {media.current(agent).name} makes it on your GPU, into "
             f"{agent.settings.media_dir}. /mode code switches back."
+        )
+    if agent.settings.mode == "video":
+        return (
+            f"Describe a video and press Enter (@photo.png starts it from a picture): {media.current(agent).name} "
+            f"makes it on your GPU, into {agent.settings.media_dir}. /mode code switches back."
         )
     return COMING.get(agent.settings.mode, "")
 
@@ -113,7 +113,7 @@ def switch(agent: Agent, new: str) -> list[str]:
     if new == "code" and agent.no_coding_model:
         reason = agent.no_coding_model.strip().splitlines()[0]
         lines.append(f"lcode started without its coding model ({reason}). Fix that, then restart lcode.")
-    if new == "image":
+    if new in ("image", "video"):
         from lcode import media
 
         warming = media.warm(agent)

@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass, replace
 
 QUALITIES = ("fast", "balanced", "best")
 MAX_COUNT = 8
+MAX_SECONDS = 8  # video: longer clips need more memory than a laptop GPU has, and models drift
 SIZES = {  # names for aspect ratios
     "square": "1:1",
     "portrait": "3:4",
@@ -46,6 +47,8 @@ ALIASES = {
     "no": "negative",
     "negative": "negative",
     "style": "style",
+    "seconds": "seconds",
+    "duration": "seconds",
 }
 FLAG = re.compile(r"(?:^|\s)--?(" + "|".join(sorted(ALIASES, key=len, reverse=True)) + r")\b(?=[\s=]|$)")
 DIMENSIONS = re.compile(r"^(\d{2,4})\s*[x×]\s*(\d{2,4})$")
@@ -64,10 +67,13 @@ class Options:
     quality: str = "balanced"
     negative: str = ""
     style: str = ""
+    seconds: float = 5.0  # video only
 
-    def describe(self) -> str:
+    def describe(self, video: bool = False) -> str:
         seed = "random" if self.seed is None else str(self.seed)
         parts = [f"n={self.n}", f"size={self.size}", f"seed={seed}", f"quality={self.quality}"]
+        if video:
+            parts.append(f"seconds={self.seconds:g}")
         if self.style:
             parts.append(f"style={self.style}")
         if self.negative:
@@ -92,7 +98,7 @@ def set_values(options: Options, values: dict[str, object]) -> Options:
     for raw_key, raw in values.items():
         key = ALIASES.get(str(raw_key).lower().lstrip("-"))
         if key is None:
-            raise OptionError(f"unknown option {raw_key!r}: use n, ar (or size), seed, quality, style or no")
+            raise OptionError(f"unknown option {raw_key!r}: use n, ar (or size), seed, quality, style, no or seconds")
         value = str(raw).strip() if raw is not None else ""
         if key == "n":
             if not value.isdigit() or not 1 <= int(value) <= MAX_COUNT:
@@ -120,6 +126,14 @@ def set_values(options: Options, values: dict[str, object]) -> Options:
                 raise OptionError(f"style is one of {', '.join(STYLES)} (or none)")
         elif key == "negative":
             out.negative = "" if value.lower() in ("none", "off") else value
+        elif key == "seconds":
+            try:
+                seconds = float(value.rstrip("s"))
+            except ValueError:
+                seconds = 0
+            if not 1 <= seconds <= MAX_SECONDS:
+                raise OptionError(f"seconds is how long a video is: 1 to {MAX_SECONDS}")
+            out.seconds = seconds
     return out
 
 
@@ -201,6 +215,11 @@ def round_to(value: float, multiple: int) -> int:
 def replace_seed(options: Options, n: int | None = None) -> Options:
     """The options with a random seed again (for /again and /vary), and optionally another count."""
     return replace(options, seed=None, n=n or options.n)
+
+
+def frames(seconds: float, fps: int) -> int:
+    """Frames for a clip: a multiple of 4 plus 1, as video models that compress time 4 to 1 need."""
+    return max(1, round(seconds * fps / 4)) * 4 + 1
 
 
 def styled(prompt: str, style: str) -> str:

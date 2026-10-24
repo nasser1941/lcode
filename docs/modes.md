@@ -6,7 +6,7 @@ lcode makes three kinds of things, each in its own mode with its own models:
 |---|---|---|
 | **code** (default) | Code: it reads, writes, runs and checks your project | A coding language model in Ollama (or another server) |
 | **image** | Images from a description, edits of your images (references, inpainting, outpainting), upscales and cut-outs | An image model, run by ComfyUI on your GPU |
-| **video** | Videos from a description, a start image or references | A video model, run by ComfyUI on your GPU |
+| **video** | Video clips from a description or a start image | A video model, run by ComfyUI on your GPU |
 
 ```text
 ❯ /mode image
@@ -137,7 +137,39 @@ image ❯ /nobg 2
   inpainting and outpainting 6 to 12 s, a 2× upscale 6 s, and a background cut-out under a second
   once the tools are loaded.
 
-## ComfyUI
+## Video mode
+
+Video mode works like image mode: what you type describes a clip, and **Wan 2.2 TI2V 5B** makes it on
+your GPU. Start it from a picture with `@photo.png` (or `@#3`, an image from this session), and the
+clip begins with that frame. From image mode, `/animate 3 the waves roll in` switches to video mode
+and animates image #3.
+
+```text
+video ❯ waves rolling onto a beach at sunset --seconds 5
+◆ #1 .lcode/media/20261024-….mp4  864×480 · Wan 2.2 TI2V 5B · seed 1234 · …
+video ❯ /play
+```
+
+- **Options:** the image options work here too (`--n`, `--ar`, `--seed`, `--quality`, `--style`,
+  `--no`, and `/options`), plus `--seconds` (1 to 8; 5 by default, at 24 frames per second).
+  Clips are 16:9, or 9:16 from an upright start picture (cropped to it), unless you give a shape:
+  Wan 2.2 knows those two shapes best, and a square or small clip can break up into streaks.
+- **Quality:** `fast` makes 864×480 in 12 steps, `balanced` (the default) 864×480 in 20 steps, and
+  `best` the model's own 1280×704 in 30 steps. Smaller than 864×480 breaks this model up into
+  streaks, so lcode doesn't go lower.
+- **Camera moves:** describe them as shots ("slow zoom in", "dolly shot along the shore", "pan
+  left"). "The camera moves in" can put a camera in the picture.
+- **Negative prompt:** Wan uses one. lcode passes Wan's own default (it avoids static, blurry,
+  over-exposed clips) unless you give `--no "…"`.
+- **Results:** an MP4 with a JSON file next to it (prompt, seed, size, frames, fps, start image),
+  numbered in the session's gallery with the images. The first frame shows in the terminal.
+  `/play 4` opens a clip in your player, and `/vary` and `/again` make new clips from the same
+  description and start image.
+- **Measured** on the RTX 4080 Laptop GPU (12 GB), a 5-second clip (121 frames): `fast` 100 s,
+  `balanced` 150 s (the same from a start image), `best` 10.5 minutes.
+- **Long renders:** progress shows the step and the time left. With `notify` on, lcode sends a
+  desktop notification when a clip that took longer than `notify_after` seconds is done.
+
 
 ComfyUI runs the image and video models; lcode drives it through its API.
 
@@ -234,10 +266,8 @@ themselves:
 
 ## Coming next
 
-Video mode doesn't generate yet: a request there says what's coming instead of going anywhere.
-
-- **#153, #154 Video mode:** with video models in the catalog, from text or a start image, first and last frames, several
-  references, camera moves, longer clips, sound.
+- **#154 More video:** first and last frames, several references, camera moves, longer clips,
+  sound, and more video models in the catalog.
 - **#155 Movies:** storyboards with a consistent cast, shots stitched into one film.
 - **#156 Prompt assistant:** a small local model for prompts and follow-ups.
 - **#157 Cloud generation**, with costs shown (Grok Imagine first).

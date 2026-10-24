@@ -89,6 +89,8 @@ COMMANDS = {
     "/extend": "Image mode: outpaint an image to a shape or by sides, e.g. /extend 3 --ar 16:9 (or --left 256)",
     "/upscale": "Image mode: 2 or 4 times the pixels, e.g. /upscale 3 4",
     "/nobg": "Image mode: remove the background (a transparent PNG), e.g. /nobg 3",
+    "/animate": "Image mode: make a video starting from an image, e.g. /animate 3 the waves roll in (video mode)",
+    "/play": "Play a video in your player, e.g. /play 4 (default: the last)",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
     "/status": "The task sheet: your requests, the plan and notes, files changed, the last check",
@@ -230,7 +232,7 @@ def model_lines(agent: Agent) -> str:
     if s.mode == "image":
         return f"[dim]model[/]    {escape(media.current(agent).name)} [dim]· ComfyUI · {escape(s.media_dir)}[/]\n"
     if s.mode == "video":
-        return "[dim]model[/]    [dim]video models come with video generation (#153)[/]\n"
+        return f"[dim]model[/]    {escape(media.current(agent).name)} [dim]· ComfyUI · {escape(s.media_dir)}[/]\n"
     server = f" [dim]· {escape(agent.ollama.describe())}[/]" if backends.is_openai(agent.ollama) else ""
     return f"[dim]model[/]    {escape(s.model)}{server}\n[dim]context[/]  {format_tokens(s.context)} tokens\n"
 
@@ -931,13 +933,13 @@ def media_model_command(agent: Agent, arg: str, hardware: Hardware) -> None:
     if model is None:
         c.print(f"[red]There's no {s.mode} model {escape(arg)!r}: choose 1 to {len(choices)}, or a name.[/]")
         return
-    s.image_model = model.key
-    c.print(f"[green]Image model: {escape(model.name)}.[/]")
+    setattr(s, f"{s.mode}_model", model.key)
+    c.print(f"[green]{s.mode.capitalize()} model: {escape(model.name)}.[/]")
     if installed is not None:
         _, missing = catalog.chosen_files(model, installed)
         if missing:
             size = sum(f.gb for f in missing)
-            c.print(f"[dim]Not installed yet: {size:.1f} GB download with your next image (you're asked first).[/]")
+            c.print(f"[dim]Not installed yet: {size:.1f} GB download with your next {s.mode} (you're asked first).[/]")
 
 
 def switch_model(agent: Agent, wanted: str, hardware: Hardware) -> None:
@@ -1347,10 +1349,7 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
         if info:
             resume_session(agent, info)
     session_start(agent)
-    if prompt and agent.settings.mode == "video":
-        agent.console.print(f"[yellow]{escape(modes.ready(agent))}[/]")
-        prompt = None
-    if prompt and agent.settings.mode == "image":
+    if prompt and agent.settings.mode in ("image", "video"):
         respond(agent, prompt)
         return
     if prompt:
@@ -1367,7 +1366,7 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
     if agent.settings.mode == "code":
         preload(agent, session)
     else:
-        warming = media.warm(agent) if agent.settings.mode == "image" else None
+        warming = media.warm(agent)
         if warming:
             agent.say(warming)
         agent.console.print(f"[yellow]{escape(modes.ready(agent))}[/]")
@@ -1396,17 +1395,18 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
 
 def respond(agent: Agent, line: str) -> None:
     """What a typed request does: the coding agent works on it, or image and video mode take it."""
-    if agent.settings.mode == "image":  # no coding model involved
+    if agent.settings.mode in ("image", "video"):  # no coding model involved
         make_image(agent, line)
-        return
-    if agent.settings.mode != "code":
-        agent.console.print(f"[yellow]{escape(modes.ready(agent))}[/]")
         return
     agent.console.print(Rule(style="dim"))
     run_safely(agent, line)
 
 
-IMAGE_COMMANDS = ("/options", "/again", "/vary", "/gallery", "/open", "/edit", "/use", "/extend", "/upscale", "/nobg")
+IMAGE_COMMANDS = (
+    "/options", "/again", "/vary", "/gallery", "/open", "/play", "/edit", "/use", "/extend", "/upscale", "/nobg",
+    "/animate",
+)  # fmt: skip
+VIDEO_TOO = ("/options", "/again", "/vary", "/gallery", "/open", "/play", "/use")  # what video mode shares
 NUMBER = re.compile(r"^#?(\d+)$")
 
 
@@ -1418,9 +1418,10 @@ def image_command(agent: Agent, cmd: str, arg: str) -> None:
     from lcode import edits, imageopts
 
     c = agent.console
+    video = agent.settings.mode == "video"
     if cmd == "/options":
         if not arg.strip():
-            c.print(f"Image options: [bold]{escape(agent.image_options.describe())}[/]")
+            c.print(f"Options: [bold]{escape(agent.image_options.describe(video))}[/]")
             c.print(
                 '[dim]Set them with /options n=4 ar=16:9 seed=42 quality=best style=photo no="text"; '
                 f"styles: {', '.join(imageopts.STYLES)}. Flags in a request (--n 4) win for that request.[/]"
@@ -1431,13 +1432,14 @@ def image_command(agent: Agent, cmd: str, arg: str) -> None:
         except imageopts.OptionError as e:
             c.print(f"[red]{escape(str(e))}[/]")
             return
-        c.print(f"Image options: [bold]{escape(agent.image_options.describe())}[/]")
+        c.print(f"Options: [bold]{escape(agent.image_options.describe(video))}[/]")
         return
     if cmd == "/gallery":
         gallery(agent, everything=arg.strip() == "all")
         return
-    if agent.settings.mode != "image" and cmd != "/open":
-        c.print(f"[yellow]{cmd} works in image mode: /mode image.[/]")
+    if cmd not in ("/open", "/play") and not (agent.settings.mode == "image" or (video and cmd in VIDEO_TOO)):
+        where = "image or video mode" if cmd in VIDEO_TOO else "image mode"
+        c.print(f"[yellow]{cmd} works in {where}: /mode {'image' if where == 'image mode' else 'video'}.[/]")
         return
     first, _, rest = arg.strip().partition(" ")
     number = first if NUMBER.match(first) else ""
@@ -1456,19 +1458,30 @@ def image_command(agent: Agent, cmd: str, arg: str) -> None:
             return
         entry = media.result(agent, f"#{NUMBER.match(number).group(1)}" if number else "")
         source = Path(entry["path"])
-        if cmd == "/open":
+        if cmd in ("/open", "/play"):
             problem = media.open_file(source)
             c.print(f"[yellow]{escape(problem)}[/]" if problem else f"[dim]Opened #{entry['n']}.[/]")
             return
         if cmd == "/vary":
             job = dict(entry.get("job") or {"kind": "image", "sources": [], "mask": None, "pads": None})
-            if entry.get("kind") in ("upscale", "remove-background") or job["kind"] not in ("image", "edit"):
+            if entry.get("kind") in ("upscale", "remove-background") or job["kind"] not in ("image", "edit", "video"):
                 c.print(f"[yellow]#{entry['n']} is {escape(entry['prompt'])}: /vary the image it came from.[/]")
                 return
             job["prompt"] = entry["prompt"] if job["kind"] == "image" else job.get("prompt", entry["prompt"])
             options = imageopts.replace_seed(imageopts.Options.from_json(entry.get("options") or {}), n=4)
             _, job["options"] = imageopts.parse(rest, options)
             c.print(f"[dim]Variations of #{entry['n']}: {escape(entry['prompt'])}[/]")
+            make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
+            return
+        if cmd == "/animate":
+            if not edits.is_image(source):
+                c.print(f"[yellow]#{entry['n']} isn't a picture: /animate takes an image.[/]")
+                return
+            for line in modes.switch(agent, "video"):
+                c.print(f"[dim]{escape(line)}[/]")
+            text, options = imageopts.parse(rest, imageopts.replace_seed(agent.image_options, n=1))
+            job = {"kind": "video", "prompt": text or entry["prompt"], "options": options, "sources": [str(source)],
+                   "mask": None, "pads": None, "keep_shape": "--ar" not in rest and "--size" not in rest}  # fmt: skip
             make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
             return
         if cmd == "/edit":
@@ -1571,6 +1584,7 @@ def make_image(agent: Agent, prompt: str = "", options=None, run=None) -> None:
         answer = steering.ask(f"  {question} [y/N] ") if reading else input(f"  {question} [y/N] ")
         return answer.strip().lower() in ("y", "yes")
 
+    started = time.monotonic()
     try:
         asking = ask if agent.interactive else None
         if run is not None:
@@ -1593,6 +1607,7 @@ def make_image(agent: Agent, prompt: str = "", options=None, run=None) -> None:
             agent.unsent = typed
             agent.console.print(Text("✎ What you typed is in the prompt below.", style="cyan"))
         agent.save()  # the gallery and options carry over when the session is resumed
+        agent.finished(prompt or "image or video", time.monotonic() - started)  # a long render: notify
 
 
 def preload(agent: Agent, session: PromptSession | None = None) -> None:

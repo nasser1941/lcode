@@ -27,7 +27,7 @@ from lcode import media_catalog as catalog
 if TYPE_CHECKING:
     from lcode.agent import Agent
 
-SOON = {"video": "Video models come with video generation (#153)."}
+SOON: dict[str, str] = {}
 IGNORED = "# lcode's images and videos: not part of the project unless you add them\n*\n"
 
 
@@ -44,9 +44,11 @@ def installed_lister(agent: Agent) -> catalog.Installed | None:
     return catalog.lister(install=install) if install else None
 
 
-def current(agent: Agent) -> catalog.MediaModel:
-    """The image model the agent uses (the image_model setting, or /model in image mode)."""
+def current(agent: Agent, mode: str | None = None) -> catalog.MediaModel:
+    """The model the agent uses in image or video mode (image_model, video_model, or /model there)."""
     cat = catalog.load()
+    if (mode or agent.settings.mode) == "video":
+        return cat.find(agent.settings.video_model) or cat.models[catalog.DEFAULT_VIDEO]
     return cat.find(agent.settings.image_model) or cat.models[catalog.DEFAULT_IMAGE]
 
 
@@ -61,6 +63,7 @@ class Made:
     prompt: str = ""
     numbers: list[int] = field(default_factory=list)  # in the session's gallery
     thumbnail: bytes = b""  # a small PNG, for the half-block preview
+    poster: bytes = b""  # a video's first frame, for terminals that show pictures
 
 
 # ----------------------------------------------------------------------------- ComfyUI, started and stopped
@@ -227,25 +230,36 @@ def ensure_installed(
 
 
 THUMB_NODES = ("9001", "9002")  # the thumbnail lcode adds to a workflow, for the half-block preview
+POSTER_NODES = ("9003", "9004")  # a video's first frame, picked and kept (not saved) for the preview
 
 
 def add_thumbnail(graph: dict, width: int, height: int) -> None:
-    """Have ComfyUI also make a small copy of the image (not saved, a preview), for the half-block preview."""
+    """Have ComfyUI also make a small copy of the image, or of a video's first frame (not saved, a preview)."""
     save = next((nid for nid, node in graph.items() if node.get("class_type") == "SaveImage"), None)
-    if save is None:
+    video = next((nid for nid, node in graph.items() if node.get("class_type") == "CreateVideo"), None)
+    if save is not None:
+        frames = graph[save]["inputs"]["images"]
+    elif video is not None:
+        first, keep = POSTER_NODES
+        graph[first] = {
+            "class_type": "ImageFromBatch",
+            "inputs": {"image": graph[video]["inputs"]["images"], "batch_index": 0, "length": 1},
+        }
+        graph[keep] = {"class_type": "PreviewImage", "inputs": {"images": [first, 0]}}
+        frames = [first, 0]
+    else:
         return
     tw, th = preview.thumbnail_size(width, height)
     scale, show = THUMB_NODES
     graph[scale] = {
         "class_type": "ImageScale",
-        "inputs": {"image": graph[save]["inputs"]["images"], "upscale_method": "area", "width": tw, "height": th,
-                   "crop": "disabled"},
-    }  # fmt: skip
+        "inputs": {"image": frames, "upscale_method": "area", "width": tw, "height": th, "crop": "disabled"},
+    }
     graph[show] = {"class_type": "PreviewImage", "inputs": {"images": [scale, 0]}}
 
 
-def thumbnail(server: comfy.Server, outputs: dict) -> bytes:
-    for item in (outputs.get(THUMB_NODES[1]) or {}).get("images", []):
+def thumbnail(server: comfy.Server, outputs: dict, node: str = THUMB_NODES[1]) -> bytes:
+    for item in (outputs.get(node) or {}).get("images", []):
         try:
             return server.fetch(item)
         except (comfy.ComfyError, OSError, requests.RequestException):
@@ -275,6 +289,12 @@ def request(
     sources = [resolve(agent, ref) for ref in refs] + [Path(p) for p in agent.image_refs if Path(p).exists()]
     if mask and not sources:
         raise MediaError("--mask needs the image it masks: @photo.png --mask mask.png make the sky purple")
+    if agent.settings.mode == "video":
+        if mask:
+            raise MediaError("Video mode doesn't take a mask: @photo.png starts a video from a picture.")
+        job = {"kind": "video", "prompt": prompt, "options": options, "sources": [str(p) for p in sources[:1]],
+               "mask": None, "pads": None, "keep_shape": not SIZE_FLAG.search(text)}  # fmt: skip
+        return redo(agent, job, cancelled, ask)
     job = {"kind": "edit" if sources else "image", "prompt": prompt, "options": options,
            "sources": [str(p) for p in sources], "mask": str(mask) if mask else None, "pads": None,
            "keep_shape": not SIZE_FLAG.search(text)}  # fmt: skip
@@ -286,9 +306,10 @@ def redo(
 ) -> list[Made]:
     """Make what `job` describes (also what /again and /vary repeat): images, or edits of its sources."""
     prompt, options = job["prompt"], job["options"]
-    if not prompt.strip() and job["kind"] in ("image", "edit") and not job.get("pads"):
-        raise MediaError("Describe the image you want." if job["kind"] == "image" else "Say what to change.")
-    model = current(agent)
+    if not prompt.strip() and job["kind"] in ("image", "edit", "video") and not job.get("pads"):
+        what = {"image": "Describe the image you want.", "edit": "Say what to change."}
+        raise MediaError(what.get(job["kind"], "Describe the video you want."))
+    model = current(agent, "video" if job["kind"] == "video" else "image")
     if options.negative and not model.negative:
         agent.say(f"{model.name} doesn't use a negative prompt: describe what you want instead (--no is ignored).")
     agent.last_request = job
@@ -299,6 +320,8 @@ def redo(
         one = replace(options, seed=seed, n=1)
         if job["kind"] == "image":
             made.append(generate_image(agent, prompt, cancelled, ask, one, label))
+        elif job["kind"] == "video":
+            made.append(generate_video(agent, job, one, cancelled, ask, label))
         else:
             made.append(edit_image(agent, job, one, cancelled, ask, label))
     return made
@@ -368,7 +391,7 @@ def generate_image(
         raise MediaError("Describe the image you want.")
     options = options or imageopts.Options()
     server = prepare(agent, ask, cancelled)
-    model = current(agent)
+    model = current(agent, "image")
     files = ensure_installed(agent, model, server, ask)
     workflow = comfy.load_workflow(model.workflow)
     seed = options.seed if options.seed is not None else random.randrange(2**32)
@@ -397,7 +420,7 @@ def edit_image(
     """An edit of the job's source images: by instruction, through a mask (inpainting), or on a bigger canvas
     (outpainting). The first source sets the shape unless the request gave one."""
     server = prepare(agent, ask, cancelled)
-    chosen = current(agent)
+    chosen = current(agent, "image")
     model = catalog.load().editor(chosen)
     if model is None:
         raise MediaError("None of lcode's image models edits pictures yet.")
@@ -450,6 +473,62 @@ def edit_image(
     remembered = {k: job.get(k) for k in ("kind", "prompt", "sources", "mask", "pads", "keep_shape")}
     plan = Plan(model, workflow, graph, meta, job["prompt"] or "extended", seed, options, kind, job["sources"],
                 remembered, f"{sources[0].stem}-extended" if pads else "")  # fmt: skip
+    return run_plan(agent, server, plan, cancelled, label)
+
+
+def generate_video(
+    agent: Agent,
+    job: dict,
+    options: imageopts.Options,
+    cancelled: Callable[[], bool] = lambda: False,
+    ask: Callable[[str], bool] | None = None,
+    label: str = "",
+) -> Made:
+    """One video: from the prompt, or starting from the job's image. Its shape is 16:9, or 9:16 for an upright start
+    image (the shapes video models know best; the image is cropped to it), unless the request gives one."""
+    prompt = job["prompt"].strip()
+    server = prepare(agent, ask, cancelled)
+    model = current(agent, "video")
+    files = ensure_installed(agent, model, server, ask)
+    workflow = comfy.load_workflow(model.workflow)
+    start = Path(job["sources"][0]) if job.get("sources") else None
+    seed = options.seed if options.seed is not None else random.randrange(2**32)
+    steps, megapixels = model.preset(options.quality)
+    ratio = options.size
+    if job.get("keep_shape", True) and options.size == imageopts.Options().size:  # no shape asked for
+        ratio = "16:9"
+        if start is not None:
+            try:
+                w, h = edits.image_size(start)
+                ratio = "9:16" if h > w else "16:9"  # a square or odd shape breaks up; this crops it
+            except (OSError, edits.EditError):
+                pass
+    width, height = imageopts.dimensions(imageopts.SIZES.get(ratio, ratio), megapixels, multiple=32)
+    fps = int(workflow.defaults.get("fps", 24))
+    text = imageopts.styled(prompt, options.style)
+    values = {**workflow.defaults, **files, "prompt": text, "seed": seed, "width": width, "height": height,
+              "length": imageopts.frames(options.seconds, fps), "fps": fps}  # fmt: skip
+    if steps:
+        values["steps"] = steps
+    if options.negative:
+        values["negative"] = options.negative
+    graph = comfy.fill(workflow.graph, values)
+    if start is not None:
+        try:
+            name = server.upload(start)
+        except (comfy.ComfyError, OSError) as e:
+            raise MediaError(f"Couldn't hand the image to ComfyUI: {e}") from e
+        latent = edits.node_of(graph, "Wan22ImageToVideoLatent")
+        if latent is None:
+            raise MediaError(f"{model.name} can't start from an image.")
+        graph["8100"] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        graph[latent]["inputs"]["start_image"] = ["8100", 0]
+    add_thumbnail(graph, width, height)
+    meta = describe_job(model, workflow, prompt, text, seed, values, options, files)
+    meta.update({"seconds": round((values["length"] - 1) / fps, 2), "fps": fps, "frames": values["length"],
+                 "start_image": shown(agent, start) if start else ""})  # fmt: skip
+    remembered = {k: job.get(k) for k in ("kind", "prompt", "sources", "mask", "pads", "keep_shape")}
+    plan = Plan(model, workflow, graph, meta, prompt, seed, options, "video", job.get("sources") or [], remembered)
     return run_plan(agent, server, plan, cancelled, label)
 
 
@@ -580,6 +659,8 @@ def run_plan(agent: Agent, server: comfy.Server, plan: Plan, cancelled, label: s
             pass
     made = Made(saved, plan.model.name, plan.seed, width, height, time.monotonic() - line.started, plan.prompt)
     made.thumbnail = thumbnail(server, outputs)
+    if plan.kind == "video":
+        made.poster = thumbnail(server, outputs, POSTER_NODES[1])
     made.numbers = record(agent, made, plan)
     show(agent, made)
     return made
@@ -626,18 +707,21 @@ def show(agent: Agent, made: Made) -> None:
             + Text(f"  {made.width}×{made.height} · {made.model}{seed} · {made.seconds:.1f} s", style="dim")
         )
     if made.files:
-        show_preview(agent, made.files[0], made.thumbnail)
+        show_preview(agent, made.files[0], made.thumbnail, made.poster)
 
 
-def show_preview(agent: Agent, path: Path, thumb: bytes = b"") -> None:
-    """The image in the terminal: itself where the terminal can show pictures, else a half-block preview."""
+def show_preview(agent: Agent, path: Path, thumb: bytes = b"", poster: bytes = b"") -> None:
+    """The image (or a video's first frame) in the terminal: itself where the terminal can show pictures, else a
+    half-block preview."""
     setting = agent.settings.preview
     how = preview.protocol(setting)
     if how == "off" or (setting == "auto" and not agent.console.is_terminal):
         return
     try:
         if how in ("kitty", "iterm"):
-            data = path.read_bytes()
+            data = path.read_bytes() if edits.is_image(path) else poster
+            if not data:
+                return
             sequence = preview.kitty(data) if how == "kitty" else preview.iterm(data)
             agent.console.file.write(sequence)
             agent.console.file.flush()

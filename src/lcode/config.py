@@ -46,6 +46,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "comfyui_path": (None, str, "your ComfyUI folder, if lcode doesn't find it (lcode starts it when needed)"),
     "media_dir": (".lcode/media", str, "where images and videos go: a folder in the project, or an absolute path"),
     "image_model": ("flux2-klein-4b", str, "the model image mode uses: a key from `lcode media`"),
+    "video_model": ("wan22-ti2v-5b", str, "the model video mode uses: a key from `lcode media`"),
     "preview": ("auto", str, "images in the terminal: auto | kitty | iterm | blocks (colour text) | off"),
     "think": (True, bool, "let the model reason before answering (slower, better)"),
     "web": ("on", str, "web search and page fetching for the model: on | ask | off"),
@@ -217,12 +218,12 @@ def coerce(key: str, value: object) -> object:
 
         if value not in PROTOCOLS:
             raise ConfigError(f"preview must be one of {', '.join(PROTOCOLS)}")
-    if key == "image_model":
+    if key in ("image_model", "video_model"):
         from lcode import media_catalog
 
-        keys = [m.key for m in media_catalog.load().for_mode("image")]
+        keys = [m.key for m in media_catalog.load().for_mode(key.removesuffix("_model"))]
         if value not in keys:
-            raise ConfigError(f"image_model must be one of {', '.join(keys)} (see lcode media)")
+            raise ConfigError(f"{key} must be one of {', '.join(keys)} (see lcode media)")
     if typ is bool and isinstance(value, str):
         if value.lower() not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
             raise ConfigError(f"{key} must be true or false")
