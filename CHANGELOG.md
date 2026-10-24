@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-10-24
+
 ### Added
 
 - **Image mode edits pictures** (#152). See [Editing](https://nasser1941.github.io/lcode/modes/#editing).
@@ -952,7 +954,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.42.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.43.0...HEAD
+[0.43.0]: https://github.com/nasser1941/lcode/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/nasser1941/lcode/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/nasser1941/lcode/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/nasser1941/lcode/compare/v0.39.0...v0.40.0
