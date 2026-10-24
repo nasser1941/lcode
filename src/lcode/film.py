@@ -1,8 +1,9 @@
 """Films: from one description to a short film with the same characters in every shot.
 
 1. **A storyboard.** The prompt assistant (lcode.assistant) writes it: a title, the look of the whole film, the cast
-   (each character or place described once), and the shots (what happens, how long, the camera, who's in it). It's
-   saved as `storyboard.json` in the film's folder, so it can be edited and made again.
+   (each living character described once; things and places are described in the shots), and the shots (what
+   happens, how long, the camera, who's in it). It's saved as `storyboard.json` in the film's folder, so it can be
+   edited and made again.
 2. **The cast.** Each character gets a reference picture (FLUX.2 klein), made once and kept in `cast/`.
 3. **The shots.** Each shot starts as a keyframe: a picture of the shot made with the cast's pictures as references,
    so the characters look the same from shot to shot. Video mode's model then animates the keyframe.
@@ -37,8 +38,10 @@ STORYBOARD = (
     '"what happens in this shot, where, and who is in it, in one or two sentences, using the cast names", "camera": '
     '"a shot type and camera move, like slow zoom in, tracking shot, static wide shot", "cast": ["names in this '
     'shot"], "seconds": {seconds}}}]}}\n'
-    "Use one to three cast members, the same names in every shot. Each shot is one continuous moment; the film "
-    "tells a small story from the first shot to the last. Describe what is seen, never what is felt or heard."
+    "The cast is one to three living characters (people, animals, creatures), with the same names in every shot. "
+    "Things and places are never cast members: a kite, a car, a house or a forest is described in the shots. Each "
+    "shot is one continuous moment; the film tells a small story from the first shot to the last. Describe what is "
+    "seen, never what is felt or heard."
 )
 TRANSITIONS = ("cut", "fade")
 FADE = 0.5  # seconds a fade takes
@@ -203,7 +206,10 @@ def make(
         if picture.exists():
             continue
         say(f"Cast: {name}")
-        prompt = f"{board.look} Character reference of {name}: {desc}. Full body, facing the camera, plain background."
+        prompt = (
+            f"{board.look} Character reference of {name}, alone: {desc}. Full body, facing the camera, plain "
+            "background."
+        )
         made = with_mode(agent, "image", lambda p=prompt: media.generate_image(
             agent, p, cancelled, ask, imageopts.Options(size="3:4", quality=board.quality)))  # fmt: skip
         keep(made.files[0], picture)

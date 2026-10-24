@@ -216,7 +216,8 @@ The Fox and the Kitten  (.lcode/media/films/the-fox-and-the-kitten)
 ![The cast's reference pictures (right) and a frame from each of the three shots](assets/film-fox-and-kitten.jpg)
 
 1. **The storyboard:** the [prompt assistant](#the-prompt-assistant) writes it from your idea: the
-   look of the whole film, the cast (each character described once) and the shots (what happens,
+   look of the whole film, the cast (each living character described once; things like a kite or a car are
+   described in the shots) and the shots (what happens,
    the camera, who's in it, how long). It's saved as `storyboard.json` (and a readable
    `storyboard.md`) in the film's folder.
 2. **The cast:** each character gets a reference picture, made once, in `cast/`.
