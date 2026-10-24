@@ -87,9 +87,12 @@ COMMANDS = {
     "/edit": "Image mode: change an image by instruction, e.g. /edit 3 make the sky purple (@photo.png: references)",
     "/use": "Image mode: images the next requests follow, e.g. /use 3 or /use photo.png (/use off)",
     "/extend": "Outpaint an image (/extend 3 --ar 16:9), or continue a clip in video mode (/extend 4 --seconds 3)",
-    "/upscale": "Image mode: 2 or 4 times the pixels, e.g. /upscale 3 4",
+    "/upscale": "2 or 4 times the pixels of an image or a clip, e.g. /upscale 3 4",
     "/nobg": "Image mode: remove the background (a transparent PNG), e.g. /nobg 3",
     "/animate": "Image mode: make a video starting from an image, e.g. /animate 3 the waves roll in (video mode)",
+    "/smooth": "Video mode: 2 or 4 times the frames (smoother motion), e.g. /smooth 4",
+    "/sound": "Video mode: add sound to a clip, e.g. /sound 4 waves and seagulls",
+    "/restyle": "Video mode: the same clip in a new look, e.g. /restyle 4 as a watercolor painting",
     "/play": "Play a video in your player, e.g. /play 4 (default: the last)",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
@@ -1404,9 +1407,12 @@ def respond(agent: Agent, line: str) -> None:
 
 IMAGE_COMMANDS = (
     "/options", "/again", "/vary", "/gallery", "/open", "/play", "/edit", "/use", "/extend", "/upscale", "/nobg",
-    "/animate",
+    "/animate", "/smooth", "/sound", "/restyle",
 )  # fmt: skip
-VIDEO_TOO = ("/options", "/again", "/vary", "/gallery", "/open", "/play", "/use", "/extend")  # video mode has these
+VIDEO_TOO = (
+    "/options", "/again", "/vary", "/gallery", "/open", "/play", "/use", "/extend", "/upscale", "/smooth", "/sound",
+    "/restyle",
+)  # what video mode has  # fmt: skip
 NUMBER = re.compile(r"^#?(\d+)$")
 
 
@@ -1464,7 +1470,8 @@ def image_command(agent: Agent, cmd: str, arg: str) -> None:
             return
         if cmd == "/vary":
             job = dict(entry.get("job") or {"kind": "image", "sources": [], "mask": None, "pads": None})
-            if entry.get("kind") in ("upscale", "remove-background") or job["kind"] not in ("image", "edit", "video"):
+            tools = ("upscale", "remove-background", "interpolate", "sound")
+            if entry.get("kind") in tools or job["kind"] not in ("image", "edit", "video"):
                 c.print(f"[yellow]#{entry['n']} is {escape(entry['prompt'])}: /vary the image it came from.[/]")
                 return
             job["prompt"] = entry["prompt"] if job["kind"] == "image" else job.get("prompt", entry["prompt"])
@@ -1524,6 +1531,30 @@ def image_command(agent: Agent, cmd: str, arg: str) -> None:
             make_image(
                 agent, run=lambda cancel, ask: media.apply_tool(agent, "upscale", source, int(scale), cancel, ask)
             )
+            return
+        if cmd == "/smooth":
+            times = int(rest.strip().lower().rstrip("x×") or "2")
+            if times not in (2, 4):
+                c.print("[yellow]/smooth makes 2 or 4 times the frames: /smooth 4 2[/]")
+                return
+            make_image(
+                agent, run=lambda cancel, ask: media.apply_tool(agent, "interpolate", source, times, cancel, ask)
+            )
+            return
+        if cmd == "/sound":
+            make_image(agent, run=lambda cancel, ask: media.apply_tool(agent, "sound", source, 1, cancel, ask, rest))
+            return
+        if cmd == "/restyle":
+            if not media.is_video(source):
+                c.print("[yellow]/restyle works on clips: /restyle 4 as a watercolor painting.[/]")
+                return
+            text, options = imageopts.parse(rest, imageopts.replace_seed(agent.image_options, n=1))
+            if not text:
+                c.print("[yellow]Say the new look: /restyle 4 as a watercolor painting[/]")
+                return
+            job = {"kind": "video", "prompt": text, "options": options, "sources": [], "mask": None, "pads": None,
+                   "keep_shape": True, "restyle": str(source), "seconds_given": "--seconds" in rest}  # fmt: skip
+            make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
             return
         if cmd == "/nobg":
             make_image(

@@ -6,10 +6,12 @@ sizes, variations and a gallery come with #151, video with #153.
 
 from __future__ import annotations
 
+import json
 import os
 import random
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -269,6 +271,7 @@ def thumbnail(server: comfy.Server, outputs: dict, node: str = THUMB_NODES[1]) -
 
 SIZE_FLAG = re.compile(r"(?:^|\s)--?(ar|aspect|size)\b")
 MASK_FLAG = re.compile(r'(?:^|\s)--mask\s+("[^"]+"|\S+)')
+REF_FLAG = re.compile(r"(?:^|\s)--refs?\b")
 
 
 def request(
@@ -276,6 +279,8 @@ def request(
 ) -> list[Made]:
     """A typed request: its @references (images to edit or follow), --mask, and flags (--n 4 --ar 16:9 …, over
     the session's /options), then the images."""
+    as_references = bool(REF_FLAG.search(text))
+    text = REF_FLAG.sub(" ", text)
     mask = None
     m = MASK_FLAG.search(text)
     if m:
@@ -292,8 +297,12 @@ def request(
     if agent.settings.mode == "video":
         if mask:
             raise MediaError("Video mode doesn't take a mask: @photo.png starts a video from a picture.")
-        job = {"kind": "video", "prompt": prompt, "options": options, "sources": [str(p) for p in sources[:2]],
-               "mask": None, "pads": None, "keep_shape": not SIZE_FLAG.search(text)}  # fmt: skip
+        if as_references and not sources:
+            raise MediaError("--ref makes the @pictures references: @cat.png @hat.png --ref the cat wears the hat")
+        frames = [] if as_references else [str(p) for p in sources[:2]]
+        refs = [str(p) for p in sources] if as_references else []
+        job = {"kind": "video", "prompt": prompt, "options": options, "sources": frames, "mask": None, "pads": None,
+               "keep_shape": not SIZE_FLAG.search(text), "refs": refs}  # fmt: skip
         return redo(agent, job, cancelled, ask)
     job = {"kind": "edit" if sources else "image", "prompt": prompt, "options": options,
            "sources": [str(p) for p in sources], "mask": str(mask) if mask else None, "pads": None,
@@ -492,8 +501,13 @@ def generate_video(
     start = sources[0] if sources else None
     end = sources[1] if len(sources) > 1 else None
     clip = Path(job["extend"]) if job.get("extend") else None
-    model = video_model(agent, "first-last-frame" if end else ("camera" if options.camera else
-                        ("image-to-video" if clip else "")))  # fmt: skip
+    refs = [Path(p) for p in job.get("refs") or []]
+    restyle = Path(job["restyle"]) if job.get("restyle") else None
+    task = (
+        "restyle" if restyle else "references" if refs else "first-last-frame" if end
+        else "camera" if options.camera else "image-to-video" if clip else ""
+    )  # fmt: skip
+    model = video_model(agent, task)
     files = ensure_installed(agent, model, server, ask)
     workflow = comfy.load_workflow(model.workflow)
     seed = options.seed if options.seed is not None else random.randrange(2**32)
@@ -511,6 +525,14 @@ def generate_video(
     if clip is not None:  # the new part continues the clip, so it has its size
         width, height = job["size"]
     fps = int(workflow.defaults.get("fps", 24))
+    if clip is not None:  # one clip, one pace: the new part plays at the clip's fps
+        fps = int(clip_info(clip)["fps"] or fps)
+    if restyle is not None:  # the restyled clip has the clip's size and pace (up to the model's length)
+        info = clip_info(restyle)
+        width, height = (info["width"] // 16 * 16 or 832), (info["height"] // 16 * 16 or 480)
+        fps = int(info["fps"] or fps)
+        options = replace(options, seconds=min(options.seconds if job.get("seconds_given") else 99,
+                                               (min(info["frames"] or 81, 81) - 1) / fps))  # fmt: skip
     text = imageopts.styled(prompt, options.style)
     values = {**workflow.defaults, **files, "prompt": text, "seed": seed, "width": width, "height": height,
               "length": imageopts.frames(options.seconds, fps), "fps": fps}  # fmt: skip
@@ -535,26 +557,73 @@ def generate_video(
             graph[latent]["inputs"]["end_image"] = ["8101", 0]
         if clip is not None:
             continue_clip(graph, latent, server.upload(clip), values["length"])
+        vace = edits.node_of(graph, "WanVaceToVideo")
+        if refs and vace is not None:
+            graph[vace]["inputs"]["reference_image"] = reference_strip(graph, [server.upload(p) for p in refs])
+        if restyle is not None and vace is not None:
+            graph[vace]["inputs"]["control_video"] = control_from(graph, server.upload(restyle), values["length"])
     except (comfy.ComfyError, OSError) as e:
         raise MediaError(f"Couldn't hand the files to ComfyUI: {e}") from e
     add_thumbnail(graph, width, height)
     meta = describe_job(model, workflow, prompt, text, seed, values, options, files)
     meta.update({"seconds": round((values["length"] - 1) / fps, 2), "fps": fps, "frames": values["length"],
                  "start_image": shown(agent, start) if start else "", "end_image": shown(agent, end) if end else "",
-                 "camera": options.camera, "extends": shown(agent, clip) if clip else ""})  # fmt: skip
-    remembered = {k: job.get(k) for k in ("kind", "prompt", "sources", "mask", "pads", "keep_shape", "extend", "size")}
-    stem = f"{clip.stem}-extended" if clip else ""
+                 "camera": options.camera, "extends": shown(agent, clip) if clip else "",
+                 "references": [shown(agent, p) for p in refs],
+                 "restyles": shown(agent, restyle) if restyle else ""})  # fmt: skip
+    keys = ("kind", "prompt", "sources", "mask", "pads", "keep_shape", "extend", "size", "refs", "restyle")
+    remembered = {k: job.get(k) for k in keys}
+    stem = f"{clip.stem}-extended" if clip else (f"{restyle.stem}-restyled" if restyle else "")
     plan = Plan(model, workflow, graph, meta, prompt, seed, options, "video", job.get("sources") or [], remembered,
                 stem)  # fmt: skip
     return run_plan(agent, server, plan, cancelled, label)
 
 
-VIDEO_LATENTS = ("Wan22ImageToVideoLatent", "WanFunInpaintToVideo", "WanCameraImageToVideo")
+VIDEO_LATENTS = ("Wan22ImageToVideoLatent", "WanFunInpaintToVideo", "WanCameraImageToVideo", "WanVaceToVideo")
 WHY = {
     "first-last-frame": "a clip between two frames",
     "camera": "a camera move",
     "image-to-video": "continuing a clip",
+    "references": "following reference pictures",
+    "restyle": "restyling a clip",
 }
+
+
+def reference_strip(graph: dict, names: list[str]) -> list:
+    """The reference pictures side by side in one image, as VACE takes them."""
+    graph["8300"] = {"class_type": "LoadImage", "inputs": {"image": names[0]}}
+    strip = ["8300", 0]
+    for k, name in enumerate(names[1:], 1):
+        load, stitch = str(8300 + 2 * k - 1), str(8300 + 2 * k)
+        graph[load] = {"class_type": "LoadImage", "inputs": {"image": name}}
+        graph[stitch] = {
+            "class_type": "ImageStitch",
+            "inputs": {"image1": strip, "direction": "right", "match_image_size": True, "spacing_width": 0,
+                       "spacing_color": "white", "image2": [load, 0]},
+        }  # fmt: skip
+        strip = [stitch, 0]
+    return strip
+
+
+def control_from(graph: dict, clip_name: str, length: int) -> list:
+    """Restyling: the clip's outlines (Canny edges), frame by frame, for VACE to follow."""
+    graph["8400"] = {"class_type": "LoadVideo", "inputs": {"file": clip_name}}
+    graph["8401"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["8400", 0]}}
+    graph["8402"] = {
+        "class_type": "ImageFromBatch",
+        "inputs": {"image": ["8401", 0], "batch_index": 0, "length": length},
+    }
+    latent = edits.node_of(graph, "WanVaceToVideo")
+    w, h = graph[latent]["inputs"]["width"], graph[latent]["inputs"]["height"]
+    graph["8403"] = {
+        "class_type": "ImageScale",
+        "inputs": {"image": ["8402", 0], "upscale_method": "bilinear", "width": w, "height": h, "crop": "center"},
+    }
+    graph["8404"] = {
+        "class_type": "Canny",
+        "inputs": {"image": ["8403", 0], "low_threshold": 0.3, "high_threshold": 0.6},
+    }
+    return ["8404", 0]
 
 
 def video_model(agent: Agent, task: str) -> catalog.MediaModel:
@@ -582,6 +651,46 @@ def continue_clip(graph: dict, latent: str, clip_name: str, length: int) -> None
     graph[video]["inputs"]["images"] = ["8204", 0]
 
 
+VIDEO_TYPES = (".mp4", ".webm", ".mkv", ".mov")
+TOOL_NAMES = {"upscale": "upscaled", "remove-background": "nobg", "interpolate": "smooth", "sound": "sound"}
+
+
+def is_video(path: Path) -> bool:
+    return path.suffix.lower() in VIDEO_TYPES
+
+
+def clip_info(path: Path) -> dict:
+    """A clip's fps, seconds, frames, width and height: from lcode's JSON next to it, else its MP4 header."""
+    info = {"fps": 24.0, "seconds": 0.0, "frames": 0, "width": 0, "height": 0}
+    try:
+        meta = json.loads(path.with_suffix(".json").read_text())
+        info.update({k: meta[k] for k in info if isinstance(meta.get(k), (int, float))})
+    except (OSError, ValueError):
+        pass
+    if not info["seconds"]:
+        info["seconds"] = mp4_seconds(path)
+    if not info["frames"] and info["seconds"]:
+        info["frames"] = round(info["seconds"] * info["fps"]) + 1
+    return info
+
+
+def mp4_seconds(path: Path) -> float:
+    """An MP4's length from its movie header (mvhd), or 0."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return 0.0
+    i = data.find(b"mvhd")
+    if i < 4:
+        return 0.0
+    version = data[i + 4]
+    if version == 1:
+        scale, duration = struct.unpack(">IQ", data[i + 24 : i + 36])
+    else:
+        scale, duration = struct.unpack(">II", data[i + 16 : i + 24])
+    return duration / scale if scale else 0.0
+
+
 def apply_tool(
     agent: Agent,
     task: str,
@@ -589,27 +698,52 @@ def apply_tool(
     scale: int = 2,
     cancelled: Callable[[], bool] = lambda: False,
     ask: Callable[[str], bool] | None = None,
+    prompt: str = "",
 ) -> Made:
-    """/upscale and /nobg: a tool model on one image (no seed, no prompt)."""
+    """A tool model on one image or clip: /upscale (both), /nobg (pictures), /smooth and /sound (clips)."""
+    video = is_video(source)
+    if task == "remove-background" and video:
+        raise MediaError("/nobg works on pictures.")
+    if task in ("interpolate", "sound") and not video:
+        raise MediaError(f"/{'smooth' if task == 'interpolate' else 'sound'} works on clips.")
+    if task == "sound" and not prompt.strip():
+        raise MediaError("Say what it should sound like: /sound 4 waves and seagulls")
     server = prepare(agent, ask, cancelled)
     model = catalog.load().tool(task)
     files = ensure_installed(agent, model, server, ask)
-    workflow = comfy.load_workflow(model.workflow)
+    workflow = comfy.load_workflow(model.video_workflow if video and model.video_workflow else model.workflow)
     try:
         name = server.upload(source)
-        width, height = edits.image_size(source)
+        if video:
+            info = clip_info(source)
+            width, height = info["width"] or 864, info["height"] or 480
+        else:
+            width, height = edits.image_size(source)
     except (comfy.ComfyError, OSError, edits.EditError) as e:
-        raise MediaError(f"Couldn't hand the image to ComfyUI: {e}") from e
-    values = {**workflow.defaults, **files, "image": name}
+        raise MediaError(f"Couldn't hand the file to ComfyUI: {e}") from e
+    values = {**workflow.defaults, **files, ("video" if video else "image"): name}
+    seed = 0
+    if video:
+        values["fps"] = info["fps"]
     if task == "upscale":
         values["scale_by"] = scale / 4  # Real-ESRGAN makes 4 times the size; scaled back for 2
         width, height = width * scale, height * scale
+    elif task == "interpolate":
+        values["multiplier"], values["fps"] = scale, info["fps"] * scale
+    elif task == "sound":
+        seed = random.randrange(2**32)
+        values.update({"prompt": prompt.strip(), "seed": seed, "seconds": max(1.0, info["seconds"])})
     graph = comfy.fill(workflow.graph, values)
     add_thumbnail(graph, width, height)
-    what = f"upscaled {scale}×" if task == "upscale" else "background removed"
-    prompt = f"{what}: {shown(agent, source)}"
+    what = {
+        "upscale": f"upscaled {scale}×",
+        "remove-background": "background removed",
+        "interpolate": f"{scale}× the frames",
+        "sound": f"sound: {prompt.strip()}",
+    }[task]
+    label = f"{what} ({shown(agent, source)})"
     meta = {
-        "prompt": prompt,
+        "prompt": label,
         "model": model.name,
         "model_key": model.key,
         "workflow": workflow.key,
@@ -617,8 +751,10 @@ def apply_tool(
         "files": files,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     }
-    suffix = f"upscaled-{scale}x" if task == "upscale" else "nobg"
-    plan = Plan(model, workflow, graph, meta, prompt, 0, imageopts.Options(), task, [str(source)], {},
+    if video:
+        meta.update({"fps": values["fps"], "seconds": info["seconds"], "width": width, "height": height})
+    suffix = {"upscale": f"upscaled-{scale}x", "interpolate": f"smooth-{scale}x"}.get(task, TOOL_NAMES[task])
+    plan = Plan(model, workflow, graph, meta, label, seed, imageopts.Options(), task, [str(source)], {},
                 f"{source.stem}-{suffix}")  # fmt: skip
     return run_plan(agent, server, plan, cancelled, "")
 

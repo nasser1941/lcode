@@ -1,0 +1,78 @@
+{
+  "source": "ComfyUI's template utility_video_frame_interpolation, in API format",
+  "defaults": {
+    "multiplier": 2,
+    "fps": 48
+  },
+  "labels": {
+    "1": "loading the clip",
+    "2": "reading its frames",
+    "3": "loading FILM",
+    "4": "making the in-between frames",
+    "5": "making the video",
+    "6": "saving"
+  },
+  "graph": {
+    "1": {
+      "class_type": "LoadVideo",
+      "inputs": {
+        "file": "$video"
+      }
+    },
+    "2": {
+      "class_type": "GetVideoComponents",
+      "inputs": {
+        "video": [
+          "1",
+          0
+        ]
+      }
+    },
+    "3": {
+      "class_type": "FrameInterpolationModelLoader",
+      "inputs": {
+        "model_name": "$model"
+      }
+    },
+    "4": {
+      "class_type": "FrameInterpolate",
+      "inputs": {
+        "interp_model": [
+          "3",
+          0
+        ],
+        "images": [
+          "2",
+          0
+        ],
+        "multiplier": "$multiplier"
+      }
+    },
+    "5": {
+      "class_type": "CreateVideo",
+      "inputs": {
+        "images": [
+          "4",
+          0
+        ],
+        "audio": [
+          "2",
+          1
+        ],
+        "fps": "$fps"
+      }
+    },
+    "6": {
+      "class_type": "SaveVideo",
+      "inputs": {
+        "video": [
+          "5",
+          0
+        ],
+        "filename_prefix": "lcode/video",
+        "format": "mp4",
+        "codec": "auto"
+      }
+    }
+  }
+}
