@@ -82,11 +82,13 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   with tool calling. Or use LM Studio, llama.cpp, vLLM or MLX instead of Ollama.
 - **MCP servers, ready to go.** Connect Jira and Confluence, GitHub, AWS, Google Drive, Grafana,
   Google Cloud, Sentry, Linear, Notion, Postgres, Kubernetes, Metabase, Encord, Valohai and more with one command
-  (`lcode mcp add atlassian`), image generation with ComfyUI, or any other MCP server. Browser sign-in (OAuth) is built in.
+  (`lcode mcp add atlassian`), or any other MCP server. Browser sign-in (OAuth) is built in.
 - **Sees images.** Attach a screenshot or mockup with `@path` and lcode looks at it, using the
-  vision part of your model. With ComfyUI (`lcode mcp add comfyui`) it can also generate and edit
-  images with local models such as FLUX, SDXL and Qwen-Image, or, in the cloud, images, videos
-  and speech with xAI's Grok Imagine (`lcode mcp add xai`).
+  vision part of your model.
+- **Images, videos and films.** Image and video [modes](https://nasser1941.github.io/lcode/modes/)
+  (`/mode image`) make pictures, edits, clips and short films with local models run by ComfyUI
+  (FLUX.2 klein, Wan 2.2, installed on demand), or with xAI's Grok Imagine and your own key, after
+  showing what it costs.
 - **Web search when needed.** Looks up the latest versions, docs and error messages with Ollama web
   search, Brave, Tavily or your own SearXNG, and reads pages as clean text.
 - **Private.** The model runs on your machine, lcode never uploads your files and has no telemetry.

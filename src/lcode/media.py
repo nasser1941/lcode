@@ -1,7 +1,7 @@
 """Image and video mode: a request becomes media, made by ComfyUI (lcode.comfy) with no language model in between.
 
-Image mode makes one image per request with the image model chosen from the media catalog (lcode.media_catalog);
-sizes, variations and a gallery come with #151, video with #153.
+The image or video model is chosen from the media catalog (lcode.media_catalog). A cloud model there (Grok Imagine)
+makes what it can at its provider instead, after showing the cost (lcode.media_cloud).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 import requests
 from rich.text import Text
 
-from lcode import assistant, comfy, edits, imageopts, preview
+from lcode import assistant, comfy, edits, imageopts, media_cloud, preview
 from lcode import media_catalog as catalog
 
 if TYPE_CHECKING:
@@ -112,6 +112,8 @@ def offer_install(agent: Agent, server: comfy.Server, ask: Callable[[str], bool]
 
 def warm(agent: Agent) -> str | None:
     """Start ComfyUI in the background on entering image or video mode, so the first request waits less."""
+    if current(agent).cloud:
+        return None  # it runs at its provider; ComfyUI starts when a local model is needed
     if agent.comfy_process is not None and agent.comfy_process.poll() is None:
         return None
     if comfy.Server(agent.settings.comfyui_url).stats():
@@ -335,6 +337,12 @@ def redo(
     agent.last_request = job
     if not job.get("raw") and job["kind"] in ("image", "edit", "video") and not job.get("pads"):
         job = {**job, "expanded": expand(agent, job)}
+    if model.cloud and not media_cloud.cannot(model, job):  # at its provider: all of them, asked once
+        made = media_cloud.make(agent, model, job, options, cancelled, ask)
+        if job["kind"] in ("image", "edit"):
+            for one in made:
+                check_result(agent, one, prompt)
+        return made
     made = []
     for i in range(options.n):
         seed = None if options.seed is None else options.seed + i
@@ -493,8 +501,11 @@ def generate_image(
     if not prompt:
         raise MediaError("Describe the image you want.")
     options = options or imageopts.Options()
-    server = prepare(agent, ask, cancelled)
     model = current(agent, "image")
+    if model.cloud:
+        job = {"kind": "image", "prompt": prompt, "expanded": expanded, "sources": []}
+        return media_cloud.make(agent, model, job, replace(options, n=1), cancelled, ask)[0]
+    server = prepare(agent, ask, cancelled)
     files = ensure_installed(agent, model, server, ask)
     workflow = comfy.load_workflow(model.workflow)
     seed = options.seed if options.seed is not None else random.randrange(2**32)
@@ -522,13 +533,17 @@ def edit_image(
 ) -> Made:
     """An edit of the job's source images: by instruction, through a mask (inpainting), or on a bigger canvas
     (outpainting). The first source sets the shape unless the request gave one."""
-    server = prepare(agent, ask, cancelled)
     chosen = current(agent, "image")
+    why = media_cloud.cannot(chosen, {**job, "kind": "edit"}) if chosen.cloud else ""
+    if chosen.cloud and not why:  # films call this directly
+        return media_cloud.make(agent, chosen, {**job, "kind": "edit"}, replace(options, n=1), cancelled, ask)[0]
+    server = prepare(agent, ask, cancelled)
     model = catalog.load().editor(chosen)
     if model is None:
         raise MediaError("None of lcode's image models edits pictures yet.")
     if model.key != chosen.key:
-        agent.say(f"{chosen.name} doesn't edit pictures: {model.name} makes this one.")
+        reason = f"doesn't do {why} here" if why else "doesn't edit pictures"
+        agent.say(f"{chosen.name} {reason}: {model.name} makes this one{' on your GPU' if chosen.cloud else ''}.")
     files = ensure_installed(agent, model, server, ask)
     workflow = comfy.load_workflow(model.workflow)
     sources = [Path(p) for p in job["sources"]]
@@ -600,7 +615,7 @@ def generate_video(
     restyle = Path(job["restyle"]) if job.get("restyle") else None
     task = (
         "restyle" if restyle else "references" if refs else "first-last-frame" if end
-        else "camera" if options.camera else "image-to-video" if clip else ""
+        else "camera" if options.camera else "extend" if clip else ""
     )  # fmt: skip
     model = video_model(agent, task)
     files = ensure_installed(agent, model, server, ask)
@@ -678,7 +693,7 @@ VIDEO_LATENTS = ("Wan22ImageToVideoLatent", "WanFunInpaintToVideo", "WanCameraIm
 WHY = {
     "first-last-frame": "a clip between two frames",
     "camera": "a camera move",
-    "image-to-video": "continuing a clip",
+    "extend": "extending a clip",
     "references": "following reference pictures",
     "restyle": "restyling a clip",
 }
@@ -722,14 +737,15 @@ def control_from(graph: dict, clip_name: str, length: int) -> list:
 
 
 def video_model(agent: Agent, task: str) -> catalog.MediaModel:
-    """The video model for a job: the chosen one, or the first that does what the job needs."""
+    """The video model for a job: the chosen one, or the first local one that does what the job needs."""
     chosen = current(agent, "video")
-    if not task or task in chosen.tasks:
+    if not chosen.cloud and (not task or task in chosen.tasks):
         return chosen
-    model = catalog.load().for_task("video", task)
+    model = catalog.load().for_task("video", task or "text-to-video")
     if model is None:
         raise MediaError(f"None of lcode's video models does {WHY.get(task, task)} yet.")
-    agent.say(f"{model.name} makes this one ({WHY.get(task, task)}).")
+    where = f"; {chosen.name} doesn't do that here" if chosen.cloud else ""
+    agent.say(f"{model.name} makes this one ({WHY.get(task, task)}{where}).")
     return model
 
 
@@ -784,6 +800,24 @@ def mp4_seconds(path: Path) -> float:
     else:
         scale, duration = struct.unpack(">II", data[i + 16 : i + 24])
     return duration / scale if scale else 0.0
+
+
+def mp4_size(path: Path) -> tuple[int, int]:
+    """An MP4's picture size from its first video track header (tkhd), or (0, 0)."""
+    try:
+        data = path.read_bytes()[: 1 << 22]
+    except OSError:
+        return 0, 0
+    i = data.find(b"tkhd")
+    while i >= 4:
+        size = 8 + (96 if data[i + 4 : i + 5] == b"\x01" else 84)  # the box, with its size and type
+        end = i - 4 + size  # width and height end it, as 16.16 fixed-point numbers
+        if struct.unpack(">I", data[i - 4 : i])[0] == size and end <= len(data):
+            width, height = struct.unpack(">II", data[end - 8 : end])
+            if width and height:
+                return width >> 16, height >> 16
+        i = data.find(b"tkhd", i + 4)
+    return 0, 0
 
 
 def apply_tool(

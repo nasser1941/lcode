@@ -32,17 +32,18 @@ COMING: dict[str, str] = {}
 
 def ready(agent: Agent) -> str:
     """What to do in the agent's mode, said on entering it."""
-    from lcode import media
+    from lcode import media, media_cloud
 
-    if agent.settings.mode == "image":
+    if agent.settings.mode in ("image", "video"):
+        model = media.current(agent)
+        where = "on your GPU"
+        if model.cloud:
+            where = f"at {media_cloud.provider(model).name} (you see the cost and say yes first)"
+        what = "an image" if agent.settings.mode == "image" else "a video"
+        start = " (@photo.png starts it from a picture)" if agent.settings.mode == "video" else ""
         return (
-            f"Describe an image and press Enter: {media.current(agent).name} makes it on your GPU, into "
+            f"Describe {what} and press Enter{start}: {model.name} makes it {where}, into "
             f"{agent.settings.media_dir}. /mode code switches back."
-        )
-    if agent.settings.mode == "video":
-        return (
-            f"Describe a video and press Enter (@photo.png starts it from a picture): {media.current(agent).name} "
-            f"makes it on your GPU, into {agent.settings.media_dir}. /mode code switches back."
         )
     return COMING.get(agent.settings.mode, "")
 
