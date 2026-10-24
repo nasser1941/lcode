@@ -202,6 +202,8 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         media_dir=cfg["media_dir"],
         image_model=cfg["image_model"],
         video_model=cfg["video_model"],
+        prompt_assistant=cfg["prompt_assistant"],
+        check_results=cfg["check_results"],
         preview=cfg["preview"],
         web=switch(options.web, cfg["web"], "on"),
         search_backend=cfg["search_backend"],

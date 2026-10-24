@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 import requests
 from rich.text import Text
 
-from lcode import comfy, edits, imageopts, preview
+from lcode import assistant, comfy, edits, imageopts, preview
 from lcode import media_catalog as catalog
 
 if TYPE_CHECKING:
@@ -270,6 +270,7 @@ def thumbnail(server: comfy.Server, outputs: dict, node: str = THUMB_NODES[1]) -
 
 
 SIZE_FLAG = re.compile(r"(?:^|\s)--?(ar|aspect|size)\b")
+RAW_FLAG = re.compile(r"(?:^|\s)--raw\b")
 MASK_FLAG = re.compile(r'(?:^|\s)--mask\s+("[^"]+"|\S+)')
 REF_FLAG = re.compile(r"(?:^|\s)--refs?\b")
 
@@ -281,6 +282,8 @@ def request(
     the session's /options), then the images."""
     as_references = bool(REF_FLAG.search(text))
     text = REF_FLAG.sub(" ", text)
+    raw = bool(RAW_FLAG.search(text))  # the prompt exactly as typed: no assistant
+    text = RAW_FLAG.sub(" ", text)
     mask = None
     m = MASK_FLAG.search(text)
     if m:
@@ -302,11 +305,19 @@ def request(
         frames = [] if as_references else [str(p) for p in sources[:2]]
         refs = [str(p) for p in sources] if as_references else []
         job = {"kind": "video", "prompt": prompt, "options": options, "sources": frames, "mask": None, "pads": None,
-               "keep_shape": not SIZE_FLAG.search(text), "refs": refs}  # fmt: skip
+               "keep_shape": not SIZE_FLAG.search(text), "refs": refs, "raw": raw}  # fmt: skip
         return redo(agent, job, cancelled, ask)
+    if not sources and not mask and not raw:
+        change = follow_up(agent, prompt)
+        if change:  # "darker", "add a hat": the last picture, changed
+            last = agent.media_results[-1]
+            agent.console.print(Text(f"✎ A change to #{last['n']}: {change}", style="dim italic"))
+            job = {"kind": "edit", "prompt": change, "options": options, "sources": [last["path"]], "mask": None,
+                   "pads": None, "keep_shape": not SIZE_FLAG.search(text), "raw": True}  # fmt: skip
+            return redo(agent, job, cancelled, ask)
     job = {"kind": "edit" if sources else "image", "prompt": prompt, "options": options,
            "sources": [str(p) for p in sources], "mask": str(mask) if mask else None, "pads": None,
-           "keep_shape": not SIZE_FLAG.search(text)}  # fmt: skip
+           "keep_shape": not SIZE_FLAG.search(text), "raw": raw}  # fmt: skip
     return redo(agent, job, cancelled, ask)
 
 
@@ -322,18 +333,100 @@ def redo(
     if options.negative and not model.negative:
         agent.say(f"{model.name} doesn't use a negative prompt: describe what you want instead (--no is ignored).")
     agent.last_request = job
+    if not job.get("raw") and job["kind"] in ("image", "edit", "video") and not job.get("pads"):
+        job = {**job, "expanded": expand(agent, job)}
     made = []
     for i in range(options.n):
         seed = None if options.seed is None else options.seed + i
         label = f"{i + 1} of {options.n}" if options.n > 1 else ""
         one = replace(options, seed=seed, n=1)
         if job["kind"] == "image":
-            made.append(generate_image(agent, prompt, cancelled, ask, one, label))
+            made.append(generate_image(agent, prompt, cancelled, ask, one, label, job.get("expanded", "")))
         elif job["kind"] == "video":
             made.append(generate_video(agent, job, one, cancelled, ask, label))
         else:
             made.append(edit_image(agent, job, one, cancelled, ask, label))
+        if job["kind"] in ("image", "edit"):
+            check_result(agent, made[-1], prompt)
     return made
+
+
+# ----------------------------------------------------------------------------- the prompt assistant
+
+
+def helps(agent: Agent, kind: str) -> bool:
+    """Whether the prompt assistant writes this kind of prompt: video only by default, or everything (all)."""
+    setting = agent.settings.prompt_assistant
+    return setting != "off" and (setting != "video" or kind == "video")
+
+
+def helper(agent: Agent) -> assistant.Assistant | None:
+    """The prompt assistant (lcode.assistant): the prompt_assistant setting's model, or a small installed one."""
+    if getattr(agent, "_assistant_model", None) is None:
+        setting = agent.settings.prompt_assistant
+        model = assistant.pick(agent.ollama, "auto" if setting == "off" else setting)  # check_results may want one
+        agent._assistant_model = model or ""
+        if setting not in assistant.SCOPES and not model:
+            agent.say(f"The prompt assistant {agent.settings.prompt_assistant} isn't installed in Ollama: ollama pull "
+                      f"{agent.settings.prompt_assistant}. Prompts go as typed.", warning=True)  # fmt: skip
+    return assistant.Assistant(agent.ollama, agent._assistant_model) if agent._assistant_model else None
+
+
+def expand(agent: Agent, job: dict) -> str:
+    """The assistant's fuller prompt for the job, shown before it's used; empty when it's off or fails."""
+    kind = job["kind"]
+    helper_model = helper(agent) if helps(agent, kind) else None
+    if helper_model is None:
+        return ""
+    start = Path(job["sources"][0]) if kind == "video" and job.get("sources") else None
+    try:
+        with agent.console.status(
+            f"The prompt assistant ({helper_model.model}) is writing the prompt…", spinner="dots"
+        ):
+            text = helper_model.expand(job["prompt"], kind, start if start and edits.is_image(start) else None)
+    except assistant.AssistantError as e:
+        agent.say(f"{e}: the prompt goes as typed.", warning=True)
+        return ""
+    if text and text != job["prompt"]:
+        agent.console.print(Text(f"✎ {text}", style="dim italic"))
+        return text
+    return ""
+
+
+def follow_up(agent: Agent, text: str) -> str | None:
+    """A short request after an image: the assistant decides whether it's a change to it, and words it."""
+    last = agent.media_results[-1] if agent.media_results else None
+    if last is None or not edits.is_image(Path(last["path"])) or len(text.split()) > 10:
+        return None
+    if agent.settings.prompt_assistant in ("off", "video"):  # follow-ups come with prompts for pictures (all)
+        return None
+    helper_model = helper(agent)
+    if helper_model is None:
+        return None
+    try:
+        return helper_model.follow_up(text, last["prompt"])
+    except assistant.AssistantError:
+        return None
+
+
+def check_result(agent: Agent, made: Made, request: str) -> None:
+    """With check_results on: the assistant looks at the picture and says whether it shows what was asked."""
+    if not agent.settings.check_results or not made.files or not edits.is_image(made.files[0]):
+        return
+    helper_model = helper(agent)
+    if helper_model is None:
+        return
+    try:
+        with agent.console.status("The prompt assistant is checking the picture…", spinner="dots"):
+            result = helper_model.check(made.files[0], request)
+    except assistant.AssistantError as e:
+        agent.say(f"Couldn't check the picture: {e}", warning=True)
+        return
+    if result.matches:
+        agent.console.print(Text("✓ It shows what you asked for.", style="green"))
+    else:
+        tip = f" Try: {result.better_prompt}" if result.better_prompt else ""
+        agent.console.print(Text(f"⚠ {result.missing or 'It misses part of the request.'}{tip}", style="yellow"))
 
 
 def make(
@@ -393,8 +486,9 @@ def generate_image(
     ask: Callable[[str], bool] | None = None,
     options: imageopts.Options | None = None,
     label: str = "",
+    expanded: str = "",
 ) -> Made:
-    """One image from the prompt, saved in the media folder and numbered. Raises MediaError with what to do."""
+    """One image from the prompt (or the assistant's fuller prompt), saved in the media folder and numbered."""
     prompt = prompt.strip()
     if not prompt:
         raise MediaError("Describe the image you want.")
@@ -406,7 +500,7 @@ def generate_image(
     seed = options.seed if options.seed is not None else random.randrange(2**32)
     steps, megapixels = model.preset(options.quality)
     width, height = imageopts.dimensions(options.size, megapixels)
-    text = imageopts.styled(prompt, options.style)
+    text = imageopts.styled(expanded or prompt, options.style)
     values = {**workflow.defaults, **files, "prompt": text, "seed": seed, "width": width, "height": height}
     if steps:
         values["steps"] = steps
@@ -452,7 +546,8 @@ def edit_image(
     keep_shape = bool(job.get("keep_shape", True) or job.get("mask") or pads)
     ratio = f"{first_w}x{first_h}" if keep_shape else options.size
     width, height = shape(ratio, megapixels)
-    instruction = job["prompt"] if not pads else f"{edits.EXTEND_HINT} {job['prompt']}".strip()
+    instruction = job.get("expanded") or job["prompt"]
+    instruction = instruction if not pads else f"{edits.EXTEND_HINT} {job['prompt']}".strip()
     text = imageopts.styled(instruction, options.style)
     values = {**workflow.defaults, **files, "prompt": text, "seed": seed, "width": width, "height": height}
     if steps:
@@ -533,7 +628,7 @@ def generate_video(
         fps = int(info["fps"] or fps)
         options = replace(options, seconds=min(options.seconds if job.get("seconds_given") else 99,
                                                (min(info["frames"] or 81, 81) - 1) / fps))  # fmt: skip
-    text = imageopts.styled(prompt, options.style)
+    text = imageopts.styled(job.get("expanded") or prompt, options.style)
     values = {**workflow.defaults, **files, "prompt": text, "seed": seed, "width": width, "height": height,
               "length": imageopts.frames(options.seconds, fps), "fps": fps}  # fmt: skip
     if steps:

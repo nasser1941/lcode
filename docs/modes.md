@@ -196,6 +196,53 @@ video ❯ /play
 - **Long renders:** progress shows the step and the time left. With `notify` on, lcode sends a
   desktop notification when a clip that took longer than `notify_after` seconds is done.
 
+## The prompt assistant
+
+Image and video models do better with some prompts than others. A small local language model,
+the prompt assistant, can write the fuller prompt for you, read a short follow-up as a change to
+the last picture, and check a result against what you asked. It runs in Ollama, loaded for each
+job and unloaded right after, so the image or video model keeps the GPU.
+
+```text
+video ❯ city at night rain
+✎ A lone figure walks through a neon-drenched city street under a relentless summer rain. The shot slowly zooms in on their silhouette as water droplets ripple across the pavement…
+◆ #1 .lcode/media/…-city-at-night-rain.mp4  864×480 · Wan 2.2 TI2V 5B · seed 2001 · 62 s
+```
+
+- **Where it helps:** the `prompt_assistant` setting. `video` (the default) writes video prompts,
+  `all` writes picture prompts too and reads follow-ups, `off` sends prompts as typed, and an
+  Ollama model's name (`qwen3.5:9b`) uses that model everywhere. Otherwise lcode picks a small
+  installed one (`qwen3.5:4b` first); with none installed, prompts go as typed. `--raw` sends one
+  request as typed.
+- **Your words stay yours:** the gallery and file names keep what you typed; the fuller prompt is
+  shown (✎) and saved in the JSON next to the result (`full_prompt`).
+- **Any language:** it writes in English from what you type. FLUX.2 klein reads other languages
+  well on its own; Wan does better in English.
+- **A start picture** is shown to it (it can see), so a video prompt describes what the picture
+  shows and then the motion.
+- **Follow-ups** (with `all`): a short request after a picture ("darker", "add a hat") is read as a
+  change to it and made as an edit; a new description makes a new picture.
+- **Checking results:** `lcode config set check_results true` has it look at each picture and say
+  whether it shows what you asked, with a better prompt when it doesn't (⚠ … Try: …).
+
+### Measured with the assistant
+
+On the RTX 4080 Laptop GPU (12 GB) with `qwen3.5:4b`, the same seeds with and without the
+assistant:
+
+- **Pictures (FLUX.2 klein 4B, six short prompts, two not in English):** no clear gain. "fox snow",
+  "a cat astronaut", the panda (asked in Chinese) and the OPEN sign came out about as well either
+  way; "cozy cabin" became a twilight exterior instead of an interior, and for a rainy Paris café
+  (asked in German) it added a "Bienvenue" sign nobody asked for. It costs about 6 s per picture,
+  12 s with the check, against 3.6 s for the picture itself. So pictures go as typed by default.
+- **Video (Wan 2.2 TI2V 5B, `fast`):** clearly better. "city at night rain" as typed came out
+  almost black; the fuller prompt made a neon street in the rain with a person walking through it.
+  "dog running beach" became a more detailed golden retriever on the sand. The few seconds it
+  takes are small next to a minute of video. So video prompts are written by default.
+- **The check** said every one of the six pictures matched, which they did; it hasn't been
+  measured on pictures that miss.
+
+## ComfyUI
 
 ComfyUI runs the image and video models; lcode drives it through its API.
 
@@ -293,7 +340,6 @@ themselves:
 ## Coming next
 
 - **#155 Movies:** storyboards with a consistent cast, shots stitched into one film.
-- **#156 Prompt assistant:** a small local model for prompts and follow-ups.
 - **#157 Cloud generation**, with costs shown (Grok Imagine first).
 
 The permission mode (`ask`, `plan`, `auto-edit`, `yolo`) is a different setting: `/permissions`

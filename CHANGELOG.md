@@ -6,6 +6,22 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The prompt assistant** (#156): a small local model (`qwen3.5:4b` when installed) writes fuller
+  prompts in English for image and video mode, reads a start picture, takes follow-ups ("darker")
+  as changes, and checks pictures against the request (`check_results`). See
+  [The prompt assistant](https://nasser1941.github.io/lcode/modes/#the-prompt-assistant).
+  - **Measured:** video prompts get much better (a near-black "city at night rain" became a neon
+    street scene), picture prompts don't (FLUX.2 klein already reads short and non-English prompts
+    well), so by default it writes video prompts only (`prompt_assistant = video`); `all` adds
+    pictures and follow-ups. `--raw` sends one request as typed.
+  - It's loaded for each job and unloaded right after, and your own words stay in the gallery.
+
+### Fixed
+
+- The modes page has its "ComfyUI" heading back (it had slipped under video mode).
+
 ## [0.46.0] - 2026-10-24
 
 ### Added
