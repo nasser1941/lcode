@@ -1107,9 +1107,13 @@ def cmd_media(args) -> None:
         f"ComfyUI at {server.url}" if running else (f"{install.path} (not running)" if install else "no ComfyUI found")
     )
     console.print(f"[dim]{hw.describe()} · {where} · image model: {cfg['image_model']}[/]\n")
-    for mode in ("image", "video"):
+    for mode in ("image", "video", "tool"):
         models = cat.for_mode(mode)
-        console.print(f"[bold]{mode.capitalize()} models[/]")
+        console.print(
+            "[bold]Tools for images[/] [dim](/upscale, /nobg)[/]"
+            if mode == "tool"
+            else f"[bold]{mode.capitalize()} models[/]"
+        )
         if not models:
             console.print(f"  [dim]{media.SOON[mode]}[/]\n")
             continue

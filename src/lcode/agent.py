@@ -380,7 +380,8 @@ class Agent:
 
         self.image_options = ImageOptions()  # image mode's defaults for this session (/options)
         self.media_results: list[dict] = []  # the session's images, numbered (/gallery, /vary, /open)
-        self.last_request: tuple[str, ImageOptions] | None = None  # for /again
+        self.last_request: dict | None = None  # what /again repeats (lcode.media.redo)
+        self.image_refs: list[str] = []  # images every next request follows (/use)
         self.reflected = 0  # messages before this index were already checked for notes to remember
         self._memory: memory_notes.Memory | None = None
         self._agent_types: tuple[Path, dict[str, subagents.AgentType], list[str]] | None = None
@@ -697,7 +698,7 @@ class Agent:
             "model": self.settings.model,
             "mode": self.settings.mode,
             "image_model": self.settings.image_model,
-            "media": {"results": self.media_results, "options": self.image_options.to_json()},
+            "media": {"results": self.media_results, "options": self.image_options.to_json(), "refs": self.image_refs},
             "name": self.session_name,
             "title": self.session_title,
             "messages": self.messages,
@@ -751,6 +752,7 @@ class Agent:
         media = data.get("media") or {}
         self.media_results = [r for r in media.get("results") or [] if isinstance(r, dict) and "path" in r]
         self.image_options = type(self.image_options).from_json(media.get("options") or {})
+        self.image_refs = [r for r in media.get("refs") or [] if isinstance(r, str)]
         self.session_title = data.get("title") or sessions.title_from(self.messages)
         self.tools.read_mtimes.clear()  # files may have changed since; the model must read them again
         self.tools.todos = list(data.get("todos") or [])

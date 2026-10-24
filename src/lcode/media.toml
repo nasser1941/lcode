@@ -8,7 +8,7 @@
 #   alternatives  other file names that do the same job: an installed one is used instead of downloading
 #
 # [models.<key>]  one model.
-#   mode          image or video
+#   mode          image, video, or tool (upscaling, background removal: used by image mode's commands)
 #   tasks         text-to-image, edit, inpaint, text-to-video, image-to-video, first-last-frame, reference-to-video, audio
 #   workflow      lcode's workflow for it (lcode/workflows/<workflow>.json)
 #   files         role -> file key; the workflow's $role placeholders get the file names
@@ -17,6 +17,8 @@
 #   measured      what it did on real hardware; models without it haven't been run yet
 #   quality       per preset (fast, balanced, best): [steps, megapixels]
 #   negative      whether it uses a negative prompt (distilled models don't)
+#   edit          how it edits images: "reference-latent" (its text-to-image workflow, given the images as
+#                 reference latents on both conditionings); absent: it doesn't edit
 
 [files.flux-2-klein-4b-fp8]
 folder = "diffusion_models"
@@ -51,12 +53,25 @@ name = "ae.safetensors"
 url = "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors"
 gb = 0.34
 
+[files.birefnet]
+folder = "background_removal"
+name = "birefnet.safetensors"
+url = "https://huggingface.co/Comfy-Org/BiRefNet/resolve/main/background_removal/birefnet.safetensors"
+gb = 0.44
+
+[files.realesrgan-x4]
+folder = "upscale_models"
+name = "RealESRGAN_x4plus.safetensors"
+url = "https://huggingface.co/Comfy-Org/Real-ESRGAN_repackaged/resolve/main/RealESRGAN_x4plus.safetensors"
+gb = 0.07
+
 [models.flux2-klein-4b]
 name = "FLUX.2 klein 4B"
 mode = "image"
 publisher = "Black Forest Labs"
 license = "Apache 2.0"
-tasks = ["text-to-image"]
+tasks = ["text-to-image", "edit", "references"]
+edit = "reference-latent"
 workflow = "flux2-klein-4b-t2i"
 files = { model = "flux-2-klein-4b-fp8", text_encoder = "qwen-3-4b", vae = "flux2-vae" }
 gpu_gb = 0.0
@@ -78,3 +93,23 @@ measured = "1024×1024: 17 s per image (1.9 s per step), 23 s for the first (RTX
 notes = "photorealistic, writes text well: 8 steps"
 quality = { fast = [6, 0.5], balanced = [8, 1.0], best = [9, 2.0] }
 negative = false
+
+[models.realesrgan-x4]
+name = "Real-ESRGAN x4"
+mode = "tool"
+publisher = "Xintao Wang et al."
+license = "BSD-3-Clause"
+tasks = ["upscale"]
+workflow = "upscale-esrgan"
+files = { model = "realesrgan-x4" }
+notes = "/upscale: 2× or 4× the pixels"
+
+[models.birefnet]
+name = "BiRefNet"
+mode = "tool"
+publisher = "ZhengPeng7"
+license = "MIT"
+tasks = ["remove-background"]
+workflow = "remove-background"
+files = { model = "birefnet" }
+notes = "/nobg: a transparent PNG"

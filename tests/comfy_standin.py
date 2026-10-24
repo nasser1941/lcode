@@ -43,6 +43,7 @@ class StandIn:
         self.hold = False  # the next job keeps running until it's cancelled
         self.reject = False  # /prompt refuses the next workflow
         self.prompts: list[dict] = []  # the workflows queued
+        self.uploads: dict[str, bytes] = {}  # input images, by the name ComfyUI gave them
         self.cancelled: list[str] = []
         self.freed = 0
         self.history: dict[str, dict] = {}
@@ -202,8 +203,22 @@ class StandIn:
 
             def do_POST(self):
                 length = int(self.headers.get("Content-Length") or 0)
-                body = json.loads(self.rfile.read(length) or b"{}")
+                raw = self.rfile.read(length)
                 path = urlsplit(self.path).path
+                if path == "/upload/image":
+                    from email import policy
+                    from email.parser import BytesParser
+
+                    message = BytesParser(policy=policy.default).parsebytes(
+                        b"Content-Type: " + self.headers["Content-Type"].encode() + b"\r\n\r\n" + raw
+                    )
+                    for part in message.iter_parts():
+                        if part.get_param("name", header="content-disposition") == "image":
+                            name = f"lcode-{len(standin.uploads)}-{part.get_filename()}"
+                            standin.uploads[name] = part.get_payload(decode=True)
+                            return self.reply(200, {"name": name, "subfolder": "", "type": "input"})
+                    return self.reply(400, {"error": "no image"})
+                body = json.loads(raw or b"{}")
                 if path == "/prompt":
                     if standin.reject:
                         standin.reject = False
