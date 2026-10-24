@@ -72,6 +72,10 @@ class MediaModel:
     negative: bool = False  # whether it uses a negative prompt
     edit: str = ""  # how it edits images ("reference-latent"), or empty: it doesn't
     video_workflow: str = ""  # a tool's workflow for clips, when it works on them too (upscaling)
+    cloud: str = ""  # the provider it runs at (lcode.media_cloud.PROVIDERS), or empty: on this machine
+    api_model: str = ""  # the provider's name for it
+    price: dict[str, float] = field(default_factory=dict, hash=False)  # dollars: per image, per second at 720p…
+    priced: str = ""  # when the prices were checked
 
     def preset(self, quality: str) -> tuple[int | None, float]:
         """(steps, megapixels) for a quality preset: None steps keeps the workflow's."""
@@ -86,10 +90,12 @@ class MediaModel:
     def need_gb(self) -> float:
         """GPU memory at the peak: measured, or estimated. ComfyUI loads the text encoder, the model and the VAE
         one after another and moves what it doesn't need off the GPU, so the largest file sets the peak."""
-        return self.gpu_gb or max(f.gb for f in self.files.values()) + WORKING_GB
+        return self.gpu_gb or max((f.gb for f in self.files.values()), default=0.0) + WORKING_GB
 
     def fit(self, hw: Hardware) -> tuple[str, str]:
-        """(fits | slower | too big | cpu, a short note) on this machine."""
+        """(fits | slower | too big | cpu | cloud, a short note) on this machine."""
+        if self.cloud:
+            return "cloud", "runs at the provider: nothing on this machine"
         weights_gib = self.size_gb * 1e9 / GIB
         need_gib = self.need_gb * 1e9 / GIB
         if hw.unified:
@@ -114,18 +120,18 @@ class Catalog:
         return [m for m in self.models.values() if m.mode == mode]
 
     def for_task(self, mode: str, task: str) -> MediaModel | None:
-        """The first model of a mode that does a task (first-last-frame, camera, image-to-video…)."""
-        return next((m for m in self.for_mode(mode) if task in m.tasks), None)
+        """The first local model of a mode that does a task (first-last-frame, camera, extend…)."""
+        return next((m for m in self.for_mode(mode) if task in m.tasks and not m.cloud), None)
 
     def tool(self, task: str) -> MediaModel:
         """The tool for a task (upscale, remove-background)."""
         return next(m for m in self.models.values() if m.mode == "tool" and task in m.tasks)
 
     def editor(self, preferred: MediaModel) -> MediaModel | None:
-        """A model that edits: the preferred one if it can, else the first image model that can."""
-        if preferred.edit:
+        """A local model that edits: the preferred one if it can, else the first image model that can."""
+        if preferred.edit and not preferred.cloud:
             return preferred
-        return next((m for m in self.for_mode("image") if m.edit), None)
+        return next((m for m in self.for_mode("image") if m.edit and not m.cloud), None)
 
     def find(self, wanted: str, mode: str | None = None) -> MediaModel | None:
         """A model by key or name (any case), or by its number in the mode's list."""
@@ -146,7 +152,7 @@ def load() -> Catalog:
     models = {}
     for key, m in data.get("models", {}).items():
         try:
-            roles = {role: files[ref] for role, ref in m["files"].items()}
+            roles = {role: files[ref] for role, ref in m.get("files", {}).items()}
         except KeyError as e:
             raise CatalogError(f"media.toml: {key} uses the file {e}, which isn't listed") from e
         models[key] = MediaModel(
@@ -156,7 +162,7 @@ def load() -> Catalog:
             m.get("publisher", ""),
             m.get("license", ""),
             tuple(m.get("tasks", ())),
-            m["workflow"],
+            m.get("workflow", ""),
             roles,
             float(m.get("gpu_gb", 0.0)),
             m.get("measured", ""),
@@ -165,6 +171,10 @@ def load() -> Catalog:
             bool(m.get("negative", False)),
             m.get("edit", ""),
             m.get("video_workflow", ""),
+            m.get("cloud", ""),
+            m.get("api_model", ""),
+            {name: float(v) for name, v in (m.get("price") or {}).items()},
+            m.get("priced", ""),
         )
     return Catalog(files, models)
 
@@ -307,8 +317,10 @@ def file_sha256(path: Path) -> str:
 def install(model: MediaModel, server=None, install=None, console=None, ask=None, get=None) -> list[Path]:
     """Download the model's missing files into ComfyUI's model folders. Raises CatalogError with what to do.
 
-    `ask(question) -> bool` confirms the download (None: go ahead, for `--yes`).
+    `ask(question) -> bool` confirms the download (None: go ahead, for `--yes`). A cloud model has nothing to install.
     """
+    if model.cloud:
+        return []
     from rich.console import Console
     from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn, TimeRemainingColumn, TransferSpeedColumn
 
@@ -346,7 +358,11 @@ def install(model: MediaModel, server=None, install=None, console=None, ask=None
 
 
 def describe(model: MediaModel, hw: Hardware, installed: Installed | None) -> str:
-    """One line for a list: tasks, size, fit, installed."""
+    """One line for a list: tasks, size, fit, installed; for a cloud model, where it runs, its price and the key."""
+    if model.cloud:
+        from lcode import media_cloud
+
+        return " · ".join([", ".join(model.tasks), *media_cloud.describe(model)])
     status, note = model.fit(hw)
     parts = [", ".join(model.tasks), f"{model.size_gb:.1f} GB"]
     if installed is not None:

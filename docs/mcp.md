@@ -89,8 +89,10 @@ details.
 
 Code mode makes code only, so the servers that generated images and videos in earlier versions
 (`comfyui`, `xai`) aren't in the catalog any more, and lcode doesn't load them in code mode if
-they're still in your `mcp.json`. Image and video generation get their own [modes](modes.md),
-with their own models and controls.
+they're still in your `mcp.json`. Image and video generation have their own [modes](modes.md),
+with their own models and controls, and Grok Imagine is there as a
+[cloud model](modes.md#in-the-cloud-grok-imagine). The `lcode-mcp-xai` server still works with
+other MCP clients, for speech too.
 
 ### Metabase
 

@@ -30,8 +30,8 @@ lcode config path                      # print the file location
 | `preview` | `auto` | Images in the terminal: `auto`, `kitty`, `iterm`, `blocks` (colour text) or `off` ([results](modes.md#results)) |
 | `prompt_assistant` | `video` | A small model writes fuller prompts: `video`, `all` (pictures and follow-ups too), `off`, or an Ollama model ([prompt assistant](modes.md#the-prompt-assistant)) |
 | `check_results` | `false` | The prompt assistant checks each picture against the request |
-| `video_model` | `wan22-ti2v-5b` | The model video mode uses: a key from `lcode media` ([video mode](modes.md#video-mode)) |
-| `image_model` | `flux2-klein-4b` | The model image mode uses: a key from `lcode media` ([image models](modes.md#image-models)) |
+| `video_model` | `wan22-ti2v-5b` | The model video mode uses: a key from `lcode media` ([video mode](modes.md#video-mode)); `grok-video` runs at xAI ([in the cloud](modes.md#in-the-cloud-grok-imagine)) |
+| `image_model` | `flux2-klein-4b` | The model image mode uses: a key from `lcode media` ([image models](modes.md#image-models)); `grok-image` runs at xAI ([in the cloud](modes.md#in-the-cloud-grok-imagine)) |
 | `think` | `true` | Let the model reason before answering |
 | `web` | `on` | Web search and page fetching: `on`, `ask` (before each search/website) or `off` |
 | `search_backend` | `auto` | `auto`, `ollama`, `brave`, `tavily` or `searxng`; `auto` uses the first one configured |

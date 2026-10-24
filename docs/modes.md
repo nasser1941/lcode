@@ -5,8 +5,8 @@ lcode makes three kinds of things, each in its own mode with its own models:
 | Mode | What it makes | The model doing the work |
 |---|---|---|
 | **code** (default) | Code: it reads, writes, runs and checks your project | A coding language model in Ollama (or another server) |
-| **image** | Images from a description, edits of your images (references, inpainting, outpainting), upscales and cut-outs | An image model, run by ComfyUI on your GPU |
-| **video** | Video clips from a description or a start image | A video model, run by ComfyUI on your GPU |
+| **image** | Images from a description, edits of your images (references, inpainting, outpainting), upscales and cut-outs | An image model, run by ComfyUI on your GPU, or [in the cloud](#in-the-cloud-grok-imagine) |
+| **video** | Video clips from a description or a start image, and [films](#films) | A video model, run by ComfyUI on your GPU, or [in the cloud](#in-the-cloud-grok-imagine) |
 
 ```text
 ❯ /mode image
@@ -287,6 +287,65 @@ assistant:
 - **The check** said every one of the six pictures matched, which they did; it hasn't been
   measured on pictures that miss.
 
+## In the cloud: Grok Imagine
+
+For what a laptop can't run, or when speed matters, image and video mode can use xAI's Grok Imagine
+with your own API key. It's chosen like a local model and marked *cloud* in `/models` and `lcode
+media`. lcode reads the key from the environment only:
+
+```bash
+export XAI_API_KEY=xai-…     # from https://console.x.ai, then start lcode
+```
+
+```text
+image ❯ /model grok-image
+Image model: Grok Imagine Image 2.0.
+◆ Grok Imagine Image 2.0 runs at xAI: each request shows what goes there and about what it costs ($0.04 per image), and asks first.
+image ❯ a red fox in the snow --n 2
+╭─ Make it at xAI? ─────────────────────────────────────────────────────────────────────────────╮
+│ Where: Grok Imagine Image 2.0 (grok-imagine-image-2.0) at xAI, api.x.ai                        │
+│ What goes: the prompt. Your XAI_API_KEY goes with it, to api.x.ai only.                        │
+│ Prompt: a red fox in the snow                                                                  │
+│ Cost: about $0.08 (2 images × $0.04), billed to your xAI account; prices as of 2026-10-24, the │
+│ real ones: https://docs.x.ai/developers/pricing                                                │
+╰────────────────────────────────────────────────────────────────────────────────────────────────╯
+  Send it to xAI (about $0.08)? [y/N] y
+◆ #1 .lcode/media/20261024-153907-a-red-fox-in-the-snow-1.jpg  … · Grok Imagine Image 2.0 · … s
+◆ #2 .lcode/media/20261024-153907-a-red-fox-in-the-snow-2.jpg  … · Grok Imagine Image 2.0 · … s
+  about $0.08 at xAI (this session: about $0.08)
+```
+
+| Model | `/model` | Makes | Price (xAI's, on 2026-10-24) |
+|---|---|---|---|
+| **Grok Imagine Image 2.0** | `grok-image` | Pictures from text; edits of one picture | $0.04 per picture, 1k or 2k; $0.01 per picture sent |
+| **Grok Imagine Video 1.5** | `grok-video` | Clips from text or a start picture | Per second: $0.08 at 480p, $0.14 at 720p, $0.25 at 1080p; $0.01 per picture sent |
+
+- **What's sent:** the prompt (the [prompt assistant](#the-prompt-assistant)'s fuller one when it
+  wrote one, shown above the panel) and the picture you edit or start a clip from. Nothing else:
+  not your project, not other pictures, not the conversation.
+- **The key** goes in the request's `Authorization` header to xAI's API, and nowhere else. Results
+  are downloaded from the address xAI gives, without it. `XAI_API_BASE` sends the requests, key
+  included, to another address, such as a proxy you run.
+- **What it costs** is shown before every request, from lcode's copy of xAI's prices with the date
+  they were checked, and nothing is sent until you say yes. The line under the results adds it to
+  the session's total. It's an estimate: xAI bills by its [pricing page](https://docs.x.ai/developers/pricing).
+- **Options:** `--quality` picks the resolution: pictures are 1k (`fast`, `balanced`) or 2k
+  (`best`), at the same price; clips are 480p, 720p or 1080p. `--ar` picks the nearest shape xAI
+  offers. `--camera` becomes words in the prompt. Seeds and `--no` aren't used.
+- **What it doesn't do here** is made by a local model, and lcode says which: masks, several
+  pictures at once and extending a picture (FLUX.2 klein); clips between two frames, reference
+  pictures, extending and restyling a clip (the Wan models).
+- **Stopping:** Esc or Ctrl+C stops waiting for a clip, but xAI may still make it and bill it. The
+  message gives the request's id.
+- **No terminal, no cloud:** `lcode -p` in image or video mode refuses a cloud model, because
+  nobody can say yes to the cost.
+- **[Films](#films)** work with cloud models too; each picture and clip asks.
+- **Files:** results land in the media folder and the gallery as local ones do. The JSON next to
+  each says what was sent, to which model, the estimated cost and xAI's request id for a clip.
+  xAI's terms and usage policies apply to what you send.
+- **Tested** against a stand-in for xAI's API that answers as its documentation describes; prices
+  are from xAI's pricing page.
+
 ## ComfyUI
 
 ComfyUI runs the image and video models; lcode drives it through its API.
@@ -373,18 +432,14 @@ memory a model *needs* is lower than what `nvidia-smi` shows while it runs.
 
 ## One model on the GPU at a time
 
-Image and video modes don't need the big coding model: the image or video model does the work. A
-small optional model will help with prompts later. Image and video models need the GPU to
-themselves:
+Image and video modes don't need the big coding model: the image or video model does the work, and
+the [prompt assistant](#the-prompt-assistant) loads only while it writes. Image and video models
+need the GPU to themselves:
 
 - **Into image or video mode:** lcode unloads its coding model from Ollama, and checks again
   before each image.
 - **Back to code mode:** lcode stops the ComfyUI it started, or asks yours to free its memory,
   then loads the coding model again in the background.
-
-## Coming next
-
-- **#157 Cloud generation**, with costs shown (Grok Imagine first).
 
 The permission mode (`ask`, `plan`, `auto-edit`, `yolo`) is a different setting: `/permissions`
 sets it, and Shift+Tab cycles it as before.

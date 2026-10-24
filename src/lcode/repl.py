@@ -939,6 +939,11 @@ def media_model_command(agent: Agent, arg: str, hardware: Hardware) -> None:
         return
     setattr(s, f"{s.mode}_model", model.key)
     c.print(f"[green]{s.mode.capitalize()} model: {escape(model.name)}.[/]")
+    if model.cloud:
+        from lcode import media_cloud
+
+        agent.say(media_cloud.ready_note(model))
+        return
     if installed is not None:
         _, missing = catalog.chosen_files(model, installed)
         if missing:

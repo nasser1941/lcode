@@ -385,6 +385,7 @@ class Agent:
         self.media_results: list[dict] = []  # the session's images, numbered (/gallery, /vary, /open)
         self.last_request: dict | None = None  # what /again repeats (lcode.media.redo)
         self.image_refs: list[str] = []  # images every next request follows (/use)
+        self.cloud_spent = 0.0  # dollars, about, spent at cloud image and video models this session (media_cloud)
         self.reflected = 0  # messages before this index were already checked for notes to remember
         self._memory: memory_notes.Memory | None = None
         self._agent_types: tuple[Path, dict[str, subagents.AgentType], list[str]] | None = None

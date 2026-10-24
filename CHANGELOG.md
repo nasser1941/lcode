@@ -6,6 +6,20 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Cloud generation in image and video mode** (#157): xAI's Grok Imagine as cloud models,
+  `grok-image` (pictures, edits of one picture) and `grok-video` (clips from text or a start
+  picture), chosen with `/model` and marked *cloud* in `/models` and `lcode media`. Before each
+  request lcode shows what goes where and about what it costs, and sends nothing until you say yes;
+  the session's total is shown after. The key comes from `XAI_API_KEY` only and goes to xAI's API
+  only. What a cloud model can't do here (masks, several pictures, clips between two frames…) is
+  made by a local model. See [In the cloud](https://nasser1941.github.io/lcode/modes/#in-the-cloud-grok-imagine).
+
+### Changed
+
+- The README no longer says code mode makes images through MCP servers (it hasn't since 0.40.0).
+
 ### Fixed
 
 - **Films:** things and places no longer become cast members. A kite in the cast got a "character" picture

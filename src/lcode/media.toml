@@ -19,6 +19,12 @@
 #   negative      whether it uses a negative prompt (distilled models don't)
 #   edit          how it edits images: "reference-latent" (its text-to-image workflow, given the images as
 #                 reference latents on both conditionings); absent: it doesn't edit
+#
+# Cloud models (lcode.media_cloud) have no files or workflow; they run at a provider, with the user's API key:
+#   cloud         the provider: xai
+#   api_model     the provider's name for the model
+#   price         dollars: image (per picture made), input_image (per picture sent), 480p / 720p / 1080p (per second)
+#   priced        when the prices were checked (they change: the provider's pricing page has the real ones)
 
 [files.flux-2-klein-4b-fp8]
 folder = "diffusion_models"
@@ -139,7 +145,7 @@ name = "Wan 2.2 TI2V 5B"
 mode = "video"
 publisher = "Wan-AI (Alibaba)"
 license = "Apache 2.0"
-tasks = ["text-to-video", "image-to-video"]
+tasks = ["text-to-video", "image-to-video", "extend"]
 workflow = "wan22-ti2v-5b"
 files = { model = "wan22-ti2v-5b", text_encoder = "umt5-xxl-fp8", vae = "wan22-vae" }
 gpu_gb = 0.0
@@ -254,3 +260,29 @@ tasks = ["sound"]
 workflow = "sound-stable-audio"
 files = { model = "stable-audio-open", text_encoder = "t5-base" }
 notes = "/sound: sound effects and ambience for a clip, up to 47 s"
+
+# ----------------------------------------------------------------------------- in the cloud: your key, your bill
+
+[models.grok-image]
+name = "Grok Imagine Image 2.0"
+mode = "image"
+publisher = "xAI"
+license = "xAI's terms of service"
+tasks = ["text-to-image", "edit"]
+cloud = "xai"
+api_model = "grok-imagine-image-2.0"
+price = { image = 0.04, input_image = 0.01 }
+priced = "2026-10-24"
+notes = "1k or 2k (--quality best); edits one picture at a time"
+
+[models.grok-video]
+name = "Grok Imagine Video 1.5"
+mode = "video"
+publisher = "xAI"
+license = "xAI's terms of service"
+tasks = ["text-to-video", "image-to-video"]
+cloud = "xai"
+api_model = "grok-imagine-video-1.5"
+price = { "480p" = 0.08, "720p" = 0.14, "1080p" = 0.25, input_image = 0.01 }
+priced = "2026-10-24"
+notes = "480p fast, 720p balanced, 1080p best; text or a start image"

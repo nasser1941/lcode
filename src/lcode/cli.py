@@ -781,6 +781,13 @@ def comfyui_status(cfg: dict) -> tuple[str, bool | None]:
     from lcode import media_catalog as catalog
 
     model = catalog.load().find(cfg.get("image_model") or "") or catalog.load().models[catalog.DEFAULT_IMAGE]
+    if model.cloud:
+        from lcode import media_cloud
+
+        p = media_cloud.provider(model)
+        if not p.api_key():
+            return f"image model: {model.name}, at {p.name}, but {p.key_env} isn't set ({p.keys_url})", None
+        return f"image model: {model.name}, at {p.name} ({p.key_env} is set)", True
     server = comfy.Server(cfg["comfyui_url"])
     stats = server.stats()
     install = None if stats else comfy.find_install(cfg["comfyui_path"])
@@ -1085,6 +1092,11 @@ def cmd_media(args) -> None:
         model = cat.find(args.model or "")
         if model is None:
             fail(f"no media model {args.model!r}: lcode media lists them")
+        if model.cloud:
+            from lcode import media_cloud
+
+            console.print(f"Nothing to install: {media_cloud.ready_note(model)}")
+            return
         if not running and install is None:
             fail(f"lcode needs ComfyUI to install models into. {comfy.install_hint()}")
         ask = None if args.yes else (lambda q: Confirm.ask(q, default=True, console=console))
