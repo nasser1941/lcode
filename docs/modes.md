@@ -177,6 +177,20 @@ video ❯ /play
 - **Extend a clip:** `/extend 4 --seconds 3 it flies away` continues clip #4 from its last frame
   and joins the new part after it, as one longer clip (`…-extended.mp4`; 3 s more in about a
   minute at `fast`).
+- **Reference pictures:** `@cat.png @hat.png --ref the cat wears the hat in a garden` makes a clip
+  that shows what the pictures show (who, what, where), not starting from them. Wan 2.1 VACE 1.3B
+  makes these (832×480, 16 fps; a 3 s clip in about 3 minutes).
+- **Restyle a clip:** `/restyle 4 as a watercolor painting --style watercolor` makes clip #4 again in
+  a new look, following its outlines (Canny edges, up to its first 81 frames). VACE 1.3B follows them
+  loosely: the layout and motion carry over, sizes can change. Naming the style with `--style`
+  helps. About 5 minutes for 3 s.
+- **Smoother:** `/smooth 4` (or `/smooth 4 4`) adds in-between frames with FILM: 2 or 4 times the
+  frames per second, in seconds.
+- **Bigger:** `/upscale 4` works on clips too (Real-ESRGAN, 2 or 4 times): 864×480 becomes 1728×960
+  in about 2 minutes for 3 s.
+- **Sound:** `/sound 4 wings buzzing and birdsong` adds sound effects or ambience made by Stable
+  Audio Open 1.0 (up to 47 s; seconds to make), as an AAC track in the MP4 (`…-sound.mp4`). Its
+  license is the Stability AI Community License: free under $1M yearly revenue.
 - **Which model:** the one you chose (`/models`) makes ordinary clips. For first and last frames or a
   camera move, lcode uses the model that can, installs it when you agree, and says so.
 - **Long renders:** progress shows the step and the time left. With `notify` on, lcode sends a
@@ -278,8 +292,6 @@ themselves:
 
 ## Coming next
 
-- **#154 More video:** several reference images, smoother and bigger clips (frame interpolation,
-  upscaling), restyling a video, and sound.
 - **#155 Movies:** storyboards with a consistent cast, shots stitched into one film.
 - **#156 Prompt assistant:** a small local model for prompts and follow-ups.
 - **#157 Cloud generation**, with costs shown (Grok Imagine first).

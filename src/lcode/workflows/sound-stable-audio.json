@@ -1,0 +1,144 @@
+{
+  "source": "ComfyUI's template audio_stable_audio_example, in API format, with the sound put on the clip",
+  "defaults": {
+    "seconds": 5.0,
+    "fps": 24,
+    "steps": 50,
+    "negative": ""
+  },
+  "labels": {
+    "1": "loading the clip",
+    "2": "reading its frames",
+    "3": "loading Stable Audio",
+    "4": "loading the text encoder",
+    "5": "reading the prompt",
+    "8": "making the sound",
+    "9": "decoding the sound",
+    "10": "putting it on the clip",
+    "11": "saving"
+  },
+  "graph": {
+    "1": {
+      "class_type": "LoadVideo",
+      "inputs": {
+        "file": "$video"
+      }
+    },
+    "2": {
+      "class_type": "GetVideoComponents",
+      "inputs": {
+        "video": [
+          "1",
+          0
+        ]
+      }
+    },
+    "3": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "$model"
+      }
+    },
+    "4": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "$text_encoder",
+        "type": "stable_audio",
+        "device": "default"
+      }
+    },
+    "5": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "$prompt",
+        "clip": [
+          "4",
+          0
+        ]
+      }
+    },
+    "6": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "$negative",
+        "clip": [
+          "4",
+          0
+        ]
+      }
+    },
+    "7": {
+      "class_type": "EmptyLatentAudio",
+      "inputs": {
+        "seconds": "$seconds",
+        "batch_size": 1
+      }
+    },
+    "8": {
+      "class_type": "KSampler",
+      "inputs": {
+        "model": [
+          "3",
+          0
+        ],
+        "seed": "$seed",
+        "steps": "$steps",
+        "cfg": 4.98,
+        "sampler_name": "dpmpp_3m_sde_gpu",
+        "scheduler": "exponential",
+        "positive": [
+          "5",
+          0
+        ],
+        "negative": [
+          "6",
+          0
+        ],
+        "latent_image": [
+          "7",
+          0
+        ],
+        "denoise": 1
+      }
+    },
+    "9": {
+      "class_type": "VAEDecodeAudio",
+      "inputs": {
+        "samples": [
+          "8",
+          0
+        ],
+        "vae": [
+          "3",
+          2
+        ]
+      }
+    },
+    "10": {
+      "class_type": "CreateVideo",
+      "inputs": {
+        "images": [
+          "2",
+          0
+        ],
+        "audio": [
+          "9",
+          0
+        ],
+        "fps": "$fps"
+      }
+    },
+    "11": {
+      "class_type": "SaveVideo",
+      "inputs": {
+        "video": [
+          "10",
+          0
+        ],
+        "filename_prefix": "lcode/video",
+        "format": "mp4",
+        "codec": "auto"
+      }
+    }
+  }
+}

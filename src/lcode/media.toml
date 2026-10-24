@@ -101,6 +101,7 @@ publisher = "Xintao Wang et al."
 license = "BSD-3-Clause"
 tasks = ["upscale"]
 workflow = "upscale-esrgan"
+video_workflow = "upscale-video-esrgan"
 files = { model = "realesrgan-x4" }
 notes = "/upscale: 2× or 4× the pixels"
 
@@ -196,3 +197,60 @@ measured = "3 s clip (49 frames, 832×480): 115 s on an RTX 4080 Laptop, 12 GB"
 notes = "camera moves (--camera pan-left, zoom-in, …), small and fast, 16 fps"
 quality = { fast = [12, 0.38], balanced = [20, 0.38], best = [30, 0.38] }
 negative = true
+
+[files.wan21-vace-1-3b]
+folder = "diffusion_models"
+name = "wan2.1_vace_1.3B_fp16.safetensors"
+url = "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_vace_1.3B_fp16.safetensors"
+gb = 4.31
+
+[files.film-net]
+folder = "frame_interpolation"
+name = "film_net_fp16.safetensors"
+url = "https://huggingface.co/Comfy-Org/frame_interpolation/resolve/main/frame_interpolation/film_net_fp16.safetensors"
+gb = 0.07
+
+[files.stable-audio-open]
+folder = "checkpoints"
+name = "stable-audio-open-1.0.safetensors"
+url = "https://huggingface.co/Comfy-Org/stable-audio-open-1.0_repackaged/resolve/main/stable-audio-open-1.0.safetensors"
+gb = 4.85
+
+[files.t5-base]
+folder = "text_encoders"
+name = "t5-base.safetensors"
+url = "https://huggingface.co/ComfyUI-Wiki/t5-base/resolve/main/t5-base.safetensors"
+gb = 0.89
+
+[models.wan21-vace-1-3b]
+name = "Wan 2.1 VACE 1.3B"
+mode = "video"
+publisher = "Alibaba (Wan-AI)"
+license = "Apache 2.0"
+tasks = ["references", "restyle"]
+workflow = "wan21-vace"
+files = { model = "wan21-vace-1-3b", text_encoder = "umt5-xxl-fp8", vae = "wan21-vae" }
+measured = "3 s clip from references (832×480): 190 s; restyling 3 s: 320 s, on an RTX 4080 Laptop, 12 GB"
+notes = "clips that follow reference pictures (--ref), or restyle a clip (/restyle)"
+quality = { fast = [12, 0.38], balanced = [20, 0.38], best = [30, 0.38] }
+negative = true
+
+[models.film]
+name = "FILM"
+mode = "tool"
+publisher = "Google Research"
+license = "Apache 2.0"
+tasks = ["interpolate"]
+workflow = "smooth-film"
+files = { model = "film-net" }
+notes = "/smooth: twice the frames per second"
+
+[models.stable-audio-open]
+name = "Stable Audio Open 1.0"
+mode = "tool"
+publisher = "Stability AI"
+license = "Stability AI Community License"
+tasks = ["sound"]
+workflow = "sound-stable-audio"
+files = { model = "stable-audio-open", text_encoder = "t5-base" }
+notes = "/sound: sound effects and ambience for a clip, up to 47 s"
