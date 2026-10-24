@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-10-24
+
 ### Added
 
 - **The prompt assistant** (#156): a small local model (`qwen3.5:4b` when installed) writes fuller
@@ -1013,7 +1015,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.46.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.47.0...HEAD
+[0.47.0]: https://github.com/nasser1941/lcode/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/nasser1941/lcode/compare/v0.45.0...v0.46.0
 [0.45.0]: https://github.com/nasser1941/lcode/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/nasser1941/lcode/compare/v0.43.0...v0.44.0
