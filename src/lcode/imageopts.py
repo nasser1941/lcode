@@ -35,6 +35,21 @@ STYLES = {
     "comic": "comic book art, bold ink outlines, halftone shading",
     "flat": "flat vector illustration, minimal, bold shapes",
 }
+CAMERA = {  # video: --camera name -> the camera model's pose
+    "static": "Static",
+    "pan-left": "Pan Left",
+    "pan-right": "Pan Right",
+    "pan-up": "Pan Up",
+    "pan-down": "Pan Down",
+    "tilt-up": "Pan Up",
+    "tilt-down": "Pan Down",
+    "zoom-in": "Zoom In",
+    "zoom-out": "Zoom Out",
+    "dolly-in": "Zoom In",
+    "dolly-out": "Zoom Out",
+    "rotate-left": "Anti Clockwise (ACW)",
+    "rotate-right": "ClockWise (CW)",
+}
 ALIASES = {
     "n": "n",
     "count": "n",
@@ -49,6 +64,7 @@ ALIASES = {
     "style": "style",
     "seconds": "seconds",
     "duration": "seconds",
+    "camera": "camera",
 }
 FLAG = re.compile(r"(?:^|\s)--?(" + "|".join(sorted(ALIASES, key=len, reverse=True)) + r")\b(?=[\s=]|$)")
 DIMENSIONS = re.compile(r"^(\d{2,4})\s*[x×]\s*(\d{2,4})$")
@@ -68,12 +84,15 @@ class Options:
     negative: str = ""
     style: str = ""
     seconds: float = 5.0  # video only
+    camera: str = ""  # video only: a move from CAMERA, made by a camera-control model
 
     def describe(self, video: bool = False) -> str:
         seed = "random" if self.seed is None else str(self.seed)
         parts = [f"n={self.n}", f"size={self.size}", f"seed={seed}", f"quality={self.quality}"]
         if video:
             parts.append(f"seconds={self.seconds:g}")
+            if self.camera:
+                parts.append(f"camera={self.camera}")
         if self.style:
             parts.append(f"style={self.style}")
         if self.negative:
@@ -98,7 +117,9 @@ def set_values(options: Options, values: dict[str, object]) -> Options:
     for raw_key, raw in values.items():
         key = ALIASES.get(str(raw_key).lower().lstrip("-"))
         if key is None:
-            raise OptionError(f"unknown option {raw_key!r}: use n, ar (or size), seed, quality, style, no or seconds")
+            raise OptionError(
+                f"unknown option {raw_key!r}: use n, ar (or size), seed, quality, style, no, seconds or camera"
+            )
         value = str(raw).strip() if raw is not None else ""
         if key == "n":
             if not value.isdigit() or not 1 <= int(value) <= MAX_COUNT:
@@ -126,6 +147,13 @@ def set_values(options: Options, values: dict[str, object]) -> Options:
                 raise OptionError(f"style is one of {', '.join(STYLES)} (or none)")
         elif key == "negative":
             out.negative = "" if value.lower() in ("none", "off") else value
+        elif key == "camera":
+            if value.lower() in ("none", "off", ""):
+                out.camera = ""
+            elif value.lower() in CAMERA:
+                out.camera = value.lower()
+            else:
+                raise OptionError(f"camera is one of {', '.join(CAMERA)} (or none)")
         elif key == "seconds":
             try:
                 seconds = float(value.rstrip("s"))

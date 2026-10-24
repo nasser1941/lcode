@@ -6,6 +6,17 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Video mode: first and last frames, camera moves, longer clips** (#154, part 1). See
+  [Video mode](https://nasser1941.github.io/lcode/modes/#video-mode).
+  - **`@start.png @end.png …`** makes a clip from one picture to the other (Wan 2.2 Fun InP 5B).
+  - **`--camera pan-left`** and twelve other moves (pan, tilt, zoom, dolly, rotate), from a
+    description or a start picture (Wan 2.1 Fun Camera 1.3B, 16 fps).
+  - **`/extend 4 --seconds 3 …`** in video mode continues a clip from its last frame into one
+    longer clip.
+  - lcode picks the model a job needs, installs it when you agree, and says so.
+
 ## [0.44.0] - 2026-10-24
 
 ### Added

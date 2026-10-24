@@ -292,7 +292,7 @@ def request(
     if agent.settings.mode == "video":
         if mask:
             raise MediaError("Video mode doesn't take a mask: @photo.png starts a video from a picture.")
-        job = {"kind": "video", "prompt": prompt, "options": options, "sources": [str(p) for p in sources[:1]],
+        job = {"kind": "video", "prompt": prompt, "options": options, "sources": [str(p) for p in sources[:2]],
                "mask": None, "pads": None, "keep_shape": not SIZE_FLAG.search(text)}  # fmt: skip
         return redo(agent, job, cancelled, ask)
     job = {"kind": "edit" if sources else "image", "prompt": prompt, "options": options,
@@ -488,10 +488,14 @@ def generate_video(
     image (the shapes video models know best; the image is cropped to it), unless the request gives one."""
     prompt = job["prompt"].strip()
     server = prepare(agent, ask, cancelled)
-    model = current(agent, "video")
+    sources = [Path(p) for p in job.get("sources") or []]
+    start = sources[0] if sources else None
+    end = sources[1] if len(sources) > 1 else None
+    clip = Path(job["extend"]) if job.get("extend") else None
+    model = video_model(agent, "first-last-frame" if end else ("camera" if options.camera else
+                        ("image-to-video" if clip else "")))  # fmt: skip
     files = ensure_installed(agent, model, server, ask)
     workflow = comfy.load_workflow(model.workflow)
-    start = Path(job["sources"][0]) if job.get("sources") else None
     seed = options.seed if options.seed is not None else random.randrange(2**32)
     steps, megapixels = model.preset(options.quality)
     ratio = options.size
@@ -504,6 +508,8 @@ def generate_video(
             except (OSError, edits.EditError):
                 pass
     width, height = imageopts.dimensions(imageopts.SIZES.get(ratio, ratio), megapixels, multiple=32)
+    if clip is not None:  # the new part continues the clip, so it has its size
+        width, height = job["size"]
     fps = int(workflow.defaults.get("fps", 24))
     text = imageopts.styled(prompt, options.style)
     values = {**workflow.defaults, **files, "prompt": text, "seed": seed, "width": width, "height": height,
@@ -512,24 +518,68 @@ def generate_video(
         values["steps"] = steps
     if options.negative:
         values["negative"] = options.negative
+    values["camera"] = imageopts.CAMERA[options.camera or "static"]
     graph = comfy.fill(workflow.graph, values)
-    if start is not None:
-        try:
-            name = server.upload(start)
-        except (comfy.ComfyError, OSError) as e:
-            raise MediaError(f"Couldn't hand the image to ComfyUI: {e}") from e
-        latent = edits.node_of(graph, "Wan22ImageToVideoLatent")
-        if latent is None:
-            raise MediaError(f"{model.name} can't start from an image.")
-        graph["8100"] = {"class_type": "LoadImage", "inputs": {"image": name}}
-        graph[latent]["inputs"]["start_image"] = ["8100", 0]
+    latent = next((edits.node_of(graph, c) for c in VIDEO_LATENTS if edits.node_of(graph, c)), None)
+    try:
+        if start is not None:
+            graph["8100"] = {"class_type": "LoadImage", "inputs": {"image": server.upload(start)}}
+            graph[latent]["inputs"]["start_image"] = ["8100", 0]
+            loader = edits.node_of(graph, "CLIPVisionLoader")
+            if loader is not None:  # the camera model also looks at the start image
+                look = {"clip_vision": [loader, 0], "image": ["8100", 0], "crop": "none"}
+                graph["8102"] = {"class_type": "CLIPVisionEncode", "inputs": look}
+                graph[latent]["inputs"]["clip_vision_output"] = ["8102", 0]
+        if end is not None:
+            graph["8101"] = {"class_type": "LoadImage", "inputs": {"image": server.upload(end)}}
+            graph[latent]["inputs"]["end_image"] = ["8101", 0]
+        if clip is not None:
+            continue_clip(graph, latent, server.upload(clip), values["length"])
+    except (comfy.ComfyError, OSError) as e:
+        raise MediaError(f"Couldn't hand the files to ComfyUI: {e}") from e
     add_thumbnail(graph, width, height)
     meta = describe_job(model, workflow, prompt, text, seed, values, options, files)
     meta.update({"seconds": round((values["length"] - 1) / fps, 2), "fps": fps, "frames": values["length"],
-                 "start_image": shown(agent, start) if start else ""})  # fmt: skip
-    remembered = {k: job.get(k) for k in ("kind", "prompt", "sources", "mask", "pads", "keep_shape")}
-    plan = Plan(model, workflow, graph, meta, prompt, seed, options, "video", job.get("sources") or [], remembered)
+                 "start_image": shown(agent, start) if start else "", "end_image": shown(agent, end) if end else "",
+                 "camera": options.camera, "extends": shown(agent, clip) if clip else ""})  # fmt: skip
+    remembered = {k: job.get(k) for k in ("kind", "prompt", "sources", "mask", "pads", "keep_shape", "extend", "size")}
+    stem = f"{clip.stem}-extended" if clip else ""
+    plan = Plan(model, workflow, graph, meta, prompt, seed, options, "video", job.get("sources") or [], remembered,
+                stem)  # fmt: skip
     return run_plan(agent, server, plan, cancelled, label)
+
+
+VIDEO_LATENTS = ("Wan22ImageToVideoLatent", "WanFunInpaintToVideo", "WanCameraImageToVideo")
+WHY = {
+    "first-last-frame": "a clip between two frames",
+    "camera": "a camera move",
+    "image-to-video": "continuing a clip",
+}
+
+
+def video_model(agent: Agent, task: str) -> catalog.MediaModel:
+    """The video model for a job: the chosen one, or the first that does what the job needs."""
+    chosen = current(agent, "video")
+    if not task or task in chosen.tasks:
+        return chosen
+    model = catalog.load().for_task("video", task)
+    if model is None:
+        raise MediaError(f"None of lcode's video models does {WHY.get(task, task)} yet.")
+    agent.say(f"{model.name} makes this one ({WHY.get(task, task)}).")
+    return model
+
+
+def continue_clip(graph: dict, latent: str, clip_name: str, length: int) -> None:
+    """Extending a clip: start from its last frame, and join the new frames (without that first one) after it."""
+    graph["8200"] = {"class_type": "LoadVideo", "inputs": {"file": clip_name}}
+    graph["8201"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["8200", 0]}}
+    graph["8202"] = {"class_type": "ImageFromBatch", "inputs": {"image": ["8201", 0], "batch_index": -1, "length": 1}}
+    graph[latent]["inputs"]["start_image"] = ["8202", 0]
+    video = edits.node_of(graph, "CreateVideo")
+    decoded = graph[video]["inputs"]["images"]
+    graph["8203"] = {"class_type": "ImageFromBatch", "inputs": {"image": decoded, "batch_index": 1, "length": length}}
+    graph["8204"] = {"class_type": "ImageBatch", "inputs": {"image1": ["8201", 0], "image2": ["8203", 0]}}
+    graph[video]["inputs"]["images"] = ["8204", 0]
 
 
 def apply_tool(
