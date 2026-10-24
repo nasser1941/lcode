@@ -6,8 +6,6 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.45.0] - 2026-10-24
-
 ### Added
 
 - **Video mode: references, restyling, smoother and bigger clips, sound** (#154, part 2). See
@@ -20,6 +18,8 @@ All notable changes to lcode are documented here. The format follows
 ### Fixed
 
 - Extending a clip keeps its pace: a 16 fps camera clip extended with the 24 fps model played too fast.
+
+## [0.45.0] - 2026-10-24
 
 ### Added
 
