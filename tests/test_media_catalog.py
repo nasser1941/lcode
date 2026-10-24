@@ -47,6 +47,7 @@ def test_every_model_has_a_workflow_its_files_fill():
             "checkpoints",
             "upscale_models",
             "background_removal",
+            "clip_vision",
         )
 
 

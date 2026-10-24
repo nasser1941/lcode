@@ -86,7 +86,7 @@ COMMANDS = {
     "/open": "Open an image in your viewer, e.g. /open 3 (default: the last)",
     "/edit": "Image mode: change an image by instruction, e.g. /edit 3 make the sky purple (@photo.png: references)",
     "/use": "Image mode: images the next requests follow, e.g. /use 3 or /use photo.png (/use off)",
-    "/extend": "Image mode: outpaint an image to a shape or by sides, e.g. /extend 3 --ar 16:9 (or --left 256)",
+    "/extend": "Outpaint an image (/extend 3 --ar 16:9), or continue a clip in video mode (/extend 4 --seconds 3)",
     "/upscale": "Image mode: 2 or 4 times the pixels, e.g. /upscale 3 4",
     "/nobg": "Image mode: remove the background (a transparent PNG), e.g. /nobg 3",
     "/animate": "Image mode: make a video starting from an image, e.g. /animate 3 the waves roll in (video mode)",
@@ -1406,7 +1406,7 @@ IMAGE_COMMANDS = (
     "/options", "/again", "/vary", "/gallery", "/open", "/play", "/edit", "/use", "/extend", "/upscale", "/nobg",
     "/animate",
 )  # fmt: skip
-VIDEO_TOO = ("/options", "/again", "/vary", "/gallery", "/open", "/play", "/use")  # what video mode shares
+VIDEO_TOO = ("/options", "/again", "/vary", "/gallery", "/open", "/play", "/use", "/extend")  # video mode has these
 NUMBER = re.compile(r"^#?(\d+)$")
 
 
@@ -1493,6 +1493,17 @@ def image_command(agent: Agent, cmd: str, arg: str) -> None:
             sources = [str(source)] + [str(media.resolve(agent, r)) for r in refs]
             job = {"kind": "edit", "prompt": instruction, "options": options, "sources": sources, "mask": None,
                    "pads": None, "keep_shape": "--ar" not in rest and "--size" not in rest}  # fmt: skip
+            make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
+            return
+        if cmd == "/extend" and video:
+            if edits.is_image(source):
+                c.print(f"[yellow]#{entry['n']} is a picture: /animate it, or /extend a clip.[/]")
+                return
+            text, options = imageopts.parse(rest, imageopts.replace_seed(agent.image_options, n=1))
+            job = {"kind": "video", "prompt": text or entry["prompt"], "options": options, "sources": [],
+                   "mask": None, "pads": None, "keep_shape": True, "extend": str(source),
+                   "size": [entry["width"], entry["height"]]}  # fmt: skip
+            c.print(f"[dim]Continuing #{entry['n']} from its last frame, {options.seconds:g} s more.[/]")
             make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
             return
         if cmd == "/extend":

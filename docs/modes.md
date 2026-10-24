@@ -167,6 +167,18 @@ video ❯ /play
   description and start image.
 - **Measured** on the RTX 4080 Laptop GPU (12 GB), a 5-second clip (121 frames): `fast` 100 s,
   `balanced` 150 s (the same from a start image), `best` 10.5 minutes.
+- **First and last frame:** two pictures, `@start.png @end.png the flower opens`, make a clip that
+  goes from the first to the last. Wan 2.2 Fun InP 5B makes these (a 3 s clip in 62 s at `fast`;
+  `fast` can change abruptly halfway, `balanced` moves more smoothly).
+- **Camera moves:** `--camera pan-left` (also `pan-right`, `pan-up`, `pan-down`, `tilt-up`,
+  `tilt-down`, `zoom-in`, `zoom-out`, `dolly-in`, `dolly-out`, `rotate-left`, `rotate-right`,
+  `static`), from a description or a start picture. Wan 2.1 Fun Camera 1.3B makes these, at 832×480
+  and 16 frames per second: a 3 s move takes about 2 minutes.
+- **Extend a clip:** `/extend 4 --seconds 3 it flies away` continues clip #4 from its last frame
+  and joins the new part after it, as one longer clip (`…-extended.mp4`; 3 s more in about a
+  minute at `fast`).
+- **Which model:** the one you chose (`/models`) makes ordinary clips. For first and last frames or a
+  camera move, lcode uses the model that can, installs it when you agree, and says so.
 - **Long renders:** progress shows the step and the time left. With `notify` on, lcode sends a
   desktop notification when a clip that took longer than `notify_after` seconds is done.
 
@@ -266,8 +278,8 @@ themselves:
 
 ## Coming next
 
-- **#154 More video:** first and last frames, several references, camera moves, longer clips,
-  sound, and more video models in the catalog.
+- **#154 More video:** several reference images, smoother and bigger clips (frame interpolation,
+  upscaling), restyling a video, and sound.
 - **#155 Movies:** storyboards with a consistent cast, shots stitched into one film.
 - **#156 Prompt assistant:** a small local model for prompts and follow-ups.
 - **#157 Cloud generation**, with costs shown (Grok Imagine first).

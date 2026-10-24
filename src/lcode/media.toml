@@ -146,3 +146,53 @@ measured = "5 s clip: 100 s fast, 150 s balanced (864×480), 10.5 min best (1280
 notes = "5 s at 24 fps, up to 1280×704; text or a start image"
 quality = { fast = [12, 0.4], balanced = [20, 0.4], best = [30, 0.859] }
 negative = true
+
+[files.wan22-fun-inp-5b]
+folder = "diffusion_models"
+name = "wan2.2_fun_inpaint_5B_bf16.safetensors"
+url = "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_fun_inpaint_5B_bf16.safetensors"
+gb = 10.00
+
+[files.wan21-fun-camera-1-3b]
+folder = "diffusion_models"
+name = "wan2.1_fun_camera_v1.1_1.3B_bf16.safetensors"
+url = "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_fun_camera_v1.1_1.3B_bf16.safetensors"
+gb = 3.23
+
+[files.clip-vision-h]
+folder = "clip_vision"
+name = "clip_vision_h.safetensors"
+url = "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors"
+gb = 1.26
+
+[files.wan21-vae]
+folder = "vae"
+name = "wan_2.1_vae.safetensors"
+url = "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors"
+gb = 0.25
+
+[models.wan22-fun-inp-5b]
+name = "Wan 2.2 Fun InP 5B"
+mode = "video"
+publisher = "Alibaba PAI"
+license = "Apache 2.0"
+tasks = ["first-last-frame"]
+workflow = "wan22-fun-inp-5b"
+files = { model = "wan22-fun-inp-5b", text_encoder = "umt5-xxl-fp8", vae = "wan22-vae" }
+measured = "3 s clip, fast: 62 s (864×480) on an RTX 4080 Laptop, 12 GB"
+notes = "a clip from a first frame to a last frame: @start.png @end.png"
+quality = { fast = [12, 0.4], balanced = [20, 0.4], best = [30, 0.859] }
+negative = true
+
+[models.wan21-fun-camera-1-3b]
+name = "Wan 2.1 Fun Camera 1.3B"
+mode = "video"
+publisher = "Alibaba PAI"
+license = "Apache 2.0"
+tasks = ["camera"]
+workflow = "wan21-fun-camera"
+files = { model = "wan21-fun-camera-1-3b", text_encoder = "umt5-xxl-fp8", vae = "wan21-vae", clip_vision = "clip-vision-h" }
+measured = "3 s clip (49 frames, 832×480): 115 s on an RTX 4080 Laptop, 12 GB"
+notes = "camera moves (--camera pan-left, zoom-in, …), small and fast, 16 fps"
+quality = { fast = [12, 0.38], balanced = [20, 0.38], best = [30, 0.38] }
+negative = true

@@ -112,6 +112,10 @@ class Catalog:
     def for_mode(self, mode: str) -> list[MediaModel]:
         return [m for m in self.models.values() if m.mode == mode]
 
+    def for_task(self, mode: str, task: str) -> MediaModel | None:
+        """The first model of a mode that does a task (first-last-frame, camera, image-to-video…)."""
+        return next((m for m in self.for_mode(mode) if task in m.tasks), None)
+
     def tool(self, task: str) -> MediaModel:
         """The tool for a task (upscale, remove-background)."""
         return next(m for m in self.models.values() if m.mode == "tool" and task in m.tasks)

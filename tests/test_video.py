@@ -12,9 +12,15 @@ from lcode.repl import handle_command, respond
 
 LAPTOP = Hardware("linux", "x", 31, "RTX 4080 Laptop", 12)
 WAN = {
-    "diffusion_models": [*FLUX["diffusion_models"], "wan2.2_ti2v_5B_fp16.safetensors"],
+    "diffusion_models": [
+        *FLUX["diffusion_models"],
+        "wan2.2_ti2v_5B_fp16.safetensors",
+        "wan2.2_fun_inpaint_5B_bf16.safetensors",
+        "wan2.1_fun_camera_v1.1_1.3B_bf16.safetensors",
+    ],
     "text_encoders": [*FLUX["text_encoders"], "umt5_xxl_fp8_e4m3fn_scaled.safetensors"],
-    "vae": [*FLUX["vae"], "wan2.2_vae.safetensors"],
+    "vae": [*FLUX["vae"], "wan2.2_vae.safetensors", "wan_2.1_vae.safetensors"],
+    "clip_vision": ["clip_vision_h.safetensors"],
 }
 
 
@@ -143,3 +149,50 @@ def test_the_video_model_setting(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         cli.main(["config", "set", "video_model", "flux2-klein-4b"])  # an image model
     cli.main(["config", "set", "video_model", "wan22-ti2v-5b"])
+
+
+# ---------------------------------------------------------------------- first and last frames, camera, extending
+
+
+def test_two_pictures_make_a_clip_from_the_first_to_the_last(video_agent, standin, repo):
+    (repo / "end.png").write_bytes(tiny_png())
+    media.request(video_agent, "@photo.png @end.png the flower opens")
+    graph = standin.prompts[-1]
+    latent = node(graph, "WanFunInpaintToVideo")["inputs"]
+    assert latent["start_image"] == ["8100", 0] and latent["end_image"] == ["8101", 0]
+    assert node(graph, "UNETLoader")["inputs"]["unet_name"] == "wan2.2_fun_inpaint_5B_bf16.safetensors"
+    assert node(graph, "KSampler")["inputs"]["latent_image"] == ["7", 2]
+    assert "Wan 2.2 Fun InP 5B makes this one (a clip between two frames)" in text(video_agent)
+
+
+def test_camera_moves(video_agent, standin):
+    media.request(video_agent, "a mountain lake at dawn --camera pan-left --seconds 3")
+    graph = standin.prompts[-1]
+    assert node(graph, "WanCameraEmbedding")["inputs"]["camera_pose"] == "Pan Left"
+    assert (
+        node(graph, "CreateVideo")["inputs"]["fps"] == 16
+        and node(graph, "WanCameraImageToVideo")["inputs"]["length"] == 49
+    )
+    assert not any(n["class_type"] == "CLIPVisionEncode" for n in graph.values())  # no start image: nothing to look at
+    media.request(video_agent, "@photo.png the lighthouse --camera zoom-in")
+    graph = standin.prompts[-1]
+    latent = node(graph, "WanCameraImageToVideo")["inputs"]
+    assert latent["start_image"] == ["8100", 0] and latent["clip_vision_output"] == ["8102", 0]
+    assert node(graph, "WanCameraEmbedding")["inputs"]["camera_pose"] == "Zoom In"
+    with pytest.raises(media.MediaError, match="camera is one of static, pan-left"):
+        media.request(video_agent, "a lake --camera crane-up")
+
+
+def test_extending_a_clip_continues_from_its_last_frame(video_agent, standin):
+    media.request(video_agent, "a hummingbird near red flowers --seconds 2")
+    handle_command(video_agent, "/extend 1 --seconds 3 it flies away", LAPTOP)
+    graph = standin.prompts[-1]
+    assert node(graph, "LoadVideo")["inputs"]["file"].endswith(".mp4")
+    last = graph["8202"]["inputs"]
+    assert last["batch_index"] == -1 and node(graph, "Wan22ImageToVideoLatent")["inputs"]["start_image"] == ["8202", 0]
+    assert node(graph, "CreateVideo")["inputs"]["images"] == ["8204", 0]  # the clip, then the new frames
+    latent = node(graph, "Wan22ImageToVideoLatent")["inputs"]
+    assert (latent["width"], latent["height"]) == (864, 480) and latent["length"] == 73
+    entry = video_agent.media_results[-1]
+    assert entry["path"].endswith("-extended.mp4") and entry["prompt"] == "it flies away"
+    assert "Continuing #1 from its last frame, 3 s more" in text(video_agent)
