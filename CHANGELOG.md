@@ -19,8 +19,6 @@ All notable changes to lcode are documented here. The format follows
     `/models` in video mode picks one (the `video_model` setting).
   - With `notify` on, a long render ends with a desktop notification.
 
-### Added
-
 ## [0.43.0] - 2026-10-24
 
 ### Added
