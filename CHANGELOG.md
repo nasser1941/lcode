@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-10-24
+
 ### Added
 
 - **Video mode makes videos** (#153). Describe a clip, or start it from a picture (`@photo.png`),
@@ -967,7 +969,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.43.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.44.0...HEAD
+[0.44.0]: https://github.com/nasser1941/lcode/compare/v0.43.0...v0.44.0
 [0.43.0]: https://github.com/nasser1941/lcode/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/nasser1941/lcode/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/nasser1941/lcode/compare/v0.40.0...v0.41.0
