@@ -198,6 +198,7 @@ def test_extending_a_clip_continues_from_its_last_frame(video_agent, standin):
     assert node(graph, "CreateVideo")["inputs"]["images"] == ["8204", 0]  # the clip, then the new frames
     latent = node(graph, "Wan22ImageToVideoLatent")["inputs"]
     assert (latent["width"], latent["height"]) == (864, 480) and latent["length"] == 73
+    assert node(graph, "CreateVideo")["inputs"]["fps"] == 24  # the clip's own pace
     entry = video_agent.media_results[-1]
     assert entry["path"].endswith("-extended.mp4") and entry["prompt"] == "it flies away"
     assert "Continuing #1 from its last frame, 3 s more" in text(video_agent)
@@ -222,6 +223,14 @@ def test_pictures_as_references(video_agent, standin, repo):
     assert "Wan 2.1 VACE 1.3B makes this one (following reference pictures)" in text(video_agent)
     with pytest.raises(media.MediaError, match="--ref makes the @pictures references"):
         media.request(video_agent, "--ref a cat in a garden")
+
+
+def test_extending_keeps_the_clips_pace(video_agent, standin):
+    media.request(video_agent, "a lake --camera pan-left --seconds 2")  # a 16 fps clip
+    handle_command(video_agent, "/extend 1 --seconds 2 mist rises", LAPTOP)
+    graph = standin.prompts[-1]
+    assert node(graph, "CreateVideo")["inputs"]["fps"] == 16
+    assert node(graph, "Wan22ImageToVideoLatent")["inputs"]["length"] == 33  # 2 s at 16 fps
 
 
 def test_restyling_a_clip_follows_its_outlines(video_agent, standin):

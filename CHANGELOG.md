@@ -17,6 +17,10 @@ All notable changes to lcode are documented here. The format follows
   - **`/smooth 4`** doubles (or quadruples) the frames with FILM, **`/upscale 4`** now works on clips,
     and **`/sound 4 …`** adds sound made by Stable Audio Open to a clip.
 
+### Fixed
+
+- Extending a clip keeps its pace: a 16 fps camera clip extended with the 24 fps model played too fast.
+
 ### Added
 
 - **Video mode: first and last frames, camera moves, longer clips** (#154, part 1). See

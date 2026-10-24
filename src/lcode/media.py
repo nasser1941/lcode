@@ -525,6 +525,8 @@ def generate_video(
     if clip is not None:  # the new part continues the clip, so it has its size
         width, height = job["size"]
     fps = int(workflow.defaults.get("fps", 24))
+    if clip is not None:  # one clip, one pace: the new part plays at the clip's fps
+        fps = int(clip_info(clip)["fps"] or fps)
     if restyle is not None:  # the restyled clip has the clip's size and pace (up to the model's length)
         info = clip_info(restyle)
         width, height = (info["width"] // 16 * 16 or 832), (info["height"] // 16 * 16 or 480)
