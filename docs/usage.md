@@ -84,6 +84,7 @@ reasoning is on.
 | `/options`, `/again`, `/vary N`, `/gallery`, `/open N` | Image mode: [options for the session, follow-ups on results](modes.md#results) |
 | `/edit N`, `/use N`, `/extend N`, `/upscale N`, `/nobg N` | Image mode: [edit, follow, outpaint, upscale, cut out](modes.md#editing) |
 | `/animate N`, `/play N` | [Video mode](modes.md#video-mode): animate image N; play a clip |
+| `/film <idea>` (`plan`, `make`, `shot N`, `stitch`, `list`) | [A short film](modes.md#films) with the same characters in every shot |
 | `/restyle N`, `/smooth N`, `/sound N`, `/upscale N` | [Video mode](modes.md#video-mode): a new look, more frames, sound, more pixels |
 | `/permissions [ask\|plan\|auto-edit\|yolo]` | Set the permission mode |
 | `/cd DIR` | Change the working directory |

@@ -94,6 +94,7 @@ COMMANDS = {
     "/sound": "Video mode: add sound to a clip, e.g. /sound 4 waves and seagulls",
     "/restyle": "Video mode: the same clip in a new look, e.g. /restyle 4 as a watercolor painting",
     "/play": "Play a video in your player, e.g. /play 4 (default: the last)",
+    "/film": "A short film from an idea: /film a fox finds a lost kitten --shots 3 (plan, make, shot N, stitch, list)",
     "/cd": "Change the working directory",
     "/todos": "Show the current todo list",
     "/status": "The task sheet: your requests, the plan and notes, files changed, the last check",
@@ -1198,6 +1199,8 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         mode_command(agent, arg.strip().lower())
     elif cmd in IMAGE_COMMANDS:
         image_command(agent, cmd, arg)
+    elif cmd == "/film":
+        film_command(agent, arg)
     elif cmd == "/permissions":
         if arg in PERMISSION_MODES:
             agent.perms.mode = arg
@@ -1581,6 +1584,70 @@ def use_references(agent: Agent, arg: str) -> None:
         return
     shown = ", ".join(media.shown(agent, Path(p)) for p in agent.image_refs)
     c.print(f"References for the next requests: [bold]{escape(shown)}[/] [dim](/use off stops)[/]")
+
+
+FILM_FLAGS = re.compile(r'--(shots|seconds|quality|transition|sound)\s+("[^"]*"|\S+)')
+
+
+def film_command(agent: Agent, arg: str) -> None:
+    """/film: a storyboard from an idea, the film made from it, a shot made again, the shots joined again."""
+    from lcode import film
+
+    c = agent.console
+    flags = {k: v.strip('"') for k, v in FILM_FLAGS.findall(arg)}
+    text = " ".join(FILM_FLAGS.sub(" ", arg).split())
+    word, _, rest = text.partition(" ")
+    try:
+        if word == "list":
+            folders = sorted(p for p in film.films_folder(agent).glob("*") if (p / "storyboard.json").exists())
+            if not folders:
+                c.print("[dim]No films here yet: /film <your idea>[/]")
+            for folder in folders:
+                board = film.load(folder)
+                made = "made" if (folder / "film.mp4").exists() else "storyboard only"
+                about = f"{len(board.shots)} shots · {made}"
+                c.print(f"  [bold]{escape(folder.name)}[/] {escape(board.title)} [dim]· {about}[/]")
+            return
+        if word in ("make", "stitch", "shot", "show"):
+            if word == "shot":
+                numbers_text, _, name = rest.partition(" ")
+                folder = film.find(agent, name.strip())
+            else:
+                folder = film.find(agent, rest.strip())
+            board = film.with_options(film.load(folder), flags.get("transition", ""), flags.get("sound", ""),
+                                      flags.get("quality", ""))  # fmt: skip
+            if word == "show":
+                c.print(escape(film.describe(board, folder, agent)))
+                return
+            film.save(board, folder)
+            if word == "stitch":
+                film.stitch(agent, board, folder)
+                return
+            only = film.shot_numbers(numbers_text, len(board.shots)) if word == "shot" else None
+            make_image(agent, run=lambda cancel, ask: film.make(agent, board, folder, only, cancel, ask))
+            return
+        just_plan = word == "plan"
+        idea = rest if just_plan else text
+        if not idea.strip():
+            c.print("[yellow]Say what the film is about: /film a fox finds a lost kitten in the snow --shots 3[/]")
+            return
+        shots = int(flags.get("shots", "3"))
+        if not 1 <= shots <= film.MAX_SHOTS:
+            c.print(f"[yellow]A film has 1 to {film.MAX_SHOTS} shots.[/]")
+            return
+        seconds = float(flags.get("seconds", "4"))
+        board, folder = film.plan(agent, idea, shots, min(max(seconds, 1.0), 8.0))
+        board = film.with_options(board, flags.get("transition", ""), flags.get("sound", ""), flags.get("quality", ""))
+        film.save(board, folder)
+        c.print(escape(film.describe(board, folder, agent)))
+        if just_plan:
+            c.print(
+                f"[dim]Edit {escape(media.shown(agent, folder / 'storyboard.json'))} if you like, then /film make.[/]"
+            )
+            return
+        make_image(agent, run=lambda cancel, ask: film.make(agent, board, folder, None, cancel, ask))
+    except (film.FilmError, ValueError) as e:
+        c.print(f"[yellow]{escape(str(e))}[/]")
 
 
 def gallery(agent: Agent, everything: bool = False) -> None:
