@@ -113,6 +113,10 @@ class StandIn:
             for node in ("12", "13"):
                 self.send(client_id, {"type": "executing", "data": {"node": node, **sid}})
             outputs = {"13": {"images": [{"filename": "lcode/image_00001_.png", "subfolder": "", "type": "output"}]}}
+            video = next((nid for nid, node in graph.items() if node.get("class_type") == "SaveVideo"), None)
+            if video:  # ComfyUI lists a saved video under "images", marked animated
+                item = {"filename": "lcode/video_00001_.mp4", "subfolder": "", "type": "output"}
+                outputs = {video: {"images": [item], "animated": [True]}}
             for node_id, node in graph.items():  # previews: temporary images, like ComfyUI's PreviewImage
                 if node.get("class_type") == "PreviewImage":
                     outputs[node_id] = {"images": [{"filename": "preview_00001_.png", "subfolder": "", "type": "temp"}]}
@@ -198,6 +202,8 @@ class StandIn:
                     entry = standin.history.get(prompt_id)
                     return self.reply(200, {prompt_id: entry} if entry else {})
                 if path == "/view":
+                    if query.get("filename", "").endswith(".mp4"):
+                        return self.reply(200, b"\x00\x00\x00\x18ftypmp42 a video", "video/mp4")
                     return self.reply(200, tiny_png(), "image/png")
                 return self.reply(404, {"error": "not found"})
 

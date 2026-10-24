@@ -36,7 +36,7 @@ def test_mode_shows_itself_and_switches(agent, monkeypatch):
     assert "Describe an image and press Enter: FLUX.2 klein 4B makes it on your GPU, into .lcode/media" in text(agent)
     handle_command(agent, "/mode video", LAPTOP)  # no coding model to unload from image mode
     assert agent.settings.mode == "video" and agent.ollama.unloaded == ["lcode-qwen3.6-35b"]
-    assert "Video mode doesn't generate yet" in text(agent)
+    assert "Describe a video and press Enter (@photo.png starts it from a picture): Wan 2.2 TI2V 5B" in text(agent)
     handle_command(agent, "/mode code", LAPTOP)
     assert agent.settings.mode == "code" and freed == [agent.settings.comfyui_url]
     assert "ComfyUI gave the GPU back" in text(agent)
@@ -51,10 +51,10 @@ def test_a_request_in_image_or_video_mode_never_reaches_the_coding_model(make_ag
     respond(agent, "a red fox in the snow")  # no ComfyUI here: image mode says how to get it
     assert "no install found" in text(agent) and agent.ollama.payloads == []
     agent.settings.mode = "video"
-    respond(agent, "a red fox running")
-    handle_command(agent, "/models", LAPTOP)
-    assert "Video mode doesn't generate yet" in text(agent) and agent.ollama.payloads == []
-    assert "Video models come with video generation (#153)" in text(agent)
+    respond(agent, "a red fox running")  # video mode too: ComfyUI's, never the coding model's
+    assert text(agent).count("no install found") == 2 and agent.ollama.payloads == []
+    handle_command(agent, "/model 1", LAPTOP)
+    assert "Video model: Wan 2.2 TI2V 5B" in text(agent) and agent.settings.video_model == "wan22-ti2v-5b"
 
 
 def test_the_permission_mode_has_its_own_command_now(agent):
@@ -146,7 +146,7 @@ def test_the_mode_setting(tmp_path, monkeypatch):
     assert config.load()["mode"] == "video"
 
 
-def test_a_request_from_the_command_line_in_video_mode_says_whats_coming(tmp_path, monkeypatch, capsys):
+def test_a_request_from_the_command_line_without_comfyui_says_how_to_get_it(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
     cli.main(["config", "set", "comfyui_url", "http://127.0.0.1:9"])
     monkeypatch.setattr(cli, "Ollama", lambda host: FakeOllama())
@@ -154,13 +154,9 @@ def test_a_request_from_the_command_line_in_video_mode_says_whats_coming(tmp_pat
     monkeypatch.setattr("lcode.api.check_server", lambda *args: "0.35.1")
     monkeypatch.setattr(cli, "resolve_model", lambda ollama, name: (name, catalog.find(name)))
     monkeypatch.setattr(cli, "choose_context", lambda *args: (32768, ""))
-    with pytest.raises(SystemExit) as done:
-        cli.main(["--mode", "video", "-p", "a red fox running", "--output", "json", "--no-mcp"])
-    assert done.value.code == 2
-    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert result["status"] == "error" and "Video mode doesn't generate yet" in result["error"]
-    with pytest.raises(SystemExit) as done:  # image mode makes images now, given a ComfyUI (tests/test_comfy.py)
-        cli.main(["--mode", "image", "-p", "a red fox", "--output", "json", "--no-mcp"])
-    assert done.value.code == 1
-    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert result["status"] == "error" and "no install found" in result["error"]
+    for mode in ("video", "image"):  # both make media now, given a ComfyUI (tests/test_comfy.py, test_video.py)
+        with pytest.raises(SystemExit) as done:
+            cli.main(["--mode", mode, "-p", "a red fox running", "--output", "json", "--no-mcp"])
+        assert done.value.code == 1
+        result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+        assert result["status"] == "error" and "no install found" in result["error"]

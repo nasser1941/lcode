@@ -801,16 +801,8 @@ def media_request(agent, prompt: str, out: Console, quiet: bool) -> None:
     """`lcode --mode image -p "…"`: make the image, say where it went (or, with --output json, a result object)."""
     import json
 
-    from lcode import api, media, modes
+    from lcode import api, media
 
-    if agent.settings.mode == "video":
-        message = modes.COMING["video"]
-        if quiet:
-            print(json.dumps({"type": "result", "status": "error", "error": message}), flush=True)
-        else:
-            out.print(f"[yellow]{escape(message)}[/]")
-        api.close_agent(agent)
-        sys.exit(2)
     try:
         made = media.request(agent, prompt)
     except (media.MediaError, KeyboardInterrupt) as e:
@@ -825,7 +817,7 @@ def media_request(agent, prompt: str, out: Console, quiet: bool) -> None:
         result = {
             "type": "result",
             "status": "success",
-            "mode": "image",
+            "mode": agent.settings.mode,
             "files": [str(path) for one in made for path in one.files],
             "model": made[0].model,
             "seed": made[0].seed,
@@ -1106,7 +1098,7 @@ def cmd_media(args) -> None:
     where = (
         f"ComfyUI at {server.url}" if running else (f"{install.path} (not running)" if install else "no ComfyUI found")
     )
-    console.print(f"[dim]{hw.describe()} · {where} · image model: {cfg['image_model']}[/]\n")
+    console.print(f"[dim]{hw.describe()} · {where} · image: {cfg['image_model']} · video: {cfg['video_model']}[/]\n")
     for mode in ("image", "video", "tool"):
         models = cat.for_mode(mode)
         console.print(

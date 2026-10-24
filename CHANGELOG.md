@@ -10,6 +10,19 @@ All notable changes to lcode are documented here. The format follows
 
 ### Added
 
+- **Video mode makes videos** (#153). Describe a clip, or start it from a picture (`@photo.png`),
+  and Wan 2.2 TI2V 5B makes it on your GPU. See [Video mode](https://nasser1941.github.io/lcode/modes/#video-mode).
+  - **Options:** `--seconds` (1 to 8, 5 by default, 24 fps) plus the image options. Quality
+    presets: 864×480 in 12 or 20 steps, or 1280×704 in 30. A 5-second clip takes 100 to 150 s on a
+    12 GB laptop GPU. Clips are 16:9 (9:16 from an upright start image) unless you give a shape.
+  - **Results:** an MP4 with its settings in a JSON file next to it, in the session's gallery; the
+    first frame shows in the terminal, `/play` opens it, and `/vary`/`/again` make new clips.
+  - **`/animate 3`** in image mode makes a clip from image #3. `lcode media` lists video models, and
+    `/models` in video mode picks one (the `video_model` setting).
+  - With `notify` on, a long render ends with a desktop notification.
+
+### Added
+
 - **Image mode edits pictures** (#152). See [Editing](https://nasser1941.github.io/lcode/modes/#editing).
   - **Edit by instruction** (`/edit 3 make the sky purple`, or `@photo.png make the sky purple`)
     and **references** (`@photo.png @#3 put the mug from image 1 on the table in image 2`), with

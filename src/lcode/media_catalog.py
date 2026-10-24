@@ -29,6 +29,7 @@ else:  # pragma: no cover
     import tomli as tomllib
 
 DEFAULT_IMAGE = "flux2-klein-4b"
+DEFAULT_VIDEO = "wan22-ti2v-5b"
 DISK_MARGIN_GB = 2.0  # left free after a download
 GPU_MARGIN_GIB = 0.5
 WORKING_GB = 1.5  # activations and buffers on top of the largest file, for models not measured yet
