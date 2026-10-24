@@ -1,5 +1,6 @@
 """Image mode's engine: lcode drives ComfyUI (a stand-in here): queue, progress, cancel, outputs, recovery."""
 
+import contextlib
 import io
 import json
 import os
@@ -410,7 +411,8 @@ def test_comfyui_stops_when_lcode_is_killed(tmp_path):
         assert not alive(child)
     finally:
         if alive(child):
-            os.kill(child, 9)
+            with contextlib.suppress(ProcessLookupError):  # it may end between the check and the kill
+                os.kill(child, 9)
 
 
 def alive(pid: int) -> bool:
