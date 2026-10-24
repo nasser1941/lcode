@@ -18,8 +18,6 @@ All notable changes to lcode are documented here. The format follows
     on first use. `/vary` on an edit makes new edits of the same images.
   - ComfyUI's reasons for refusing a workflow now include its explanation, not just the input's name.
 
-### Added
-
 ## [0.42.0] - 2026-10-24
 
 ### Added
