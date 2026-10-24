@@ -10,6 +10,15 @@ All notable changes to lcode are documented here. The format follows
 
 ### Added
 
+- **Video mode: references, restyling, smoother and bigger clips, sound** (#154, part 2). See
+  [Video mode](https://nasser1941.github.io/lcode/modes/#video-mode).
+  - **`@cat.png @hat.png --ref …`** makes a clip that follows reference pictures, and
+    **`/restyle 4 …`** makes a clip again in a new look following its outlines (Wan 2.1 VACE 1.3B).
+  - **`/smooth 4`** doubles (or quadruples) the frames with FILM, **`/upscale 4`** now works on clips,
+    and **`/sound 4 …`** adds sound made by Stable Audio Open to a clip.
+
+### Added
+
 - **Video mode: first and last frames, camera moves, longer clips** (#154, part 1). See
   [Video mode](https://nasser1941.github.io/lcode/modes/#video-mode).
   - **`@start.png @end.png …`** makes a clip from one picture to the other (Wan 2.2 Fun InP 5B).

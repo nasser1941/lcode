@@ -1,6 +1,7 @@
 """Video mode: a description (or a start image) becomes a clip, with Wan 2.2 TI2V 5B, against a stand-in ComfyUI."""
 
 import json
+import struct
 
 import pytest
 
@@ -17,10 +18,14 @@ WAN = {
         "wan2.2_ti2v_5B_fp16.safetensors",
         "wan2.2_fun_inpaint_5B_bf16.safetensors",
         "wan2.1_fun_camera_v1.1_1.3B_bf16.safetensors",
+        "wan2.1_vace_1.3B_fp16.safetensors",
     ],
-    "text_encoders": [*FLUX["text_encoders"], "umt5_xxl_fp8_e4m3fn_scaled.safetensors"],
+    "text_encoders": [*FLUX["text_encoders"], "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "t5-base.safetensors"],
     "vae": [*FLUX["vae"], "wan2.2_vae.safetensors", "wan_2.1_vae.safetensors"],
     "clip_vision": ["clip_vision_h.safetensors"],
+    "frame_interpolation": ["film_net_fp16.safetensors"],
+    "checkpoints": ["stable-audio-open-1.0.safetensors"],
+    "upscale_models": ["RealESRGAN_x4plus.safetensors"],
 }
 
 
@@ -196,3 +201,80 @@ def test_extending_a_clip_continues_from_its_last_frame(video_agent, standin):
     entry = video_agent.media_results[-1]
     assert entry["path"].endswith("-extended.mp4") and entry["prompt"] == "it flies away"
     assert "Continuing #1 from its last frame, 3 s more" in text(video_agent)
+
+
+# ---------------------------------------------------------------------- references, restyling, smoother, bigger, sound
+
+
+def a_clip(video_agent, seconds=2):
+    [made] = media.request(video_agent, f"a hummingbird near red flowers --seconds {seconds}")
+    return made
+
+
+def test_pictures_as_references(video_agent, standin, repo):
+    (repo / "hat.png").write_bytes(tiny_png())
+    media.request(video_agent, "@photo.png @hat.png --ref the cat wears the hat in a garden")
+    graph = standin.prompts[-1]
+    vace = node(graph, "WanVaceToVideo")["inputs"]
+    stitch = graph[vace["reference_image"][0]]
+    assert stitch["class_type"] == "ImageStitch" and stitch["inputs"]["direction"] == "right"
+    assert "start_image" not in vace and node(graph, "TrimVideoLatent")["inputs"]["trim_amount"] == ["7", 3]
+    assert "Wan 2.1 VACE 1.3B makes this one (following reference pictures)" in text(video_agent)
+    with pytest.raises(media.MediaError, match="--ref makes the @pictures references"):
+        media.request(video_agent, "--ref a cat in a garden")
+
+
+def test_restyling_a_clip_follows_its_outlines(video_agent, standin):
+    a_clip(video_agent)
+    handle_command(video_agent, "/restyle 1 as a watercolor painting", LAPTOP)
+    graph = standin.prompts[-1]
+    control = node(graph, "WanVaceToVideo")["inputs"]["control_video"]
+    assert graph[control[0]]["class_type"] == "Canny"
+    vace = node(graph, "WanVaceToVideo")["inputs"]
+    assert (vace["width"], vace["height"], vace["length"]) == (864, 480, 49)  # the clip's size and length
+    assert node(graph, "CreateVideo")["inputs"]["fps"] == 24
+    assert video_agent.media_results[-1]["path"].endswith("-restyled.mp4")
+    handle_command(video_agent, "/restyle 1", LAPTOP)
+    assert "Say the new look" in text(video_agent)
+
+
+def test_smoother_bigger_and_with_sound(video_agent, standin):
+    a_clip(video_agent)
+    handle_command(video_agent, "/smooth 1", LAPTOP)
+    graph = standin.prompts[-1]
+    assert (
+        node(graph, "FrameInterpolate")["inputs"]["multiplier"] == 2
+        and node(graph, "CreateVideo")["inputs"]["fps"] == 48
+    )
+    assert video_agent.media_results[-1]["path"].endswith("-smooth-2x.mp4")
+    handle_command(video_agent, "/smooth 1 3", LAPTOP)
+    assert "/smooth makes 2 or 4 times the frames" in text(video_agent)
+    handle_command(video_agent, "/upscale 1", LAPTOP)
+    graph = standin.prompts[-1]
+    assert node(graph, "LoadVideo") and node(graph, "ImageUpscaleWithModel")
+    assert video_agent.media_results[-1]["width"] == 1728
+    handle_command(video_agent, "/sound 1 wings buzzing and birdsong", LAPTOP)
+    graph = standin.prompts[-1]
+    assert node(graph, "EmptyLatentAudio")["inputs"]["seconds"] == 2.0
+    assert node(graph, "CreateVideo")["inputs"]["audio"] == ["9", 0]
+    assert video_agent.media_results[-1]["path"].endswith("-sound.mp4")
+    handle_command(video_agent, "/sound 1", LAPTOP)
+    assert "Say what it should sound like" in text(video_agent)
+    handle_command(video_agent, "/vary 4", LAPTOP)
+    assert "/vary the image it came from" in text(video_agent)
+
+
+def test_tools_say_what_they_work_on(video_agent, standin, repo):
+    with pytest.raises(media.MediaError, match="works on clips"):
+        media.apply_tool(video_agent, "sound", repo / "photo.png", 1, prompt="rain")
+    with pytest.raises(media.MediaError, match="/nobg works on pictures"):
+        media.apply_tool(video_agent, "remove-background", repo / "clip.mp4")
+
+
+def test_a_clips_length_from_its_header(tmp_path):
+    mvhd = b"mvhd" + bytes(4) + bytes(8) + struct.pack(">II", 1000, 4500)
+    (tmp_path / "c.mp4").write_bytes(
+        b"\x00\x00\x00\x20ftypisom" + bytes(8) + b"\x00\x00\x00\x6cmoov\x00\x00\x00\x6c" + mvhd
+    )
+    info = media.clip_info(tmp_path / "c.mp4")
+    assert info["seconds"] == 4.5 and info["fps"] == 24.0 and info["frames"] == 109

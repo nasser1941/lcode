@@ -71,6 +71,7 @@ class MediaModel:
     quality: dict[str, tuple[int, float]] = field(default_factory=dict, hash=False)  # preset -> (steps, megapixels)
     negative: bool = False  # whether it uses a negative prompt
     edit: str = ""  # how it edits images ("reference-latent"), or empty: it doesn't
+    video_workflow: str = ""  # a tool's workflow for clips, when it works on them too (upscaling)
 
     def preset(self, quality: str) -> tuple[int | None, float]:
         """(steps, megapixels) for a quality preset: None steps keeps the workflow's."""
@@ -163,6 +164,7 @@ def load() -> Catalog:
             {name: (int(v[0]), float(v[1])) for name, v in (m.get("quality") or {}).items()},
             bool(m.get("negative", False)),
             m.get("edit", ""),
+            m.get("video_workflow", ""),
         )
     return Catalog(files, models)
 
