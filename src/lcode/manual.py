@@ -351,8 +351,7 @@ def _load(place: str) -> Manual:
     for piece in found[before:]:
         piece.anchor = "slash-commands"
     everything = "\n".join(text_all)
-    known_commands = {c.lstrip("/") for c in commands} | {"exit", "quit", "q"}
-    known_commands |= set(re.findall(r"`/([a-z][a-z-]*)", everything))
+    known_commands = {c.lstrip("/") for c in commands} | {"exit", "quit", "q"}  # the docs name made-up ones too
     known_options = set(OPTION.findall(everything)) | {"raw"}
     return Manual(found, known_commands, known_options)
 
