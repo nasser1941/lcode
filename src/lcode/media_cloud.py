@@ -132,6 +132,9 @@ def cannot(model: catalog.MediaModel, job: dict) -> str:
         if len(sources) > 1:
             return "several pictures at once"
     elif kind == "video":
+        options = job.get("options")
+        if options is not None and options.seconds > MAX_VIDEO_SECONDS:
+            return f"clips longer than {MAX_VIDEO_SECONDS} s"
         if job.get("extend"):
             return "extending a clip"
         if job.get("restyle"):

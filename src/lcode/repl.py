@@ -88,7 +88,7 @@ COMMANDS = {
     "/open": "Open an image in your viewer, e.g. /open 3 (default: the last)",
     "/edit": "Image mode: change an image by instruction, e.g. /edit 3 make the sky purple (@photo.png: references)",
     "/use": "Image mode: images the next requests follow, e.g. /use 3 or /use photo.png (/use off)",
-    "/extend": "Outpaint an image (/extend 3 --ar 16:9), or continue a clip in video mode (/extend 4 --seconds 3)",
+    "/extend": "Outpaint an image (/extend 3 --ar 16:9), or continue a clip in video mode (/extend 4 --seconds 20)",
     "/upscale": "2 or 4 times the pixels of an image or a clip, e.g. /upscale 3 4",
     "/nobg": "Image mode: remove the background (a transparent PNG), e.g. /nobg 3",
     "/animate": "Image mode: make a video starting from an image, e.g. /animate 3 the waves roll in (video mode)",

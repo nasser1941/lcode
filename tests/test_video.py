@@ -77,8 +77,8 @@ def test_length_shape_and_quality(video_agent, standin):
     media.request(video_agent, "a hummingbird --quality best")
     latent = node(standin.prompts[-1], "Wan22ImageToVideoLatent")["inputs"]
     assert (latent["width"], latent["height"]) == (1280, 704)  # the model's own 720p
-    with pytest.raises(media.MediaError, match="seconds is how long a video is: 1 to 8"):
-        media.request(video_agent, "a hummingbird --seconds 30")
+    with pytest.raises(media.MediaError, match="seconds is how long a video is: 1 to 60"):
+        media.request(video_agent, "a hummingbird --seconds 90")
 
 
 def test_a_start_image_sets_the_first_frame_and_the_shape(video_agent, standin):

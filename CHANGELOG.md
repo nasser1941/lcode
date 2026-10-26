@@ -6,6 +6,16 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Clips up to 60 seconds** (#185), also from a start to an end picture: `@start.png @end.png the
+  flower opens --seconds 25`. A clip longer than the 8 s a video model makes at once is made in
+  parts, each starting on the last frame of the one before (the last one ending on the end
+  picture), and joined into one clip with ffmpeg, without the frame each join would repeat.
+  `/extend 4 --seconds 20` works the same way; Esc keeps the parts made so far as a clip.
+- **Clips through several pictures:** `@bud.png @half-open.png @open.png the tulip opens
+  --seconds 25` goes to each picture in turn, in an equal share of the clip.
+
 ## [0.50.0] - 2026-10-26
 
 ### Added

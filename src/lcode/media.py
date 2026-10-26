@@ -7,6 +7,7 @@ makes what it can at its provider instead, after showing the cost (lcode.media_c
 from __future__ import annotations
 
 import json
+import math
 import os
 import random
 import re
@@ -313,7 +314,7 @@ def request(
             raise MediaError("Video mode doesn't take a mask: @photo.png starts a video from a picture.")
         if as_references and not sources:
             raise MediaError("--ref makes the @pictures references: @cat.png @hat.png --ref the cat wears the hat")
-        frames = [] if as_references else [str(p) for p in sources[:2]]
+        frames = [] if as_references else [str(p) for p in sources]  # 3 or more: the clip goes through them
         refs = [str(p) for p in sources] if as_references else []
         job = {"kind": "video", "prompt": prompt, "options": options, "sources": frames, "mask": None, "pads": None,
                "keep_shape": not SIZE_FLAG.search(text), "refs": refs, "raw": raw}  # fmt: skip
@@ -359,6 +360,12 @@ def redo(
         one = replace(options, seed=seed, n=1)
         if job["kind"] == "image":
             made.append(generate_image(agent, prompt, cancelled, ask, one, label, job.get("expanded", "")))
+        elif (
+            job["kind"] == "video"
+            and not job.get("restyle")
+            and (one.seconds > imageopts.PART_SECONDS or len(job.get("sources") or []) > 2)
+        ):  # longer than a model makes at once, or through more than two pictures
+            made.append(long_clip(agent, job, one, cancelled, ask, label))
         elif job["kind"] == "video":
             made.append(generate_video(agent, job, one, cancelled, ask, label))
         else:
@@ -487,6 +494,8 @@ class Plan:
     sources: list[str] = field(default_factory=list)
     job: dict = field(default_factory=dict)  # what made it, for /vary (prompt, sources, mask, pads)
     stem: str = ""  # the file name without its extension, when not the time and the prompt
+    into: Path | None = None  # the folder for its files, when not the media folder
+    part: bool = False  # a part of a long clip: saved, not numbered or shown (long_clip joins the parts)
 
 
 def prepare(agent: Agent, ask, cancelled) -> comfy.Server:
@@ -611,9 +620,11 @@ def generate_video(
     cancelled: Callable[[], bool] = lambda: False,
     ask: Callable[[str], bool] | None = None,
     label: str = "",
+    part: tuple[Path, str] | None = None,
 ) -> Made:
     """One video: from the prompt, or starting from the job's image. Its shape is 16:9, or 9:16 for an upright start
-    image (the shapes video models know best; the image is cropped to it), unless the request gives one."""
+    image (the shapes video models know best; the image is cropped to it), unless the request gives one. A part of a
+    long clip (`part`: its folder and name) is saved there, without a number in the gallery."""
     prompt = job["prompt"].strip()
     server = prepare(agent, ask, cancelled)
     sources = [Path(p) for p in job.get("sources") or []]
@@ -626,7 +637,7 @@ def generate_video(
         "restyle" if restyle else "references" if refs else "first-last-frame" if end
         else "camera" if options.camera else "extend" if clip else ""
     )  # fmt: skip
-    model = video_model(agent, task)
+    model = video_model(agent, task, quiet=part is not None)
     files = ensure_installed(agent, model, server, ask)
     workflow = comfy.load_workflow(model.workflow)
     seed = options.seed if options.seed is not None else random.randrange(2**32)
@@ -694,7 +705,7 @@ def generate_video(
     remembered = {k: job.get(k) for k in keys}
     stem = f"{clip.stem}-extended" if clip else (f"{restyle.stem}-restyled" if restyle else "")
     plan = Plan(model, workflow, graph, meta, prompt, seed, options, "video", job.get("sources") or [], remembered,
-                stem)  # fmt: skip
+                part[1] if part else stem, part[0] if part else None, part is not None)  # fmt: skip
     return run_plan(agent, server, plan, cancelled, label)
 
 
@@ -745,8 +756,9 @@ def control_from(graph: dict, clip_name: str, length: int) -> list:
     return ["8404", 0]
 
 
-def video_model(agent: Agent, task: str) -> catalog.MediaModel:
-    """The video model for a job: the chosen one, or the first local one that does what the job needs."""
+def video_model(agent: Agent, task: str, quiet: bool = False) -> catalog.MediaModel:
+    """The video model for a job: the chosen one, or the first local one that does what the job needs (said, unless
+    `quiet`: the parts of a long clip)."""
     chosen = current(agent, "video")
     if not chosen.cloud and (not task or task in chosen.tasks):
         return chosen
@@ -754,7 +766,8 @@ def video_model(agent: Agent, task: str) -> catalog.MediaModel:
     if model is None:
         raise MediaError(f"None of lcode's video models does {WHY.get(task, task)} yet.")
     where = f"; {chosen.name} doesn't do that here" if chosen.cloud else ""
-    agent.say(f"{model.name} makes this one ({WHY.get(task, task)}{where}).")
+    if not quiet:
+        agent.say(f"{model.name} makes this one ({WHY.get(task, task)}{where}).")
     return model
 
 
@@ -771,7 +784,173 @@ def continue_clip(graph: dict, latent: str, clip_name: str, length: int) -> None
     graph[video]["inputs"]["images"] = ["8204", 0]
 
 
+def parts_of(total: float, longest: float = imageopts.PART_SECONDS) -> list[float]:
+    """How long each part of a long clip is: as few parts as it takes, about equally long (in quarter seconds)."""
+    quarters = max(4, round(total * 4))
+    count = max(1, math.ceil(quarters / (longest * 4)))
+    base, extra = divmod(quarters, count)
+    return [(base + (1 if k < extra else 0)) / 4 for k in range(count)]
+
+
+def plan_parts(total: float, stops: int) -> list[tuple[float, int | None]]:
+    """A long clip's parts, as (seconds, the picture it ends on or None). With `stops` pictures to reach after the
+    start one, each gets an equal share of the clip, made in as few parts as fit; the last of them ends on it."""
+    if not stops:
+        return [(seconds, None) for seconds in parts_of(total)]
+    if total < stops:
+        raise MediaError(f"{stops + 1} pictures need a clip of at least {stops} s: --seconds {stops} or more.")
+    out: list[tuple[float, int | None]] = []
+    for stop in range(1, stops + 1):
+        lengths = parts_of(total / stops)
+        out += [(seconds, None) for seconds in lengths[:-1]] + [(lengths[-1], stop)]
+    return out
+
+
+def long_clip(
+    agent: Agent,
+    job: dict,
+    options: imageopts.Options,
+    cancelled: Callable[[], bool] = lambda: False,
+    ask: Callable[[str], bool] | None = None,
+    label: str = "",
+) -> Made:
+    """A clip longer than a video model makes at once: made in parts, each going on from the last frame of the one
+    before (and the last one ending on the end picture, when there is one), then joined into one clip with ffmpeg.
+    Esc keeps what's made: the parts so far, joined."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise MediaError(
+            f"A clip longer than {imageopts.PART_SECONDS} s is made in parts and joined with ffmpeg: install it "
+            f"(apt install ffmpeg, brew install ffmpeg), or ask for {imageopts.PART_SECONDS} s or less."
+        )
+    pictures = [Path(p) for p in job.get("sources") or []]
+    plan = plan_parts(options.seconds, max(0, len(pictures) - 1))
+    lengths = [seconds for seconds, _ in plan]
+    chosen = current(agent, "video")
+    if chosen.cloud:
+        agent.say(
+            f"{chosen.name} makes clips of up to {media_cloud.MAX_VIDEO_SECONDS} s: this one is made on your GPU."
+        )
+    clip = Path(job["extend"]) if job.get("extend") else None
+    seed = options.seed if options.seed is not None else random.randrange(2**32)
+    stem = f"{clip.stem}-extended" if clip else f"{time.strftime('%Y%m%d-%H%M%S')}-{comfy.slug(job['prompt'])}"
+    work = comfy.unique(folder(agent) / f"{stem}-parts")
+    say_plan(agent, options.seconds, plan, len(pictures), clip is not None)
+    started = time.monotonic()
+    frame = last_frame(ffmpeg, clip, work / "00-last.png") if clip else (pictures[0] if pictures else None)
+    size = f"{job['size'][0]}x{job['size'][1]}" if clip and job.get("size") else ""
+    made: list[Made] = []
+    try:
+        for k, (seconds, stop) in enumerate(plan):
+            if k and cancelled():  # Esc between two parts: the next one isn't started
+                raise MediaError("Cancelled before the next part.")
+            part = {**job, "extend": None, "restyle": None, "size": None,
+                    "sources": [str(frame)] if frame else [],
+                    "refs": job.get("refs") if k == 0 and not clip else [],
+                    "keep_shape": not size and job.get("keep_shape", True)}  # fmt: skip
+            if stop is not None:  # this part ends on the next picture
+                part["sources"] = [str(frame), str(pictures[stop])]
+            one = replace(options, seconds=seconds, seed=seed + k, size=size or options.size)
+            name = f"part {k + 1} of {len(plan)}" + (f", {label}" if label else "")
+            made.append(generate_video(agent, part, one, cancelled, ask, name, (work, f"{k + 1:02d}")))
+            agent.console.print(Text(f"  part {k + 1} of {len(plan)}: {seconds:g} s, made in "
+                                     f"{made[-1].seconds:.0f} s", style="dim"))  # fmt: skip
+            frame = last_frame(ffmpeg, made[-1].files[0], work / f"{k + 1:02d}-last.png")
+    except MediaError as e:
+        if not made:
+            raise
+        if not str(e).startswith("Cancelled"):
+            raise MediaError(f"{e} The parts made so far are in {shown(agent, work)}.") from e
+        result = join_long(agent, ffmpeg, job, options, made, lengths, seed, clip, f"{stem}-partial", started, work)
+        agent.console.print(f"[yellow]⏹ Stopped after part {len(made)} of {len(lengths)}: what's made is "
+                            f"#{result.numbers[0]}.[/]")  # fmt: skip
+        return result
+    return join_long(agent, ffmpeg, job, options, made, lengths, seed, clip, stem, started, work)
+
+
+def say_plan(agent: Agent, total: float, plan: list[tuple[float, int | None]], pictures: int, extends: bool) -> None:
+    """What a long clip takes, before it starts: its parts, which end on a picture, and about how long (at the pace
+    of this session's last clip)."""
+    lengths = [seconds for seconds, _ in plan]
+    each = f"{lengths[0]:g}" if len(set(lengths)) == 1 else f"{min(lengths):g} to {max(lengths):g}"
+    what = f"{total:g} s more" if extends else f"A {total:g} s clip"
+    line = (f"{what}: lcode makes it in {len(plan)} parts of {each} s, each going on from the last frame of the one "
+            "before, and joins them.")  # fmt: skip
+    stops = [k + 1 for k, (_, stop) in enumerate(plan) if stop is not None]
+    if pictures == 2:
+        line += f" Part {stops[0]} goes to your end picture: the change toward it happens there."
+    elif pictures > 2:
+        named = ", ".join(str(n) for n in stops[:-1]) + f" and {stops[-1]}"
+        line += f" Parts {named} each go to your next picture, in order."
+    pace = [r["seconds"] / max(r["options"].get("seconds") or 5, 1) for r in agent.media_results
+            if r.get("kind") == "video" and isinstance(r.get("options"), dict)]  # fmt: skip
+    if pace:
+        line += f" About {max(1, round(pace[-1] * total / 60))} min, at the pace of your last clip."
+    agent.say(line)
+
+
+def last_frame(ffmpeg: str, clip: Path, out: Path) -> Path:
+    """A clip's last frame, as a picture: where its next part starts."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    done = subprocess.run([ffmpeg, "-y", "-v", "error", "-sseof", "-1", "-i", str(clip), "-update", "1", str(out)],
+                          capture_output=True, text=True, stdin=subprocess.DEVNULL)  # fmt: skip
+    if done.returncode != 0 or not out.exists():
+        raise MediaError(f"ffmpeg couldn't read the last frame of {clip.name}: {done.stderr.strip()[-300:]}")
+    return out
+
+
+def join_command(ffmpeg: str, clips: list[Path], out: Path, fps: float, width: int, height: int) -> list[str]:
+    """ffmpeg's command for one clip from its parts: each after the first starts on the frame the one before ended
+    on, so that frame is left out; all at the first part's pace and size."""
+    command = [ffmpeg, "-y", "-v", "error"]
+    chains = []
+    for k, clip in enumerate(clips):
+        command += ["-i", str(clip)]
+        steps = (["trim=start_frame=1", "setpts=PTS-STARTPTS"] if k else []) + [
+            f"fps={fps:g}", f"scale={width}:{height}:flags=lanczos", "setsar=1"]  # fmt: skip
+        chains.append(f"[{k}:v]{','.join(steps)}[p{k}]")
+    joined = "".join(f"[p{k}]" for k in range(len(clips))) + f"concat=n={len(clips)}:v=1:a=0[out]"
+    return [*command, "-filter_complex", ";".join([*chains, joined]), "-map", "[out]", "-c:v", "libx264",
+            "-crf", "17", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)]  # fmt: skip
+
+
+def join_long(agent, ffmpeg, job, options, made, lengths, seed, clip, stem, started, work) -> Made:
+    """The parts (after the clip they extend, if any) joined into one clip, numbered in the gallery and shown."""
+    parts = [m.files[0] for m in made]
+    pictures = job.get("sources") or []
+    first = clip_info(clip or parts[0])
+    width, height = (first["width"] or made[0].width), (first["height"] or made[0].height)
+    fps = first["fps"] or 24
+    out = comfy.unique(folder(agent) / f"{stem}.mp4")
+    with agent.console.status("Joining the parts…", spinner="dots"):
+        done = subprocess.run(join_command(ffmpeg, ([clip] if clip else []) + parts, out, fps, width, height),
+                              capture_output=True, text=True, stdin=subprocess.DEVNULL)  # fmt: skip
+    if done.returncode != 0:
+        raise MediaError(f"ffmpeg couldn't join the parts (in {shown(agent, work)}): {done.stderr.strip()[-400:]}")
+    models = " + ".join(dict.fromkeys(m.model for m in made))
+    seconds = mp4_seconds(out) or sum(lengths[: len(made)])
+    meta = {"model": models, "prompt": job["prompt"], "seed": seed, "width": width, "height": height,
+            "fps": fps, "seconds": round(seconds, 2), "frames": round(seconds * fps),
+            "start_image": shown(agent, Path(pictures[0])) if pictures else "",
+            "end_image": shown(agent, Path(pictures[-1])) if len(pictures) > 1 else "",
+            "pictures": [shown(agent, Path(p)) for p in pictures] if len(pictures) > 2 else [],
+            "extends": shown(agent, clip) if clip else "", "camera": options.camera,
+            "parts": [{"file": shown(agent, m.files[0]), "seconds": s, "model": m.model, "seed": m.seed}
+                      for m, s in zip(made, lengths, strict=False)],
+            "file": out.name}  # fmt: skip
+    out.with_suffix(".json").write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
+    one = Made([out], models, seed, width, height, time.monotonic() - started, job["prompt"])
+    one.thumbnail, one.poster = made[0].thumbnail, made[0].poster
+    keys = ("kind", "prompt", "sources", "mask", "pads", "keep_shape", "extend", "size", "refs", "restyle")
+    plan = Plan(None, None, {}, meta, job["prompt"], seed, options, "video", job.get("sources") or [],
+                {k: job.get(k) for k in keys}, stem)  # fmt: skip
+    one.numbers = record(agent, one, plan)
+    show(agent, one)
+    return one
+
+
 VIDEO_TYPES = (".mp4", ".webm", ".mkv", ".mov")
+SOUND_SECONDS = 47.0  # the longest sound Stable Audio Open makes
 TOOL_NAMES = {"upscale": "upscaled", "remove-background": "nobg", "interpolate": "smooth", "sound": "sound"}
 
 
@@ -870,7 +1049,10 @@ def apply_tool(
         values["multiplier"], values["fps"] = scale, info["fps"] * scale
     elif task == "sound":
         seed = random.randrange(2**32)
-        values.update({"prompt": prompt.strip(), "seed": seed, "seconds": max(1.0, info["seconds"])})
+        seconds = min(SOUND_SECONDS, max(1.0, info["seconds"]))
+        if info["seconds"] > SOUND_SECONDS:
+            agent.say(f"Stable Audio Open makes up to {SOUND_SECONDS:g} s of sound: the rest of the clip is silent.")
+        values.update({"prompt": prompt.strip(), "seed": seed, "seconds": seconds})
     graph = comfy.fill(workflow.graph, values)
     add_thumbnail(graph, width, height)
     what = {
@@ -935,7 +1117,7 @@ def describe_job(model, workflow, prompt, text, seed, values, options, files) ->
 
 def run_plan(agent: Agent, server: comfy.Server, plan: Plan, cancelled, label: str) -> Made:
     """Queue the plan, follow it, save what it made, number it, show it."""
-    out = folder(agent)
+    out = plan.into or folder(agent)
     check_disk(agent, out)
     free_gpu(agent)
     stem = plan.stem or f"{time.strftime('%Y%m%d-%H%M%S')}-{comfy.slug(plan.prompt)}"
@@ -986,8 +1168,9 @@ def run_plan(agent: Agent, server: comfy.Server, plan: Plan, cancelled, label: s
     made.thumbnail = thumbnail(server, outputs)
     if plan.kind == "video":
         made.poster = thumbnail(server, outputs, POSTER_NODES[1])
-    made.numbers = record(agent, made, plan)
-    show(agent, made)
+    if not plan.part:
+        made.numbers = record(agent, made, plan)
+        show(agent, made)
     return made
 
 
