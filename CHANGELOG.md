@@ -27,7 +27,7 @@ All notable changes to lcode are documented here. The format follows
   being made into a picture (`--raw` makes it anyway); in code mode, the coding model gets a
   `lcode_help` tool that searches the manual. The prompt assistant's small model answers in image
   and video mode (`qwen3.5:4b`); every command and option in an answer must exist in lcode,
-  and the lines to type go through lcode's own option parser (`--seconds 25` is caught), with one
+  and the lines to type go through lcode's own option parser (`--seconds 90` is caught), with one
   retry before what's still wrong is marked.
 
 ## [0.49.1] - 2026-10-26

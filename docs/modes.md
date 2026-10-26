@@ -207,12 +207,19 @@ A video model makes up to 8 seconds at once. For a longer clip (`--seconds` up t
 it in parts and joins them into one:
 
 ```text
-video ❯ @start.png @end.png the flower opens --seconds 25
-◆ A 25 s clip: lcode makes it in 4 parts of 6.25 s, each going on from the last frame of the one before, the last one ending on your end picture, and joins them.
-  part 1 of 4: 6.25 s, made in … s
-  …
-◆ #1 .lcode/media/20261026-…-the-flower-opens.mp4  864×480 · Wan 2.2 TI2V 5B + Wan 2.2 Fun InP 5B · …
+video ❯ @start.png @middle.png @end.png the tulip bud slowly opens into a full flower, gentle breeze --seconds 25 --quality fast
+◆ A 25 s clip: lcode makes it in 4 parts of 6.25 s, each going on from the last frame of the one before, and joins them. Parts 2 and 4 each go to your next picture, in order.
+  part 1 of 4: 6.25 s, made in 137 s
+  part 2 of 4: 6.25 s, made in 141 s
+  part 3 of 4: 6.25 s, made in 138 s
+  part 4 of 4: 6.25 s, made in 143 s
+◆ #2 .lcode/media/20261026-201311-the-tulip-bud-slowly-opens-into-a-full-f.mp4  864×480 · Wan 2.2 TI2V 5B + Wan 2.2 Fun InP 5B · seed 1496941735 · 561.9 s
 ```
+
+![Frames at 0, 6, 9.6, 14.6, 21.7 and 25.3 s of that clip](assets/long-clip-tulip.jpg)
+
+*Frames at 0, 6, 9.6, 14.6, 21.7 and 25.3 s of that clip, through a bud, a half-open and an open
+tulip: the change comes in steps, with some drift (the light flare at 9.6 s).*
 
 - **The parts:**
   - as few as it takes, about equally long;
@@ -243,7 +250,10 @@ video ❯ @start.png @end.png the flower opens --seconds 25
   throughout, slowly drifting; for a story with scenes, make a [film](#films). Grok Imagine makes
   up to 15 s at once: a longer clip is made on your GPU.
 
-MEASURED_LONG
+- **Measured** on the RTX 4080 Laptop GPU (12 GB), a 25 s clip from a start to an end picture
+  (4 parts of 6.25 s, 864×480, 609 frames at 24 fps): 9.4 minutes at `fast` (about 140 s a part)
+  and 14.2 minutes at `balanced` (about 210 s a part). Through three pictures at `fast`: 9.4
+  minutes. The joins don't show: the frames on either side of each one match.
 
 ## Films
 
