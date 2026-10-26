@@ -6,6 +6,20 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Image and video jobs no longer run out of GPU memory right after switching modes.** Switching
+  to video mode in the first half minute after lcode starts unloaded the coding model while it was
+  still loading; the load then finished and kept the GPU (10.8 GB of 12 here), and the next job
+  sent to ComfyUI ran out of memory. A load that ends outside code mode now unloads itself, a job
+  waits for a load still going, and unloading waits until Ollama has really freed the memory.
+- **Running out of GPU memory says what holds it** (`Other programs hold GPU memory: obs
+  (1.6 GB)…`) instead of ComfyUI's whole error, and lcode starts its ComfyUI afresh: after running
+  out of memory ComfyUI crashed on the next job. A crash now says it was one, with the log's path,
+  instead of "ComfyUI closed the websocket".
+- **A nearly full disk stops a job before it starts** (under 1 GB free), and ComfyUI's "No space
+  left on device" is said plainly: a film used to stop at shot 6 on it.
+
 ## [0.49.0] - 2026-10-24
 
 ### Added

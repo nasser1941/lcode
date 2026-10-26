@@ -50,8 +50,11 @@ def agent(make_agent, standin, monkeypatch):
     agent.interactive = False
     monkeypatch.setattr(agent.ollama, "installed_names", lambda: {"qwen3.5:4b"})
     joined = []
+    real_run = subprocess.run
 
-    def ffmpeg(command, **kwargs):
+    def ffmpeg(command, **kwargs):  # subprocess.run for everyone: only ffmpeg is stubbed
+        if not str(command[0]).endswith("ffmpeg"):
+            return real_run(command, **kwargs)
         joined.append(command)
         film.Path(command[-1]).write_bytes(b"\x00\x00\x00\x18ftypmp42 a film")
         return subprocess.CompletedProcess(command, 0, "", "")

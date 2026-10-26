@@ -19,6 +19,7 @@ from lcode.cloud import is_cloud
 from lcode.ollama import OllamaError
 
 GB = 1e9
+RELEASE_WAIT = 15.0  # seconds to wait for Ollama to give an unloaded model's GPU memory back
 SPLIT_WARNING = 0.95  # a dense model with less than this on the GPU runs much slower
 SHORTFALL = 0.25  # this much less on the GPU than expected: something else is using GPU memory
 
@@ -67,6 +68,38 @@ def loaded(ollama, model: str | None = None) -> list[Placement]:
             vram = float(entry.get("size_vram") if entry.get("size_vram") is not None else size)
             found.append(Placement(name.removesuffix(":latest"), size, vram, int(entry.get("context_length") or 0)))
     return found
+
+
+def release(ollama, model: str, wait: float | None = None) -> bool:
+    """Unload a model and wait until its GPU memory is free again; whether it was loaded.
+
+    Ollama answers the unload at once and frees the memory a moment later: a program that starts on the GPU in
+    that moment finds it still full. So this waits until Ollama no longer lists the model and, on NVIDIA GPUs, until
+    most of what it held shows as free.
+    """
+    from lcode import hardware
+
+    held = loaded(ollama, model)
+    if not held:
+        return False
+    before = hardware.gpu_used_gib()
+    ollama.unload(model)
+    deadline = time.monotonic() + (RELEASE_WAIT if wait is None else wait)
+    while loaded(ollama, model) and time.monotonic() < deadline:
+        time.sleep(0.2)
+    if before is not None:  # NVIDIA: until most of it is free, or the memory stops going down for a second
+        target = before - 0.75 * sum(p.vram for p in held) / 2**30
+        last, steady = before, time.monotonic()
+        while time.monotonic() < deadline:
+            used = hardware.gpu_used_gib()
+            if used is None or used <= target:
+                break
+            if abs(used - last) > 0.1:
+                last, steady = used, time.monotonic()
+            elif time.monotonic() - steady >= 1.0 and used < before - 0.1:
+                break
+            time.sleep(0.2)
+    return True
 
 
 def placement(ollama, model: str) -> Placement | None:
