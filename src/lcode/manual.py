@@ -70,6 +70,7 @@ OPTION = re.compile(r"(?<![\w-])--([a-z](?:[a-z0-9-]*[a-z0-9])?)\b")
 HEADING = re.compile(r"^(#{1,4})\s+(.+?)\s*$")
 FENCE = re.compile(r"^\s*(```|~~~)")
 LIST_ITEM = re.compile(r"^([-*+]|\d+\.)\s+")
+ATTRIBUTES = re.compile(r"\{\s*[.#][^}]*\}")  # MkDocs' { .class } after a picture or a heading
 
 
 def unsuffixed(word: str) -> str:
@@ -122,7 +123,7 @@ def slug(title: str) -> str:
 
 def plain(markdown: str) -> str:
     """A heading's text without Markdown: links, code marks, emphasis and attribute lists."""
-    text = re.sub(r"\{[^}]*\}", "", markdown)
+    text = ATTRIBUTES.sub("", markdown)
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
     return re.sub(r"[`*_]", "", text).strip()
 
@@ -221,7 +222,7 @@ def blocks(lines: list[str]) -> list[str]:
             continue
         current.append(line)
     close()
-    return [re.sub(r"\{[^}]*\}", "", b) for b in out]
+    return [ATTRIBUTES.sub("", b) for b in out]
 
 
 def pieces(page: str, text: str, start: int = 0) -> list[Piece]:

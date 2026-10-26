@@ -59,6 +59,12 @@ def test_the_search_finds_what_answers_everyday_questions(book, question, mode, 
     assert needed in book.excerpts(book.search(question, mode))  # what the answering model reads
 
 
+def test_pieces_keep_code_and_drop_page_layout():
+    page = '# Title { .sr-only }\n\n![logo](a.png){ .hero }\n\n## Config\n\n```json\n{"model": "x"}\n```\n'
+    found = manual.pieces("x.md", page)
+    assert [p.heading for p in found] == ["Title › Config"] and '{"model": "x"}' in found[0].text
+
+
 def test_words_fold_forms_and_synonyms():
     assert manual.words("Pictures saved") == manual.words("image saves") == ["image", "save"]
     assert manual.words("making a clip from the first frame") == ["make", "video", "start", "fram"]
