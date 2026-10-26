@@ -319,7 +319,16 @@ PRESENT_PLAN_SCHEMA = _fn(
     },
     ["title", "plan"],
 )
+LCODE_HELP_SCHEMA = _fn(
+    "lcode_help",
+    "Look things up in the manual of lcode, the program you run in: its slash commands, its modes (code, image and "
+    "video), settings, models and options. When the user asks how to do something in lcode, use it and tell them "
+    "exactly what to type; don't answer such questions from memory.",
+    {"question": {"type": "string", "description": "What the user wants to do in lcode, in words"}},
+    ["question"],
+)
 OPTIONAL_SCHEMAS = [
+    LCODE_HELP_SCHEMA,
     WEB_SEARCH_SCHEMA,
     WEB_FETCH_SCHEMA,
     VIEW_IMAGE_SCHEMA,
@@ -677,6 +686,12 @@ class Toolbox:
     def _check(self, p: Path, before: str | None, after: str) -> str:
         """Errors the language server finds that an edit introduced (lcode.lsp), for the tool result."""
         return self.agent.lsp.check_edit(p, before, after) if self.agent.lsp is not None else ""
+
+    # -- lcode's own manual
+    def t_lcode_help(self, question: str) -> str:
+        from lcode import __version__, manual
+
+        return manual.lookup(question, self.agent.settings.mode, __version__)
 
     # -- skills
     def t_skill(self, name: str) -> str:

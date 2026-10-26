@@ -89,6 +89,9 @@ through [Ollama](https://ollama.com), and when it needs current information it c
   (`/mode image`) make pictures, edits, clips and short films with local models run by ComfyUI
   (FLUX.2 klein, Wan 2.2, installed on demand), or with xAI's Grok Imagine and your own key, after
   showing what it costs.
+- **Ask it how.** `/help how do I make a clip from two pictures?`, or just the question in image and
+  video mode: lcode answers from its own manual, which ships with it, with the command to type,
+  checked by lcode's own parsers and typed into the prompt for you.
 - **Web search when needed.** Looks up the latest versions, docs and error messages with Ollama web
   search, Brave, Tavily or your own SearXNG, and reads pages as clean text.
 - **Private.** The model runs on your machine, lcode never uploads your files and has no telemetry.
@@ -146,6 +149,7 @@ lcode
 | `lcode mcp catalog` / `lcode mcp add github` | ready-made MCP servers / add one |
 | `/rename`, `/resume` | name the current session, resume a saved one |
 | `/model`, `/context`, `/compact`, `/help` | switch model, resize the context window (pick from a list), summarize, list commands |
+| `/help how do I …?` | ask lcode how to do something: the answer comes from its manual, with the command to type |
 
 ## Models
 

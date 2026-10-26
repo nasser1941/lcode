@@ -6,6 +6,18 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Ask lcode how** (#184): `/help how do I make a clip from two pictures?` answers from lcode's
+  own manual, which now ships inside the package (the docs' pages, for the installed version,
+  offline). The answer says what to type, filled in with your details, and the first step is
+  typed into the next prompt for you. In image and video mode, a question is answered instead of
+  being made into a picture (`--raw` makes it anyway); in code mode, the coding model gets a
+  `lcode_help` tool that searches the manual. Small models answer in image and video mode
+  (`qwen3.5:9b`, else `qwen3.5:4b`); every command and option in an answer must exist in lcode,
+  and the lines to type go through lcode's own option parser (`--seconds 25` is caught), with one
+  retry before what's still wrong is marked.
+
 ## [0.49.1] - 2026-10-26
 
 ### Fixed

@@ -29,6 +29,7 @@ from rich.text import Text
 
 from lcode import (
     __version__,
+    assistant,
     backends,
     catalog,
     clipboard,
@@ -36,6 +37,7 @@ from lcode import (
     extensions,
     gitflow,
     limits,
+    manual,
     media,
     modes,
     residency,
@@ -56,7 +58,7 @@ from lcode.steer import KeyReader, Steering
 from lcode.tools import IGNORE_DIRS
 
 COMMANDS = {
-    "/help": "Show this help",
+    "/help": "Show this help, or ask how to do something: /help how do I make a clip from two pictures?",
     "/init": "Analyze the repo and write an AGENTS.md guide (loaded at every start)",
     "/clear": "Start a fresh conversation",
     "/rename": "Name this session so you can find it later, e.g. /rename auth refactor",
@@ -1132,7 +1134,9 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
     c, s = agent.console, agent.settings
     if cmd in ("/exit", "/quit", "/q"):
         return False
-    if cmd == "/help":
+    if cmd == "/help" and arg:
+        ask_manual(agent, arg)
+    elif cmd == "/help":
         rows = "\n".join(f"  [cyan]{k:<13}[/] {v}" for k, v in COMMANDS.items())
         keys = (
             "Enter = send · Esc+Enter or trailing \\ = newline · Ctrl+C = interrupt · Ctrl+D = quit · "
@@ -1140,6 +1144,10 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
         )
         c.print(Panel(f"{rows}\n\n  [dim]{keys}[/]", title="lcode commands", border_style="cyan"))
         help_extensions(agent)
+        c.print(
+            "[dim]Ask how to do something: /help how do I make a 20-second clip from two pictures? In image and video "
+            "mode, just ask.[/]"
+        )
     elif cmd == "/clear":
         memory_notes.reflect(agent)
         agent.new_session()
@@ -1405,12 +1413,71 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
 
 
 def respond(agent: Agent, line: str) -> None:
-    """What a typed request does: the coding agent works on it, or image and video mode take it."""
+    """What a typed request does: the coding agent works on it, or image and video mode take it (a question about
+    lcode is answered from its manual instead)."""
     if agent.settings.mode in ("image", "video"):  # no coding model involved
+        if manual.is_question(line) and not media.RAW_FLAG.search(line):
+            ask_manual(agent, line, typed=True)
+            return
         make_image(agent, line)
         return
     agent.console.print(Rule(style="dim"))
     run_safely(agent, line)
+
+
+def manual_writer(agent: Agent):
+    """Who writes answers from lcode's manual, as (model, chat): the coding model in code mode, the prompt assistant's
+    small model in image and video mode (so the GPU stays with ComfyUI), or (None, None): the manual's own words."""
+    if agent.settings.mode == "code":
+        model = agent.settings.model
+
+        def chat(messages: list[dict]) -> str:
+            payload = {"model": model, "messages": messages, "think": False,
+                       "keep_alive": agent.settings.keep_alive, "options": agent.options()}  # fmt: skip
+            reply = agent.ollama.chat(payload, timeout=300)
+            return (reply.get("message") or {}).get("content") or ""
+
+        return model, chat
+    setting = agent.settings.prompt_assistant
+    if setting in assistant.SCOPES or not setting:  # the larger small model answers better (measured: lcode.manual)
+        model = assistant.pick(agent.ollama, "auto", manual.HELP_MODELS)
+    else:
+        model = assistant.pick(agent.ollama, setting)
+    if model is None:
+        return None, None
+    helper = assistant.Assistant(agent.ollama, model)
+    return model, lambda messages: helper.converse(messages, num_ctx=manual.HELP_CONTEXT)
+
+
+def ask_manual(agent: Agent, question: str, typed: bool = False) -> None:
+    """A question about lcode, answered from its manual (lcode.manual), with the first step put in the prompt."""
+    c, mode = agent.console, agent.settings.mode
+    model, chat = manual_writer(agent)
+    book = manual.load(set(custom_commands(agent)))
+    try:
+        with c.status(f"Looking it up in lcode's manual{f' ({model})' if model else ''}…", spinner="dots"):
+            found = manual.answer(question, mode, chat, model, book)
+    except Exception as e:  # the model didn't answer: the manual's own words
+        agent.say(f"{model} didn't answer ({e}). Here's what the manual says.", warning=True)
+        found = manual.answer(question, mode, None, None, book)
+    if not found.text:
+        c.print(f"[yellow]Nothing in lcode's manual matches that.[/] The whole manual: {manual.DOCS_URL}")
+        return
+    title = "lcode help" if found.model else "From lcode's manual"
+    c.print(Panel(Markdown(found.text), title=title, title_align="left", border_style="cyan"))
+    for problem in found.problems:
+        c.print(f"[yellow]⚠ This part won't work: {escape(problem)}[/]")
+    for piece in found.sources():
+        c.print(Text(f"  {piece.heading}: {piece.url}", style="dim"))
+    if found.model is None and mode != "code":
+        c.print("[dim]For a written answer, install a small model: ollama pull qwen3.5:4b[/]")
+    first = manual.suggestion(found.text, mode) if found.model and not found.problems else ""
+    if first and agent.interactive:
+        agent.unsent = first
+        c.print(Text("✎ The first step is in the prompt below: edit it, or press Enter to run it.", style="cyan"))
+    if typed:
+        what = "picture" if mode == "image" else "clip"
+        c.print(f"[dim]That looked like a question, so lcode answered it. To make it as a {what}, add --raw.[/]")
 
 
 IMAGE_COMMANDS = (

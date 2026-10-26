@@ -60,7 +60,7 @@ reasoning is on.
 
 | Command | What it does |
 |---|---|
-| `/help` | List commands and keys |
+| `/help [question]` | List commands and keys, or [ask how to do something](#asking-lcode-how): `/help how do I make a clip from two pictures?` |
 | `/init` | Analyze the repository and write `AGENTS.md` (read at every start) |
 | `/clear` | Start a new conversation (the current one stays saved) |
 | `/rename NAME` | Name the current session so it's easy to find later |
@@ -96,6 +96,46 @@ reasoning is on.
 | `/review [base]` | [Review](git.md#review) the uncommitted changes, or the branch against a base |
 | `/pr [base] [notes]` | Push the branch and open a GitHub [pull request](git.md#pr), once you approve it |
 | `/exit` | Quit |
+
+### Asking lcode how
+
+You don't have to read this manual to find the right command: ask lcode, and it answers from the
+manual with what to type.
+
+```text
+image ❯ how do I make the picture bigger?
+╭─ lcode help ─────────────────────────────────────────────────────────────────────────────╮
+│  /upscale 3 4                                                                             │
+│                                                                                           │
+│ This command makes image #3 four times larger using Real-ESRGAN, taking about 6 seconds   │
+│ on an RTX 4080 Laptop GPU. If you only need a 2× increase, simply type /upscale 3.        │
+╰───────────────────────────────────────────────────────────────────────────────────────────╯
+  Modes: code, image and video › Image mode › Editing: https://nasser1941.github.io/lcode/modes/#editing
+✎ The first step is in the prompt below: edit it, or press Enter to run it.
+That looked like a question, so lcode answered it. To make it as a picture, add --raw.
+image ❯ /upscale 3 4
+```
+
+- **In any mode,** `/help` followed by a question.
+- **In image and video mode, just ask.** Text that reads as a question ("how do I…", "can I…?",
+  "is there a way…") is answered instead of being made into a picture or a clip. To make it anyway,
+  add `--raw`.
+- **In code mode,** ask the coding model in your own words: it has a tool, `lcode_help`, that
+  searches the manual, so it answers with lcode's real commands instead of guessing.
+- **What you get:** what to type, filled in with your details (numbers, lengths, file names), a
+  line or two on limits and time, and links to the pages of the docs. The first step is typed into
+  the next prompt for you: edit it, press Enter, or clear it with Ctrl+U.
+- **The manual comes with lcode:** these pages ship inside the package, so the answer matches the
+  version you have, and it works offline.
+- **Who answers:** in code mode, the coding model. In image and video mode, a small model in Ollama
+  (`qwen3.5:9b`, else `qwen3.5:4b`, or the `prompt_assistant` model you chose), loaded only for the
+  answer so the GPU stays with ComfyUI. Without one, lcode shows the parts of the manual that match.
+- **Checked by lcode itself:** every command and option in an answer must exist in lcode, and the
+  lines to type go through lcode's own option parser: `--seconds 25` is caught ("seconds is how long
+  a video is: 1 to 8"). An answer that fails a check is asked for again once; what still fails is
+  marked with ⚠, and isn't typed in for you.
+
+MEASURED_HELP
 
 ## What the model can do
 
