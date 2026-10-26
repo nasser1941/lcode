@@ -97,12 +97,16 @@ class Assistant:
         message: dict = {"role": "user", "content": user}
         if images:
             message["images"] = [base64.b64encode(p.read_bytes()).decode() for p in images]
+        return self.converse([{"role": "system", "content": system}, message], json_answer=json_answer)
+
+    def converse(self, messages: list[dict], json_answer: bool = False, num_ctx: int = 4096) -> str:
+        """The model's answer to a conversation (lcode.manual's answers use a longer one)."""
         payload = {
             "model": self.model,
-            "messages": [{"role": "system", "content": system}, message],
+            "messages": messages,
             "think": False,
             "keep_alive": 0,  # unloaded right after: the image or video model needs the GPU
-            "options": {"temperature": 0.4, "num_ctx": 4096},
+            "options": {"temperature": 0.4, "num_ctx": num_ctx},
         }
         if json_answer:
             payload["format"] = "json"

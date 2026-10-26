@@ -32,6 +32,7 @@ from lcode import (
     escalate,
     extensions,
     limits,
+    manual,
     notify,
     planning,
     repomap,
@@ -56,6 +57,7 @@ from lcode.repeats import Circles, Repeats
 from lcode.sandbox import Sandbox, SandboxError, project_root
 from lcode.steer import NOTE_INTRO, Steering
 from lcode.tools import (
+    LCODE_HELP_SCHEMA,
     LSP_SCHEMA,
     MEMORY_SCHEMA,
     PRESENT_PLAN_SCHEMA,
@@ -547,6 +549,8 @@ class Agent:
 
     def tool_schemas(self) -> list[dict]:
         schemas = list(SCHEMAS)
+        if manual.folder() is not None:
+            schemas.append(LCODE_HELP_SCHEMA)
         if self.settings.web != "off":
             schemas += [*([WEB_SEARCH_SCHEMA] if self.search_backend() else []), WEB_FETCH_SCHEMA]
         if self.vision_model():

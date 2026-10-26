@@ -23,6 +23,8 @@ image ❯ a red fox sitting in fresh snow at dusk
   the current one.
 - **Where it shows:** the banner, the status bar and the prompt (`image ❯`) show the mode.
 - **Sessions:** a session keeps the mode it was made in, and resuming it brings that mode back.
+- **Not sure how?** Ask: in image and video mode, a question like "how do I make the picture
+  bigger?" is answered from this manual with the command to type ([Asking lcode how](usage.md#asking-lcode-how)).
 
 ## Code mode makes code only
 

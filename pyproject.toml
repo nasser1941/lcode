@@ -59,7 +59,12 @@ docs = ["mkdocs-material>=9.5", "mkdocs>=1.6,<2"]  # MkDocs 2 drops plugins and 
 path = "src/lcode/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/lcode"]
+only-include = ["src/lcode", "docs"]
+exclude = ["docs/assets", "docs/changelog.md", "docs/contributing.md"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
+"docs" = "lcode/docs"  # the manual, for questions about lcode (lcode.manual)
 
 [tool.hatch.build.targets.sdist]
 exclude = ["docs/assets/*.png"]  # images for the README and the docs site: not needed to build or install
@@ -78,6 +83,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "src/lcode/agent.py" = ["E501"] # the prompts are prose; wrapping them would change what the model sees
+"src/lcode/manual.py" = ["E501"] # the same for the help prompt
 "src/lcode/memory.py" = ["E501"]
 "src/lcode/subagents.py" = ["E501"]
 "src/lcode/planning.py" = ["E501"]

@@ -37,6 +37,7 @@ UNCHANGING = frozenset(
         "view_image",
         "repo_map",
         "search_code",
+        "lcode_help",
         "lsp",
         "web_search",
         "web_fetch",
