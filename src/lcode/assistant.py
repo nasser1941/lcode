@@ -76,7 +76,7 @@ class Check:
 SCOPES = ("off", "video", "all", "auto")
 
 
-def pick(ollama, setting: str, preferred: tuple[str, ...] = PREFERRED) -> str | None:
+def pick(ollama, setting: str) -> str | None:
     """The assistant's model for a setting: off, or a small installed model (video, all, auto), or a model's name."""
     if setting in ("off", "", None):
         return None
@@ -86,7 +86,7 @@ def pick(ollama, setting: str, preferred: tuple[str, ...] = PREFERRED) -> str | 
         return None
     if setting not in SCOPES:
         return setting if setting in installed or f"{setting}:latest" in installed else None
-    return next((m for m in preferred if m in installed), None)
+    return next((m for m in PREFERRED if m in installed), None)
 
 
 class Assistant:

@@ -31,9 +31,6 @@ SKIPPED = {"changelog.md", "contributing.md"}  # the repository's own files, inc
 PIECE_WORDS = 110  # a piece of the manual: a few list items or paragraphs
 EXCERPT_CHARS = 7000  # what the answering model reads (~2K tokens)
 MAX_PIECES = 8
-# The small models that answer in image and video mode, best first: qwen3.5:9b answered 13 of 15 everyday questions
-# right and qwen3.5:4b 10, in 6 to 14 s against 3 to 7 s (RTX 4080 Laptop, 12 GB)
-HELP_MODELS = ("qwen3.5:9b", "qwen3.5:4b", "qwen3:8b", "qwen3:4b", "gemma3:4b", "llama3.2:3b")
 HELP_CONTEXT = 8192  # the small model's context for an answer: the excerpts, the question and the answer
 
 STOP = frozenset((

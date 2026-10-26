@@ -197,7 +197,7 @@ def test_a_question_in_video_mode_is_answered_and_the_first_step_typed_in(make_a
     monkeypatch.setattr(repl, "make_image", lambda agent, prompt="", **kw: made.append(prompt))
     Small(agent.ollama, ["Clips are 1 to 8 seconds.\n```text\n@start.png @end.png the flower opens --seconds 8\n```"])
     repl.respond(agent, "how do I make a clip from a start and an end picture?")
-    assert made == [] and agent.ollama.chats[0]["model"] == "qwen3.5:9b"  # the larger small model answers
+    assert made == [] and agent.ollama.chats[0]["model"] == "qwen3.5:4b"  # the prompt assistant's model
     assert agent.ollama.chats[0]["keep_alive"] == 0 and agent.ollama.chats[0]["options"]["num_ctx"] == 8192
     text = output(agent)
     assert "lcode help" in text and "Clips are 1 to 8 seconds." in text and "nasser1941.github.io/lcode/modes/" in text

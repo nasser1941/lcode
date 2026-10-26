@@ -1438,11 +1438,8 @@ def manual_writer(agent: Agent):
             return (reply.get("message") or {}).get("content") or ""
 
         return model, chat
-    setting = agent.settings.prompt_assistant
-    if setting in assistant.SCOPES or not setting:  # the larger small model answers better (measured: lcode.manual)
-        model = assistant.pick(agent.ollama, "auto", manual.HELP_MODELS)
-    else:
-        model = assistant.pick(agent.ollama, setting)
+    setting = agent.settings.prompt_assistant  # its model, even when it's off for prompts
+    model = assistant.pick(agent.ollama, "auto" if setting in assistant.SCOPES or not setting else setting)
     if model is None:
         return None, None
     helper = assistant.Assistant(agent.ollama, model)

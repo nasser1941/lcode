@@ -128,7 +128,7 @@ image ❯ /upscale 3 4
 - **The manual comes with lcode:** these pages ship inside the package, so the answer matches the
   version you have, and it works offline.
 - **Who answers:** in code mode, the coding model. In image and video mode, a small model in Ollama
-  (`qwen3.5:9b`, else `qwen3.5:4b`, or the `prompt_assistant` model you chose), loaded only for the
+  (the [prompt assistant](modes.md#the-prompt-assistant)'s: `qwen3.5:4b` or the model you chose), loaded only for the
   answer so the GPU stays with ComfyUI. Without one, lcode shows the parts of the manual that match.
 - **Checked by lcode itself:** every command and option in an answer must exist in lcode, and the
   lines to type go through lcode's own option parser: `--seconds 25` is caught ("seconds is how long
