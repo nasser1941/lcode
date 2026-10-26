@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-10-26
+
 ### Added
 
 - **Ask lcode how** (#184): `/help how do I make a clip from two pictures?` answers from lcode's
@@ -1077,7 +1079,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.49.1...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.50.0...HEAD
+[0.50.0]: https://github.com/nasser1941/lcode/compare/v0.49.1...v0.50.0
 [0.49.1]: https://github.com/nasser1941/lcode/compare/v0.49.0...v0.49.1
 [0.49.0]: https://github.com/nasser1941/lcode/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/nasser1941/lcode/compare/v0.47.0...v0.48.0
