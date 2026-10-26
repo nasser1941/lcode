@@ -116,8 +116,10 @@ def test_esc_cancels_the_job_in_comfyui_too(image_agent, standin):
 
 
 def test_a_failed_job_says_which_node_and_why(image_agent, standin):
-    standin.fail = "CUDA out of memory. Tried to allocate 2.00 GiB"
-    with pytest.raises(media.MediaError, match="SamplerCustomAdvanced failed: CUDA out of memory"):
+    standin.fail = "mat1 and mat2 shapes cannot be multiplied (77x768 and 2048x3072)"
+    with pytest.raises(
+        media.MediaError, match=r"SamplerCustomAdvanced failed: mat1 and mat2 shapes cannot be multiplied"
+    ):
         media.generate_image(image_agent, "a fox")
     assert comfy._read_jobs() == {}
 

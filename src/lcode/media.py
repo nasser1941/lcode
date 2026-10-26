@@ -23,13 +23,18 @@ from typing import TYPE_CHECKING
 import requests
 from rich.text import Text
 
-from lcode import assistant, comfy, edits, imageopts, media_cloud, preview
+from lcode import assistant, comfy, edits, hardware, imageopts, media_cloud, preview, residency
 from lcode import media_catalog as catalog
 
 if TYPE_CHECKING:
     from lcode.agent import Agent
 
 SOON: dict[str, str] = {}
+LOAD_WAIT = 180  # seconds to wait for the coding model to finish loading before a job (it then unloads itself)
+MIN_FREE_GB = 1.0  # disk space a job needs, where its results are saved
+# how PyTorch and ComfyUI say the GPU is full
+OUT_OF_MEMORY = ("out of memory", "outofmemory", "vram grow failed", "would exceed allowed memory",
+                 "cudaerrormemoryallocation", "alloc_failed")  # fmt: skip
 IGNORED = "# lcode's images and videos: not part of the project unless you add them\n*\n"
 
 
@@ -135,20 +140,24 @@ def stop_engine(agent: Agent) -> bool:
 
 
 def free_gpu(agent: Agent) -> None:
-    """Unload lcode's coding model if Ollama still has it: the image or video model needs the GPU."""
+    """Unload lcode's coding model if Ollama still has it, and wait until its GPU memory is free: the image or video
+    model needs the GPU, and a job sent while Ollama is still letting go of it runs out of memory."""
     if getattr(agent.ollama, "kind", "ollama") != "ollama":
         return
+    if agent.load_state == "loading":  # started in code mode: the load gives the GPU back when it's done
+        with agent.console.status(f"Waiting for {agent.settings.model} to finish loading, to unload it…"):
+            deadline = time.monotonic() + LOAD_WAIT
+            while agent.load_state == "loading" and time.monotonic() < deadline:
+                time.sleep(0.2)
     try:
-        loaded = {name for m in agent.ollama.running() for name in (m.get("name"), m.get("model"))}
+        if not residency.placement(agent.ollama, agent.settings.model):
+            return
+        with agent.console.status(f"Unloading {agent.settings.model} to free the GPU…"):
+            freed = residency.release(agent.ollama, agent.settings.model)
     except Exception:
         return
-    model = agent.settings.model
-    if loaded & {model, f"{model}:latest"}:
-        try:
-            agent.ollama.unload(model)
-            agent.say(f"Unloaded {model} to free the GPU.")
-        except Exception:
-            pass
+    if freed:
+        agent.say(f"Unloaded {agent.settings.model} to free the GPU.")
 
 
 # ----------------------------------------------------------------------------- where the files go
@@ -926,8 +935,9 @@ def describe_job(model, workflow, prompt, text, seed, values, options, files) ->
 
 def run_plan(agent: Agent, server: comfy.Server, plan: Plan, cancelled, label: str) -> Made:
     """Queue the plan, follow it, save what it made, number it, show it."""
-    free_gpu(agent)
     out = folder(agent)
+    check_disk(agent, out)
+    free_gpu(agent)
     stem = plan.stem or f"{time.strftime('%Y%m%d-%H%M%S')}-{comfy.slug(plan.prompt)}"
     hint = "Esc or Ctrl+C cancels" if agent.interactive else ""
     line = Line(f"{plan.model.name} ({label})" if label else plan.model.name, hint)
@@ -958,7 +968,7 @@ def run_plan(agent: Agent, server: comfy.Server, plan: Plan, cancelled, label: s
     except comfy.ComfyError as e:
         if job["id"]:
             comfy.forget(job["id"])
-        raise MediaError(str(e)) from e
+        raise MediaError(explain(agent, str(e))) from e
     try:
         saved = comfy.save(server, outputs, out, stem, {**plan.meta, "comfyui_prompt_id": prompt_id})
     except (comfy.ComfyError, OSError) as e:
@@ -979,6 +989,55 @@ def run_plan(agent: Agent, server: comfy.Server, plan: Plan, cancelled, label: s
     made.numbers = record(agent, made, plan)
     show(agent, made)
     return made
+
+
+def check_disk(agent: Agent, out: Path) -> None:
+    """Refuse a job when the disk it saves to is nearly full: ComfyUI fails at the end of it otherwise."""
+    places = [out]
+    install = comfy.find_install(agent.settings.comfyui_path) if agent.comfy_process is not None else None
+    if install is not None:
+        places.append(install.path)  # ComfyUI writes there first
+    for place in places:
+        try:
+            free = shutil.disk_usage(place).free / 1e9
+        except OSError:
+            continue
+        if free < MIN_FREE_GB:
+            raise MediaError(
+                f"The disk is nearly full ({free:.1f} GB free at {place}): images and videos need room. Free some "
+                "space, then try again."
+            )
+
+
+def explain(agent: Agent, error: str) -> str:
+    """ComfyUI's error, said so it can be acted on: running out of GPU memory or disk space, or a crash."""
+    low = error.lower()
+    if any(words in low for words in OUT_OF_MEMORY):
+        step = error.split(" failed:", 1)[0] if " failed:" in error else "a step"
+        others = [(name, gib) for name, gib in hardware.gpu_users() if name != "ComfyUI" and gib >= 0.1]
+        held = ", ".join(f"{name} ({gib:.1f} GB)" for name, gib in others)
+        message = f"The GPU ran out of memory ({step})."
+        if held:
+            message += f" Other programs hold GPU memory: {held}. Close what you can, or try"
+        else:
+            message += " Try"
+        message += " --quality fast or a smaller model (/models)."
+        if stop_engine(agent):  # after running out of memory ComfyUI can crash on its next job: start it afresh
+            message += " lcode restarts ComfyUI with your next request."
+        else:
+            message += " Restart your ComfyUI if it keeps failing."
+        return message
+    if "no space left on device" in low:
+        return "ComfyUI couldn't save what it made: the disk is full. Free some space, then try again."
+    if "closed the websocket" in low or "connection" in low:
+        proc = agent.comfy_process
+        if proc is not None and proc.poll() is not None:
+            agent.comfy_process = None
+            return (
+                f"ComfyUI stopped while it worked (it crashed; its log: {comfy.log_path()}). lcode starts it again "
+                "with your next request."
+            )
+    return error
 
 
 # ----------------------------------------------------------------------------- results: numbered, shown, opened

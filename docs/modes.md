@@ -437,9 +437,16 @@ the [prompt assistant](#the-prompt-assistant) loads only while it writes. Image 
 need the GPU to themselves:
 
 - **Into image or video mode:** lcode unloads its coding model from Ollama, and checks again
-  before each image.
+  before each image. It waits until the memory is really free (Ollama lets go of it a moment after
+  it answers). If the coding model was still loading when you switched, as it is in the first half
+  minute after lcode starts, the job waits for that load to end and unloads it.
 - **Back to code mode:** lcode stops the ComfyUI it started, or asks yours to free its memory,
   then loads the coding model again in the background.
+- **Other programs on the GPU** leave less room. When a job runs out of GPU memory, lcode names
+  what holds it (`obs (1.6 GB)`, `render.py (2.0 GB)`) and starts its ComfyUI afresh for the next request:
+  after running out of memory, ComfyUI can crash on the next job. If it crashes anyway, lcode says
+  so and points to its log (`comfyui.log` in lcode's state folder).
+- **A nearly full disk** (under 1 GB free) stops a job before it starts, rather than at its end.
 
 The permission mode (`ask`, `plan`, `auto-edit`, `yolo`) is a different setting: `/permissions`
 sets it, and Shift+Tab cycles it as before.

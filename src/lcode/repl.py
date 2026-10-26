@@ -1737,6 +1737,8 @@ def preload(agent: Agent, session: PromptSession | None = None) -> None:
         refresh()
         try:
             agent.ollama.load(agent.settings.model, agent.options(), agent.settings.keep_alive)
+            if agent.settings.mode != "code":  # switched to image or video mode while it loaded: give the GPU back
+                residency.release(agent.ollama, agent.settings.model)
         except OllamaError:
             pass
         finally:

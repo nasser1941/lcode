@@ -5,6 +5,7 @@ from __future__ import annotations
 import platform
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 GIB = 1024**3
 
@@ -44,6 +45,54 @@ def _run(cmd: list[str]) -> str:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=True).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ""
+
+
+def gpu_used_gib() -> float | None:
+    """GPU memory in use on the NVIDIA GPUs, in GiB; None without nvidia-smi."""
+    out = _run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"])
+    try:
+        return sum(float(v) for v in out.split()) / 1024 if out else None
+    except ValueError:
+        return None
+
+
+def gpu_users() -> list[tuple[str, float]]:
+    """The programs holding NVIDIA GPU memory, largest first: (a short name, GiB). Empty without nvidia-smi."""
+    out = _run(["nvidia-smi", "--query-compute-apps=pid,process_name,used_memory", "--format=csv,noheader,nounits"])
+    users: dict[str, float] = {}
+    for line in out.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) != 3:
+            continue
+        try:
+            gib = float(parts[2]) / 1024
+        except ValueError:
+            continue
+        name = program_name(parts[0], parts[1])
+        users[name] = users.get(name, 0.0) + gib
+    return sorted(users.items(), key=lambda item: -item[1])
+
+
+def program_name(pid: str, process: str) -> str:
+    """A GPU program's short name, from its command line (/proc) or else nvidia-smi's process name."""
+    try:
+        argv = [a.decode(errors="replace") for a in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0") if a]
+    except OSError:
+        argv = []
+    return name_from(argv or [process], process)
+
+
+def name_from(argv: list[str], process: str = "") -> str:
+    """'render.py' for `python3 render.py`, 'ComfyUI' for its main.py, 'Ollama', else the program."""
+    program = Path(argv[0]).name if argv else process
+    if program.startswith("python") and len(argv) > 1:
+        script = next((a for a in argv[1:] if not a.startswith("-")), argv[1])
+        if Path(script).name == "main.py" and "comfyui" in " ".join(argv[:2]).lower():
+            return "ComfyUI"
+        return Path(script).name
+    if program in ("llama-server", "ollama") or "/ollama/" in (argv[0] if argv else ""):
+        return "Ollama"
+    return program or process
 
 
 def _linux_ram_gib() -> float:
