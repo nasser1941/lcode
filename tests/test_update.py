@@ -1,6 +1,7 @@
 import io
 import json
 import subprocess
+import sys
 
 import pytest
 from rich.console import Console
@@ -266,15 +267,53 @@ def test_ollama_outside_docker_gets_instructions(docker, monkeypatch):
 # ----------------------------------------------------------------------------- lcode itself
 
 
+class Replaced(Console):
+    """A console whose rich is gone once a command replaces lcode's own environment, as when uv makes a new one: rich
+    imports some modules only when first needed. From then on lcode can only write what it rendered before."""
+
+    gone = False
+
+    def print(self, *objects, **kwargs):
+        assert not self.gone, "rich used after lcode's environment was replaced"
+        super().print(*objects, **kwargs)
+
+
+def replacing(monkeypatch, console, code=0):
+    """Commands lcode streams; a uv, brew, pipx or pip one replaces its environment and ends with `code`."""
+    ran, real = [], update.stream
+
+    def stream(argv, cwd=None):
+        if argv[0] == "git":
+            return real(argv, cwd)
+        ran.append(argv)
+        console.gone = True
+        return code
+
+    monkeypatch.setattr(update, "stream", stream)
+    return ran
+
+
 def test_lcode_updates_the_way_it_was_installed(docker, monkeypatch):
     monkeypatch.setattr(update, "lcode_install", lambda: Install("uv", ["uv", "tool", "upgrade", "lcode-cli"]))
     monkeypatch.setattr(update, "latest_lcode", lambda: "99.0.0")
-    console = Console(file=io.StringIO(), width=2000)
+    console = Replaced(file=io.StringIO(), width=2000)
+    ran = replacing(monkeypatch, console)
     assert update.command(console, "lcode", yes=True) == 0
-    assert docker["stream"] == [["uv", "tool", "upgrade", "lcode-cli"]]
+    assert ran == [["uv", "tool", "upgrade", "lcode-cli"]]
+    assert output_of(console).endswith("✓ lcode updated; the new version runs from the next `lcode`.\n\n")
+    console.gone = False
+    ran = replacing(monkeypatch, console, code=1)
+    assert update.command(console, "lcode", yes=True) == 1
+    assert output_of(console).endswith("✗ uv tool upgrade lcode-cli failed\n\n")
+    console.gone = False
     monkeypatch.setattr(update, "latest_lcode", lambda: __version__)
     update.command(console, "lcode", yes=True)
     assert f"lcode {__version__} is the newest version (uv tool)" in output_of(console)
+    order = []
+    monkeypatch.setattr(update, "update_ollama", lambda console, check, ask: order.append("ollama"))
+    monkeypatch.setattr(update, "update_lcode", lambda console, check, ask: order.append("lcode"))
+    update.command(console, yes=True)
+    assert order == ["ollama", "lcode"]  # lcode last: Ollama's update needs rich and requests
 
 
 def test_a_checkout_is_pulled(tmp_path, monkeypatch):
@@ -301,3 +340,16 @@ def test_a_checkout_is_pulled(tmp_path, monkeypatch):
     assert "1 new commit(s) on origin/main" in output_of(console) and (clone / "a.txt").read_text() == "1\n"
     assert update.command(console, "lcode", yes=True) == 0
     assert (clone / "a.txt").read_text() == "2\n" and "lcode updated: 1 new commit(s)." in output_of(console)
+    (clone / "pyproject.toml").write_text('version = "2"\n')  # new dependencies, say: its environment is reinstalled
+    git(clone, "add", "-A")
+    git(clone, "commit", "-qm", "three")
+    git(clone, "push", "-q")
+    git(clone, "reset", "-q", "--hard", "HEAD~1")
+    (tmp_path / "uv-receipt.toml").write_text("[tool]\n")
+    monkeypatch.setattr(update.sys, "prefix", str(tmp_path))
+    console = Replaced(file=io.StringIO(), width=2000)
+    ran = replacing(monkeypatch, console)
+    assert update.command(console, "lcode", yes=True) == 0
+    python = f"{sys.version_info.major}.{sys.version_info.minor}"  # the one it runs on, not one uv finds nearby
+    assert ran == [["uv", "tool", "install", "--force", "--python", python, "--editable", str(clone)]]
+    assert output_of(console).endswith("✓ lcode updated: 1 new commit(s).\n\n")

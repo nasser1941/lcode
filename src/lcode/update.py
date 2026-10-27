@@ -44,7 +44,9 @@ NATIVE = {
 
 
 class UpdateError(Exception):
-    pass
+    def __init__(self, message: str, said: bool = False):
+        super().__init__(message)
+        self.said = said  # already written out
 
 
 def version_key(version: str) -> tuple[int, ...]:
@@ -179,17 +181,42 @@ def checkout_state(path: Path) -> CheckoutState:
     return CheckoutState(branch, dirty, behind, upstream)
 
 
-def update_checkout(path: Path, install_receipt: bool) -> str:
+def update_checkout(console, path: Path, install_receipt: bool) -> None:
     """git pull a checkout lcode runs from; reinstall its environment when its dependencies changed."""
     before = run(["git", "-C", str(path), "rev-parse", "HEAD"]).stdout.strip()
     if stream(["git", "-C", str(path), "pull", "--ff-only"]) != 0:
         raise UpdateError(f"git pull failed in {path}")
     changed = run(["git", "-C", str(path), "diff", "--name-only", before, "HEAD"]).stdout.split()
-    reinstall = ["uv", "tool", "install", "--force", "--editable", str(path)]
-    if "pyproject.toml" in changed and install_receipt and stream(reinstall) != 0:
-        raise UpdateError("reinstalling lcode's environment failed: run  uv tool install --force --editable .")
     count = run(["git", "-C", str(path), "rev-list", "--count", f"{before}..HEAD"]).stdout.strip() or "0"
-    return f"{count} new commit(s)"
+    done = f"[green]✓[/] lcode updated: {count} new commit(s)."
+    if "pyproject.toml" not in changed or not install_receipt:
+        console.print(done)
+        return
+    # The Python lcode runs on now: otherwise uv picks one by where you are (a nearby .venv, say) and, if it's another
+    # version, deletes the environment and makes a new one.
+    python = f"{sys.version_info.major}.{sys.version_info.minor}"
+    reinstall = ["uv", "tool", "install", "--force", "--python", python, "--editable", str(path)]
+    replace_self(
+        console, reinstall, done, "reinstalling lcode's environment failed: run  uv tool install --force --editable ."
+    )
+
+
+def replace_self(console, argv: list[str], done: str, failed: str) -> None:
+    """Run `argv`, which replaces lcode's own environment: the files this very process runs from. What to say when it
+    ends is rendered before it starts, and then only written: rich imports some of its modules when first needed (its
+    Unicode width tables, for one), and by then they may be gone or another version."""
+    said = {True: rendered(console, done), False: rendered(console, f"[red]✗ {escape(failed)}[/]")}
+    ok = stream(argv) == 0
+    console.file.write(said[ok])
+    console.file.flush()
+    if not ok:
+        raise UpdateError(failed, said=True)
+
+
+def rendered(console, markup: str) -> str:
+    with console.capture() as capture:
+        console.print(markup)
+    return capture.get()
 
 
 # ----------------------------------------------------------------------------- Ollama in Docker
@@ -405,15 +432,18 @@ def command(console, what: str = "", check: bool = False, yes: bool = False) -> 
         return Confirm.ask(question, default=True, console=console)
 
     failed = False
-    for part, step in (("lcode", update_lcode), ("ollama", update_ollama)):
+    # lcode last: updating it can replace the files this process runs from, so after it lcode only writes what it
+    # rendered before (see replace_self).
+    for part, step in (("ollama", update_ollama), ("lcode", update_lcode)):
         if what and what != part:
             continue
         try:
             step(console, check, ask)
         except UpdateError as e:
-            console.print(f"[red]✗ {escape(str(e))}[/]")
+            if not e.said:
+                console.print(f"[red]✗ {escape(str(e))}[/]")
             failed = True
-        console.print()
+        console.file.write("\n")
     return 1 if failed else 0
 
 
@@ -440,8 +470,7 @@ def update_lcode(console, check: bool, ask: Callable[[str], bool]) -> None:
                 f"{where}: {state.behind} new commit(s) on {state.upstream}, but the checkout {why}. Update it yourself with git pull."
             )
         elif ask(f"Pull {state.behind} new commit(s) into {install.path}?"):
-            receipt = (Path(sys.prefix) / "uv-receipt.toml").exists()
-            console.print(f"[green]✓[/] lcode updated: {update_checkout(install.path, receipt)}.")
+            update_checkout(console, install.path, (Path(sys.prefix) / "uv-receipt.toml").exists())
         return
     latest = latest_lcode()
     if version_key(latest) <= version_key(__version__):
@@ -458,13 +487,10 @@ def update_lcode(console, check: bool, ask: Callable[[str], bool]) -> None:
         return
     if not ask(f"Update lcode {__version__} → {latest} with `{shown}`?"):
         return
-    if stream(install.command) != 0:
-        raise UpdateError(f"{shown} failed")
-    console.print("[green]✓[/] lcode updated; the new version runs from the next `lcode`.")
+    done = "[green]✓[/] lcode updated; the new version runs from the next `lcode`."
     if install.kind == "brew":
-        console.print(
-            "[dim]Homebrew's formula follows a release by up to a day: if it's still the old version, try again later.[/]"
-        )
+        done += "\n[dim]Homebrew's formula follows a release by up to a day: if it's still the old version, try again later.[/]"
+    replace_self(console, install.command, done, f"{shown} failed")
 
 
 def update_ollama(console, check: bool, ask: Callable[[str], bool]) -> None:
