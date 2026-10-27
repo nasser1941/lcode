@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-10-27
+
 ### Added
 
 - **Clips up to 60 seconds** (#185), also from a start to an end picture: `@start.png @end.png the
@@ -1100,7 +1102,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.50.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.51.0...HEAD
+[0.51.0]: https://github.com/nasser1941/lcode/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/nasser1941/lcode/compare/v0.49.1...v0.50.0
 [0.49.1]: https://github.com/nasser1941/lcode/compare/v0.49.0...v0.49.1
 [0.49.0]: https://github.com/nasser1941/lcode/compare/v0.48.0...v0.49.0
