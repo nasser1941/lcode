@@ -16,6 +16,17 @@ All notable changes to lcode are documented here. The format follows
 - **Clips through several pictures:** `@bud.png @half-open.png @open.png the tulip opens
   --seconds 25` goes to each picture in turn, in an equal share of the clip.
 
+### Fixed
+
+- **`lcode update` ending in `ModuleNotFoundError: No module named 'rich._unicode_data…'`.**
+  The update itself had worked; only its last message failed, and the Ollama update after it
+  didn't run. Updating lcode can replace the files the running lcode is made of, so lcode now
+  prepares what it will say before that and updates Ollama first. A git checkout is reinstalled
+  on the Python lcode already runs on. Before, uv picked one from the folder you were in, such
+  as a nearby `.venv`, and built a new environment when it was another version. An update runs
+  the old version's code, so the update to this version can still show the error once. lcode is
+  updated anyway: run `lcode update ollama` for the rest.
+
 ## [0.50.0] - 2026-10-26
 
 ### Added
