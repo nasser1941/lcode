@@ -191,8 +191,8 @@ def test_continue_says_when_it_moved_to_another_folder(make_agent, tmp_path):
     agent = make_agent([reply("carried on")])
     agent.cwd = agent.workspace = main
     repl(agent, prompt="carry on", hardware=HW, cont=True)
-    shown = " ".join(output(agent).split())
-    assert "Continuing work in src" in shown and f"Working directory is now {main / 'src'}" in shown
+    shown = "".join(output(agent).split())  # a long temporary path (macOS) wraps across lines
+    assert "Continuingworkinsrc" in shown and f"Workingdirectoryisnow{main / 'src'}" in shown
     assert agent.messages[-1]["content"] == "carried on"
 
 
