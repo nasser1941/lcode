@@ -197,7 +197,8 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `extensions.py` | Custom commands and skills, and approving a repository's own |
 | `frontmatter.py` | The `---` headers of notes, agents, commands and skills |
 | `planning.py` | Plan mode: what it allows, presenting a plan and approving it |
-| `memory.py` | Notes that carry over between sessions, and the end-of-session check |
+| `memory.py` | Notes that carry over between sessions, and the optional end-of-session check |
+| `sessions.py`, `repoid.py` | Saved conversations: listing them for this folder and elsewhere; which repository a folder is in, by its first commit |
 | `sandbox.py` | The optional container for shell commands |
 | `checkpoints.py` | Snapshots before the model changes files, for `/undo` and `/rewind` |
 | `catalog.py`, `models.toml` | Model catalog and memory estimates |

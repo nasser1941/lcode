@@ -6,7 +6,7 @@ import pytest
 from rich.console import Console
 
 from conftest import output, reply
-from lcode import config
+from lcode import config, sessions
 from lcode import memory as memory_notes
 from lcode.hardware import Hardware
 from lcode.memory import Memory, NoteError, make_note, project_dir
@@ -31,6 +31,7 @@ def answers(monkeypatch, *replies):
 
 
 def two_turns(make_agent, **settings):
+    settings.setdefault("memory_check", True)  # the end-of-session check is off unless turned on
     agent = make_agent([reply("Use pnpm here."), reply("Done.")], **settings)
     agent.run_turn("how do I install deps?")
     agent.run_turn("no, we use pnpm, not npm")
@@ -262,12 +263,29 @@ def test_reflection_with_memory_ask_saves_nothing_without_approval(make_agent, m
 
 
 def test_short_sessions_and_memory_off_skip_the_reflection(make_agent):
-    agent = make_agent([reply("Hi!")], memory="auto")
+    agent = make_agent([reply("Hi!")], memory="auto", memory_check=True)
     agent.run_turn("hi")
     memory_notes.reflect(agent)
     off = two_turns(make_agent, memory="off")
     memory_notes.reflect(off)
     assert agent.ollama.chats == [] and off.ollama.chats == []
+
+
+def test_the_end_of_session_check_is_off_by_default(make_agent, monkeypatch):
+    assert config.SETTINGS["memory_check"][0] is False
+    agent = two_turns(make_agent, memory="ask", memory_check=False)
+    agent.save()  # as after every request
+    asked = []
+    monkeypatch.setattr("builtins.input", lambda prompt="": asked.append(prompt) or "y")
+    agent.ollama.chat_replies = [proposal(PNPM)]
+    memory_notes.reflect(agent)  # quitting
+    handle_command(agent, "/clear", HW)
+    assert agent.ollama.chats == [] and asked == [] and agent.memory().notes() == []
+    assert "worth remembering" not in output(agent)
+    # The conversation itself is kept, and notes still work.
+    assert [s.title for s in sessions.list_sessions(agent.workspace)] == ["how do I install deps?"]
+    handle_command(agent, "/remember the staging database needs the VPN", HW)
+    assert [n.description for n in agent.memory().notes()] == ["the staging database needs the VPN"]
 
 
 def test_reflection_drops_secrets_junk_and_restatements(make_agent, repo):

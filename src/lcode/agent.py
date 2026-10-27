@@ -35,6 +35,7 @@ from lcode import (
     manual,
     notify,
     planning,
+    repoid,
     repomap,
     residency,
     review,
@@ -329,6 +330,7 @@ class Settings:
     sandbox_network: bool = False
     vision_model: str = "auto"  # auto, off or an Ollama model that can see images
     memory: str = "off"  # off, ask or auto: notes that carry over to later sessions (lcode.memory)
+    memory_check: bool = False  # ask the model what's worth remembering when a conversation ends
     subagents: bool = False  # the agent tool (lcode.subagents)
     trust_project: bool = False  # use the repository's own commands, skills and agents (lcode.extensions)
     skills: str = "off"  # all, lcode (only lcode's own skill folders) or off
@@ -431,6 +433,7 @@ class Agent:
         self.reply_trouble = ""  # what went wrong with the last reply: "circles", "cut_off" or ""
         self.response = None  # the streaming response, so another thread can abort it
         self.ctx_used = 0
+        self._repo: tuple[Path, repoid.Repo | None] | None = None  # the workspace's repository, for saved sessions
         self.last_speed = 0.0
         self.usage = {"requests": 0, "prompt_tokens": 0, "prompt_ns": 0, "output_tokens": 0, "output_ns": 0}
         self.messages: list[dict] = []
@@ -701,8 +704,12 @@ class Agent:
         self.session_title = self.session_title or sessions.title_from(self.messages)
         f = self.session_file()
         f.parent.mkdir(parents=True, exist_ok=True)
+        repo = self.workspace_repo()
         data = {
             "cwd": str(self.workspace),  # where `lcode -c` there finds it, wherever the shell moved
+            # /resume lists it under "this folder" in any checkout of the same repository, wherever it moves
+            **({"repo": repo.to_json()} if repo else {}),
+            "context": {"used": self.next_request_tokens(), "window": self.settings.context},
             "model": self.settings.model,
             "mode": self.settings.mode,
             "image_model": self.settings.image_model,
@@ -720,6 +727,12 @@ class Agent:
         partial = f.with_name(f".{f.name}.partial")
         partial.write_text(json.dumps(data))
         os.replace(partial, f)
+
+    def workspace_repo(self) -> repoid.Repo | None:
+        """The repository the workspace is in, looked up again when the workspace changes or gets its first commit."""
+        if self._repo is None or self._repo[0] != self.workspace or (self._repo[1] and not self._repo[1].first):
+            self._repo = (self.workspace, repoid.find(self.workspace))
+        return self._repo[1]
 
     def new_session(self) -> None:
         self.reset()
@@ -770,15 +783,18 @@ class Agent:
         self.tools.notes = [str(n) for n in data.get("notes") or []]
         self.tools.changed = dict.fromkeys(str(f) for f in data.get("changed") or [])
         self.reflected = len(self.messages)  # checked for notes to remember when that session ended
-        self.ctx_used = sum(len(json.dumps(m)) for m in self.messages) // 3
-        self.counted_chars = None
+        saved = (data.get("context") or {}).get("used") if isinstance(data.get("context"), dict) else None
+        if isinstance(saved, int) and saved > 0:  # what the model counted, plus what came after
+            self.ctx_used, self.counted_chars = saved, conversation_chars(self.messages)
+        else:  # saved by a version before 0.52
+            self.ctx_used, self.counted_chars = sessions.estimate_tokens(self.messages), None
         return note
 
-    def load_latest(self) -> bool:
-        latest = sessions.list_sessions(self.workspace, limit=1)
-        if latest:
-            self.load(latest[0])
-        return bool(latest)
+    def load_latest(self) -> str | None:
+        """Continue the latest conversation in this folder (or its repository). Returns a note about the working
+        directory ("" if it stayed), or None when there's nothing to continue."""
+        latest = sessions.latest(self.workspace)
+        return self.load(latest) if latest else None
 
     # -- model calls
     def options(self) -> dict:

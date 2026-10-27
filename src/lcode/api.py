@@ -214,6 +214,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         sandbox_network=cfg["sandbox_network"],
         vision_model=cfg["vision_model"],
         memory=switch(options.memory, cfg["memory"], "ask"),
+        memory_check=cfg["memory_check"],
         subagents=cfg["subagents"],
         max_parallel_agents=cfg["max_parallel_agents"],
         trust_project=trust_project,

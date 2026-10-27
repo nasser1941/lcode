@@ -49,29 +49,37 @@ instead ("staging credentials are in 1Password, vault Dev").
     `-g` saves it for every repository. Start with `feedback:`, `reference:` or `user:` to set the
     type (the default is `project`).
 
-- **At the end of a session**, because local models rarely save anything on their own, lcode
-  asks the model one short question: is anything from this session worth remembering? It happens
-  when you quit, on `/clear`, and before the conversation is compacted (the summary leaves details
-  out). The model proposes at most three notes:
+## A check when a session ends
 
-    ```text
-    ╭─ Worth remembering? ────────────────────────────────────────────────────────╮
-    │ 1 [feedback] Use pnpm, not npm (this repository)                              │
-    │ 2 [project] Integration tests need `docker compose up db` first (this         │
-    │   repository)                                                                 │
-    ╰───────────────────────────────────────────────────────────────────────────────╯
-      Save them? [y]es / numbers to keep, e.g. 1,3 / [n]o: 1
-    ```
+Local models rarely save notes on their own. With `memory_check` on, lcode asks the model one short
+question when a conversation ends: is anything from it worth remembering? It happens when you
+quit, on `/clear`, and before the conversation is summarized (the summary leaves details out). The
+model proposes at most three notes:
 
-    The question is quick: it reuses the conversation Ollama already has in memory, so the model
-    only writes a few lines. Short sessions (one request and little work) are skipped, and Ctrl+C
-    skips it too.
+```text
+╭─ Worth remembering? ────────────────────────────────────────────────────────╮
+│ 1 [feedback] Use pnpm, not npm (this repository)                              │
+│ 2 [project] Integration tests need `docker compose up db` first (this         │
+│   repository)                                                                 │
+╰───────────────────────────────────────────────────────────────────────────────╯
+  Save them? [y]es / numbers to keep, e.g. 1,3 / [n]o: 1
+```
+
+It's off by default, because it's a model call you wait for before you can leave. Turn it on with:
+
+```bash
+lcode config set memory_check true
+```
+
+The question reuses the conversation Ollama already has in memory, so the model only writes a few
+lines. Short sessions (one request and little work) are skipped, and Ctrl+C skips it too. The
+conversation itself is always saved, with or without the check.
 
 ## Asking first: the `memory` setting
 
 | `memory` | |
 |---|---|
-| `ask` (default) | Every note the model saves, and the end-of-session proposals, need your OK. Answer `a` once to allow the model's notes for the rest of the session. This holds in `yolo` mode too. |
+| `ask` (default) | Every note the model saves, and the [end-of-session](#a-check-when-a-session-ends) proposals, need your OK. Answer `a` once to allow the model's notes for the rest of the session. This holds in `yolo` mode too. |
 | `auto` | Notes are saved without asking; lcode prints each one. |
 | `off` | No notes are loaded or saved, and the model has no `memory` tool. |
 
@@ -116,6 +124,13 @@ The dev dependencies are in a uv dependency group, which plain pytest doesn't se
 
 Each folder also has a `MEMORY.md` listing its notes, for reading; lcode regenerates it, so edit
 the notes rather than that file. A folder that isn't in a git repository gets its own notes.
+`/memory path` shows where this repository's are.
+
+A repository's notes follow it when you move or rename it, or clone it again: its folder has a
+`repo.json` naming the repository's first commit, which every clone shares. Notes saved before
+lcode 0.52 get that file the first time lcode runs in their repository. Notes of a repository
+that moved before then are in a folder named after its old name; copy them into the new one
+(`/memory path`) to keep them.
 
 At the start of a session, the model gets a one-line index of the notes (description, name, date)
 in its instructions. The index is capped at about 2,000 tokens, or 5% of a small context window;
