@@ -19,7 +19,10 @@ TICKER = f"{shlex.quote(sys.executable)} -u -c " + shlex.quote(
 def gone(pid: int) -> bool:
     """The process ended (or is a zombie waiting for its parent)."""
     status = Path(f"/proc/{pid}/status")  # Linux; elsewhere there's nothing to check
-    return not status.exists() or "zombie" in status.read_text().lower()
+    try:
+        return not status.exists() or "zombie" in status.read_text().lower()
+    except FileNotFoundError:  # it ended between the two looks
+        return True
 
 
 def wait_for(condition, seconds=5.0):
