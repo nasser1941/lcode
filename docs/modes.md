@@ -153,7 +153,8 @@ video ❯ /play
 ```
 
 - **Options:** the image options work here too (`--n`, `--ar`, `--seed`, `--quality`, `--style`,
-  `--no`, and `/options`), plus `--seconds` (1 to 8; 5 by default, at 24 frames per second).
+  `--no`, and `/options`), plus `--seconds` (1 to 60; 5 by default, at 24 frames per second;
+  longer than 8, it's [made in parts](#longer-clips)).
   Clips are 16:9, or 9:16 from an upright start picture (cropped to it), unless you give a shape:
   Wan 2.2 knows those two shapes best, and a square or small clip can break up into streaks.
 - **Quality:** `fast` makes 864×480 in 12 steps, `balanced` (the default) 864×480 in 20 steps, and
@@ -176,6 +177,8 @@ video ❯ /play
   `tilt-down`, `zoom-in`, `zoom-out`, `dolly-in`, `dolly-out`, `rotate-left`, `rotate-right`,
   `static`), from a description or a start picture. Wan 2.1 Fun Camera 1.3B makes these, at 832×480
   and 16 frames per second: a 3 s move takes about 2 minutes.
+- **Longer clips:** up to 60 seconds, also from a start to an end picture
+  (`@start.png @end.png the flower opens --seconds 25`). See [Longer clips](#longer-clips).
 - **Extend a clip:** `/extend 4 --seconds 3 it flies away` continues clip #4 from its last frame
   and joins the new part after it, as one longer clip (`…-extended.mp4`; 3 s more in about a
   minute at `fast`).
@@ -197,6 +200,60 @@ video ❯ /play
   camera move, lcode uses the model that can, installs it when you agree, and says so.
 - **Long renders:** progress shows the step and the time left. With `notify` on, lcode sends a
   desktop notification when a clip that took longer than `notify_after` seconds is done.
+
+## Longer clips
+
+A video model makes up to 8 seconds at once. For a longer clip (`--seconds` up to 60), lcode makes
+it in parts and joins them into one:
+
+```text
+video ❯ @start.png @middle.png @end.png the tulip bud slowly opens into a full flower, gentle breeze --seconds 25 --quality fast
+◆ A 25 s clip: lcode makes it in 4 parts of 6.25 s, each going on from the last frame of the one before, and joins them. Parts 2 and 4 each go to your next picture, in order.
+  part 1 of 4: 6.25 s, made in 137 s
+  part 2 of 4: 6.25 s, made in 141 s
+  part 3 of 4: 6.25 s, made in 138 s
+  part 4 of 4: 6.25 s, made in 143 s
+◆ #2 .lcode/media/20261026-201311-the-tulip-bud-slowly-opens-into-a-full-f.mp4  864×480 · Wan 2.2 TI2V 5B + Wan 2.2 Fun InP 5B · seed 1496941735 · 561.9 s
+```
+
+![Frames at 0, 6, 9.6, 14.6, 21.7 and 25.3 s of that clip](assets/long-clip-tulip.jpg)
+
+*Frames at 0, 6, 9.6, 14.6, 21.7 and 25.3 s of that clip, through a bud, a half-open and an open
+tulip: the change comes in steps, with some drift (the light flare at 9.6 s).*
+
+- **The parts:**
+  - as few as it takes, about equally long;
+  - the first comes from your description, or starts from your start picture;
+  - each next one starts on the last frame of the one before;
+  - with an end picture, the last part goes from there to your end picture (Wan 2.2 Fun InP), so
+    the clip ends exactly on it.
+- **Where the change happens:** the change toward a picture happens in the part that ends on it.
+  With only a start and an end picture, the clip goes on from the start for most of its length
+  and reaches the end picture in its last part. On a tulip opening over 25 s, it stayed closed for
+  about 20 s and then opened within 2. Making the whole change once as a guide clip doesn't help:
+  Wan 2.2 Fun InP opens the tulip within its first frames, at `fast` and at `balanced`.
+- **Pictures along the way:** for a change in steps, give more pictures, in order:
+  `@bud.png @half-open.png @open.png the tulip opens --seconds 25`. The clip gets an equal share
+  for each picture after the first, and the part that ends each share goes to that picture. Three
+  or more pictures work in a short clip too, one part to each.
+- **One clip:** ffmpeg joins the parts, leaving out the frame each join would show twice, at the
+  first part's pace and size. It's numbered in the gallery like any clip. Its JSON lists the parts,
+  which stay in a `…-parts` folder next to it.
+- **Extending:** `/extend 4 --seconds 20 it flies away` adds 20 s to clip #4 the same way.
+- **Follow-ups work as for any clip:** `/again`, `/vary` and `/play`, and `/upscale`, `/smooth`
+  and `/sound` on the result.
+- **Esc** stops it. The parts made so far are joined into a `…-partial.mp4` clip in the gallery.
+- **Needs** ffmpeg (`apt install ffmpeg`, `brew install ffmpeg`).
+- **Before it starts,** lcode says how many parts it makes. After a clip in the same session, it
+  also says about how long it takes, at that clip's pace.
+- **What to expect:** each part follows the same description, so a long clip has the same action
+  throughout, slowly drifting; for a story with scenes, make a [film](#films). Grok Imagine makes
+  up to 15 s at once: a longer clip is made on your GPU.
+
+- **Measured** on the RTX 4080 Laptop GPU (12 GB), a 25 s clip from a start to an end picture
+  (4 parts of 6.25 s, 864×480, 609 frames at 24 fps): 9.4 minutes at `fast` (about 140 s a part)
+  and 14.2 minutes at `balanced` (about 210 s a part). Through three pictures at `fast`: 9.4
+  minutes. The joins don't show: the frames on either side of each one match.
 
 ## Films
 

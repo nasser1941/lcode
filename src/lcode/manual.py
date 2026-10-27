@@ -392,7 +392,7 @@ def is_question(text: str) -> bool:
 # What a model needs to know to read the manual right: how requests work in each mode (tests check that every
 # command and option here exists).
 BASICS = """- Image mode (/mode image): what the user types at the prompt is a description, and lcode makes pictures from it. There is no command for that (no /image, /imagine or /generate). Options go after the description, for example: a red fox in the snow --n 4 --ar 16:9 (--n: 1 to 8 pictures; --ar: the shape; also --seed, --quality fast|balanced|best, --style, --no). @photo.png in a request uses the user's picture, to edit or as a reference. Results are numbered in the session's gallery (#1, #2…), and follow-ups take the number: /upscale 3, /nobg 3, /edit 3 make the sky purple, /vary 3, /use 3, /animate 3. Files go to .lcode/media/ in the project.
-- Video mode (/mode video): what the user types is a description of a clip, and lcode makes it. There is no /video command. A clip is 1 to 8 seconds (--seconds). @start.png in the request starts the clip from that picture; @start.png @end.png goes from the first picture to the second. Other options: --camera zoom-in (and other moves), --quality, --n, --ar, --seed, --style, --no. Follow-ups take the clip's number: /extend 4 --seconds 3 (continues it), /sound 4, /smooth 4, /upscale 4, /play 4. /film makes a short film of several shots, with the same characters, from one idea.
+- Video mode (/mode video): what the user types is a description of a clip, and lcode makes it. There is no /video command. A clip is 1 to 60 seconds (--seconds): longer than 8, lcode makes it in parts and joins them into one clip. @start.png in the request starts the clip from that picture; @start.png @end.png goes from the first picture to the second, also in a long clip (it ends on the second picture). Other options: --camera zoom-in (and other moves), --quality, --n, --ar, --seed, --style, --no. Follow-ups take the clip's number: /extend 4 --seconds 3 (continues it; up to 60 s), /sound 4, /smooth 4, /upscale 4, /play 4. /film makes a short film of several shots, with the same characters, from one idea.
 - Code mode (/mode code, the default): the user asks a coding agent to work on their project. Slash commands control lcode itself (/model, /context, /resume, /undo…), and lcode config set NAME VALUE, in a shell, changes a setting for good."""
 GUIDE = """You are the built-in help of lcode, a terminal program with three modes: code (a coding agent), image and video (they make pictures and clips on the user's GPU). The user is in {mode} mode now. Answer their question about lcode from what's below, and from nothing else.
 
@@ -425,7 +425,7 @@ EXTEND_PADS = {"left", "right", "top", "bottom"}
 PICTURE = re.compile(r'(?<!\S)@(?:"[^"]+"|\S+)')
 NUMBER = re.compile(r"^#?\d+$")
 OUTPUT_MARKS = ("◆", "✎", "⚠", "⎿", "●", "▀", "╭", "│", "╰", "…")
-PROMPT_MARK = re.compile(r"^\s*(?:(?:\w+\s*)?❯\s*|(?:code|image|video)\s+(?=/))")  # a prompt shown before the line
+PROMPT_MARK = re.compile(r"^\s*(?:(?:\w+\s*)?❯\s*|(?:code|image|video)\s+(?=[/@]))")  # a prompt shown before the line
 NO_SLASH = re.compile(
     r"^(mode (code|image|video)|models?\b|(upscale|nobg|vary|play|open|animate|extend|sound|smooth|edit|restyle) #?\d+)\b"
 )  # a command without its slash
@@ -471,7 +471,7 @@ def mode_problem(command: str, mode: str) -> str:
 
 def problems(text: str, mode: str, manual: Manual) -> list[str]:
     """What in an answer wouldn't work in lcode: commands or options it doesn't have (anywhere in the text), and lines
-    to type that its own parsers reject (--seconds 25: "seconds is how long a video is: 1 to 8")."""
+    to type that its own parsers reject (--seconds 90: "seconds is how long a video is: 1 to 60")."""
     found = [f"lcode has no {name}" for name in manual.unknown(text)]
     current = mode
     for line in typed_lines(text):

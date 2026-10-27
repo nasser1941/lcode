@@ -131,8 +131,8 @@ image ❯ /upscale 3 4
   (the [prompt assistant](modes.md#the-prompt-assistant)'s: `qwen3.5:4b` or the model you chose), loaded only for the
   answer so the GPU stays with ComfyUI. Without one, lcode shows the parts of the manual that match.
 - **Checked by lcode itself:** every command and option in an answer must exist in lcode, and the
-  lines to type go through lcode's own option parser: `--seconds 25` is caught ("seconds is how long
-  a video is: 1 to 8"). An answer that fails a check is asked for again once; what still fails is
+  lines to type go through lcode's own option parser: `--seconds 90` is caught ("seconds is how long
+  a video is: 1 to 60"). An answer that fails a check is asked for again once; what still fails is
   marked with ⚠, and isn't typed in for you.
 
 **Measured** on an RTX 4080 Laptop GPU (12 GB): 15 everyday questions (a 25-second clip between two
@@ -146,7 +146,7 @@ the context window…), each answer scored by hand:
 | `qwen3.6-35b` (code mode) | 12 | 2 | 1 (marked ⚠) | 6 to 7 s, once loaded |
 
 The checks caught every command that doesn't exist (`/image`, `/grok-video`, `/lcode`); before them,
-the small models answered `--seconds 25` and `/image …` without a warning. What's left: an extra
+the small models answered `/image …` without a warning. What's left: an extra
 or out-of-order step now and then, and an odd claim in the sentences after the commands.
 
 ## What the model can do

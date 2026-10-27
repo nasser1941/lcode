@@ -104,7 +104,7 @@ def test_prompts_are_not_questions(text):
 def test_what_wouldnt_work_is_found_by_lcodes_own_parsers(book):
     answer = """```text
 /mode video
-@start.png @end.png the robot walks --seconds 25
+@start.png @end.png the robot walks --seconds 90
 /image a fox --n 4 --ar 16:9
 /sound 4 waves --seconds 10
 /film a fox --shots 3 --length 4
@@ -119,7 +119,7 @@ Or try /imagine."""
         "lcode has no /image",
         "lcode has no /imagine",
         "lcode has no --length",
-        "@start.png @end.png the robot walks --seconds 25: seconds is how long a video is: 1 to 8",
+        "@start.png @end.png the robot walks --seconds 90: seconds is how long a video is: 1 to 60",
         "/sound 4 waves --seconds 10: /sound takes no --options (--seconds would be read as words)",
         "/film a fox --shots 3 --length 4: /film has no --length (it has --shots, --seconds, --quality, "
         "--transition, --sound)",
@@ -143,6 +143,10 @@ Or try /imagine."""
     assert manual.suggestion(good, "image") == "/mode video"
     assert manual.suggestion("```\nlcode config set mode video\n```", "code") == ""  # a shell command
     assert manual.suggestion("```\n.lcode/media/\n```", "image") == ""  # a folder: not a picture's description
+    assert (
+        manual.suggestion("```\nvideo @a.png @b.png it opens --seconds 25\n```", "video")
+        == "@a.png @b.png it opens --seconds 25"
+    )
 
 
 def test_answers_keep_only_what_to_type():
@@ -168,12 +172,12 @@ def test_an_answer_that_wouldnt_work_is_asked_for_again_then_marked(book):
     fixed = manual.answer(
         "how do I make a 25 second clip from two pictures?",
         "video",
-        chat(["```text\n@a.png @b.png it opens --seconds 25\n```", "Clips are 1 to 8 s.\n```text\n/film opens\n```"]),
+        chat(["```text\n@a.png @b.png it opens --seconds 90\n```", "Clips are 1 to 8 s.\n```text\n/film opens\n```"]),
         "small",
         book,
     )
     assert fixed.text.startswith("Clips are 1 to 8 s.") and fixed.problems == [] and fixed.model == "small"
-    assert "seconds is how long a video is: 1 to 8" in asked[1][-1]["content"]
+    assert "seconds is how long a video is: 1 to 60" in asked[1][-1]["content"]
     assert "Manual excerpts" in asked[0][0]["content"] and "Video mode" in asked[0][0]["content"]
     stuck = manual.answer("how do I upscale?", "image", chat(["```text\n/enlarge 3\n```"] * 2), "small", book)
     assert stuck.problems == ["lcode has no /enlarge"] and len(asked) == 4
@@ -230,7 +234,7 @@ def test_code_mode_asks_the_coding_model_and_gives_it_the_manual_as_a_tool(make_
     assert "/mode video" in output(agent)
     assert "lcode_help" in [s["function"]["name"] for s in agent.tool_schemas()]
     result = agent.tools.run("lcode_help", {"question": "how do I make a clip from two pictures"})
-    assert result.startswith("How lcode") and "A clip is 1 to 8 seconds" in result and "@start.png @end.png" in result
+    assert result.startswith("How lcode") and "A clip is 1 to 60 seconds" in result and "@start.png @end.png" in result
     assert "https://nasser1941.github.io/lcode/modes/#video-mode" in result
 
 

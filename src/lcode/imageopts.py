@@ -13,7 +13,8 @@ from dataclasses import asdict, dataclass, replace
 
 QUALITIES = ("fast", "balanced", "best")
 MAX_COUNT = 8
-MAX_SECONDS = 8  # video: longer clips need more memory than a laptop GPU has, and models drift
+MAX_SECONDS = 60  # video: a clip longer than a part is made in parts and joined (lcode.media.long_clip)
+PART_SECONDS = 8  # what a video model makes at once: longer needs more memory than a laptop GPU has, and models drift
 SIZES = {  # names for aspect ratios
     "square": "1:1",
     "portrait": "3:4",
