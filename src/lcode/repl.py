@@ -62,7 +62,7 @@ COMMANDS = {
     "/init": "Analyze the repo and write an AGENTS.md guide (loaded at every start)",
     "/clear": "Start a fresh conversation",
     "/rename": "Name this session so you can find it later, e.g. /rename auth refactor",
-    "/resume": "Resume a saved session: pick from a list, or /resume <number|name> (/resume all: every folder)",
+    "/resume": "Resume a saved session: this folder's, then others; /resume <number|name>; /resume all: older too",
     "/undo": "Undo the file changes of the last request (lcode saves a checkpoint before changing files)",
     "/rewind": "Go back to before an earlier request: its files, and optionally the conversation",
     "/checkpoints": "List the requests that changed files, and which files",
@@ -1263,51 +1263,80 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
     return True
 
 
-def print_sessions(agent: Agent, found: list[sessions.SessionInfo], all_dirs: bool) -> None:
-    where = "all folders" if all_dirs else str(agent.cwd)
-    table = Table(title=f"Saved sessions · {where}", title_justify="left", header_style="bold")
+def short_path(folder: str) -> str:
+    """A folder for a list: under the home folder as ~/…"""
+    home = str(Path.home())
+    return "~" + folder[len(home) :] if folder == home or folder.startswith(home + "/") else folder
+
+
+def session_table(agent: Agent, title: str, found: list[sessions.SessionInfo], first: int, folders: bool) -> Table:
+    table = Table(title=title, title_justify="left", header_style="bold")
     table.add_column("#", justify="right", style="cyan")
     table.add_column("Session")
     table.add_column("Last used", no_wrap=True)
     table.add_column("Requests", justify="right")
-    if all_dirs:
+    table.add_column("Context", no_wrap=True)
+    if folders:
         table.add_column("Folder", overflow="fold")
-    for i, info in enumerate(found, 1):
+    for i, info in enumerate(found, first):
         if info.name:
             label = f"[bold]{escape(info.name)}[/]\n[dim]{escape(info.title or '(no requests yet)')}[/]"
         else:
             label = escape(info.label)
         if info.id == agent.session_id:
             label += " [green](current)[/]"
-        row = [str(i), label, sessions.age(info.updated), str(info.turns)]
-        if all_dirs:
-            row.append(escape(info.cwd))
+        elif not folders and info.cwd != str(agent.workspace):  # in another folder or checkout of this repository
+            saved = Path(info.cwd)
+            where = saved.relative_to(agent.workspace) if agent.workspace in saved.parents else short_path(info.cwd)
+            label += f"\n[dim]in {escape(str(where))}[/]"
+        tokens = info.context(agent.settings.context)
+        if info.tokens > agent.settings.context * 0.85:  # resuming summarizes it first
+            tokens = f"[yellow]{tokens}[/]"
+        row = [str(i), label, sessions.age(info.updated), str(info.turns), tokens]
+        if folders:
+            row.append(escape(short_path(info.cwd)))
         table.add_row(*row)
-    agent.console.print(table)
+    return table
+
+
+def print_sessions(agent: Agent, listing: sessions.Listing) -> None:
+    """This folder's sessions, then the others with their folders, numbered across both."""
+    c = agent.console
+    here = short_path(str(agent.workspace))
+    if listing.here:
+        c.print(session_table(agent, f"This folder · {here}", listing.here, 1, folders=False))
+    else:
+        c.print(f"[dim]No saved sessions in this folder ({escape(here)}) yet.[/]")
+    if listing.elsewhere:
+        c.print(session_table(agent, "Elsewhere", listing.elsewhere, len(listing.here) + 1, folders=True))
+    left_out = []
+    if listing.more:
+        left_out.append(f"{listing.more} older session{'' if listing.more == 1 else 's'} elsewhere")
+    if listing.hidden:
+        left_out.append(f"{listing.hidden} test run{'' if listing.hidden == 1 else 's'} from temporary folders")
+    if left_out:
+        c.print(f"[dim]Not shown: {' and '.join(left_out)}. /resume all lists them.[/]")
 
 
 def choose_session(agent: Agent, query: str = "") -> sessions.SessionInfo | None:
-    """Find a session by number/name/id, or list them and ask. `all` lists every folder."""
+    """Find a session by number/name/id, or list them and ask. `all` also lists older sessions elsewhere."""
     c = agent.console
     words = query.split()
-    all_dirs = bool(words) and words[0].lower() in ("all", "--all", "-a")
-    query = " ".join(words[1:] if all_dirs else words)
-    found = sessions.list_sessions(None if all_dirs else agent.cwd)
-    if not found and not all_dirs:
-        found, all_dirs = sessions.list_sessions(None), True
-        if found and not query:
-            c.print("[dim]No saved sessions in this folder; showing all folders.[/]")
-    if not found:
-        c.print("No saved sessions yet. Sessions are saved after every request.")
-        return None
+    everything = bool(words) and words[0].lower() in ("all", "--all", "-a")
+    query = " ".join(words[1:] if everything else words)
+    listing = sessions.grouped(agent.workspace, everything=everything)
+    found = listing.numbered
     if query:
         match = sessions.find(query, found)
-        if match is None and not all_dirs:
-            match = sessions.find(query, sessions.list_sessions(None))
+        if match is None and not everything:
+            match = sessions.find(query, sessions.grouped(agent.workspace, everything=True).numbered)
         if match:
             return match
         c.print(f"[yellow]No session matches '{escape(query)}'.[/]")
-    print_sessions(agent, found, all_dirs)
+    if not found:
+        c.print("No saved sessions yet. Sessions are saved after every request.")
+        return None
+    print_sessions(agent, listing)
     try:
         answer = input("  Resume which session? (number or name, Enter to cancel): ").strip()
     except EOFError:
@@ -1358,11 +1387,14 @@ def print_recap(agent: Agent) -> None:
 
 def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = False, resume: str | None = None) -> None:
     if cont:
-        if agent.load_latest():
-            agent.console.print(f"[green]Continuing[/] [bold]{escape(agent.session_name or agent.session_title)}[/]")
-            print_recap(agent)
-        else:
+        note = agent.load_latest()
+        if note is None:
             agent.console.print("[dim]No saved session in this folder yet; starting a new one.[/]")
+        else:
+            agent.console.print(f"[green]Continuing[/] [bold]{escape(agent.session_name or agent.session_title)}[/]")
+            if note:
+                agent.console.print(f"[yellow]{escape(note)}[/]")
+            print_recap(agent)
     elif resume is not None:
         info = choose_session(agent, resume)
         if info:

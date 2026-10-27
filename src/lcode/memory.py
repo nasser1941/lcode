@@ -15,13 +15,17 @@ repository, and `memory/projects/<repo>/` holds one repository's notes, shared b
 worktrees. The system prompt gets a one-line index of both, capped so it costs little context;
 the model reads a note's details with the memory tool.
 
-Notes come from three places: the model's memory tool, the user's /remember, and a short
-reflection when a session ends ("what from this session is worth remembering?"), because local
-models rarely save anything on their own.
+Notes come from the model's memory tool and the user's /remember. With the memory_check setting on,
+also from a short reflection when a session ends ("what from this session is worth remembering?"),
+because local models rarely save anything on their own.
+
+A repository's notes follow it when it's moved, renamed or cloned again: its folder holds a repo.json
+naming the repository's first commit, and a checkout whose own folder has no notes finds them by it.
 """
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import difflib
 import hashlib
@@ -38,7 +42,7 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 
-from lcode import config
+from lcode import config, repoid
 from lcode.frontmatter import split as frontmatter
 
 if TYPE_CHECKING:
@@ -175,9 +179,12 @@ def _git_common_dir(cwd: Path) -> Path | None:
     return (cwd / out).resolve()
 
 
-def project_dir(cwd: Path) -> Path:
-    """Where the notes for the repository around `cwd` live: shared by its worktrees."""
-    common = _git_common_dir(cwd)
+IDENTITY = "repo.json"  # in a repository's notes folder: which repository it is, by its first commit
+
+
+def path_dir(cwd: Path, common: Path | None = None) -> Path:
+    """The notes folder named after where the repository (or folder) is: what lcode before 0.52 used."""
+    common = common or _git_common_dir(cwd)
     if common:
         root = common.parent if common.name == ".git" else common
         name, ident = root.name.removesuffix(".git"), common
@@ -185,6 +192,46 @@ def project_dir(cwd: Path) -> Path:
         name, ident = cwd.name, cwd.resolve()
     key = hashlib.sha256(str(ident).encode()).hexdigest()[:8]
     return memory_dir() / "projects" / f"{slugify(name, 40) or 'folder'}-{key}"
+
+
+def read_identity(folder: Path) -> str:
+    """The first commit a notes folder belongs to ("" if it doesn't say)."""
+    try:
+        data = json.loads((folder / IDENTITY).read_text())
+    except (OSError, ValueError):
+        return ""
+    return str(data.get("first") or "") if isinstance(data, dict) else ""
+
+
+def write_identity(folder: Path, first: str, root: Path) -> None:
+    with contextlib.suppress(OSError):
+        _write_atomic(folder / IDENTITY, json.dumps({"first": first, "path": str(root)}, indent=1) + "\n")
+
+
+def project_dir(cwd: Path) -> Path:
+    """Where the notes for the repository around `cwd` live: shared by its worktrees and every clone of it.
+
+    The folder named after the repository's place comes first, as older versions find it there. When that
+    folder has no notes, the repository may have moved or been cloned again: a folder whose repo.json names
+    the same first commit holds its notes."""
+    common = _git_common_dir(cwd)
+    here = path_dir(cwd, common)
+    if common is None:
+        return here  # not a repository: notes for this folder
+    if here.is_dir() and read_identity(here):
+        return here
+    first = repoid.first_commit(cwd)
+    if not first:
+        return here
+    repo = repoid.find(cwd)
+    if here.is_dir():  # notes from before 0.52: say which repository they're for, so they follow it
+        write_identity(here, first, repo.root if repo else cwd)
+        return here
+    projects = memory_dir() / "projects"
+    elsewhere = [f for f in projects.iterdir() if f.is_dir() and read_identity(f) == first] if projects.is_dir() else []
+    if elsewhere:  # the most recently used, if several clones had notes of their own
+        return max(elsewhere, key=lambda f: (f / "MEMORY.md").stat().st_mtime if (f / "MEMORY.md").exists() else 0)
+    return here
 
 
 def parse(text: str, scope: str, path: Path | None = None) -> Note | None:
@@ -293,7 +340,12 @@ class Memory:
         if existing and not note.details and existing.description == note.description:
             note = replace(note, details=existing.details)
         folder = self.folder(note.scope)
+        new_folder = not folder.is_dir()
         folder.mkdir(parents=True, exist_ok=True)
+        if new_folder and note.scope == "project":
+            repo = repoid.find(self.cwd)
+            if repo and repo.first:
+                write_identity(folder, repo.first, repo.root)
         path = folder / f"{note.name}.md"
         _write_atomic(path, note.render())
         self.write_index(note.scope)
@@ -471,7 +523,9 @@ def propose(agent: Agent) -> list[Note]:
 
 def reflect(agent: Agent) -> None:
     """At the end of a session (or before compaction): propose notes, then save the ones the user accepts."""
-    if agent.settings.memory == "off" or not worth_reflecting(agent.messages, agent.reflected):
+    if agent.settings.memory == "off" or not agent.settings.memory_check:
+        return  # off by default: quitting just saves the conversation
+    if not worth_reflecting(agent.messages, agent.reflected):
         return
     agent.reflected = len(agent.messages)
     c = agent.console

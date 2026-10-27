@@ -712,40 +712,59 @@ Instructions that are only needed for some tasks fit better in a [command or ski
 which costs no context until it's used.
 
 What doesn't belong in `AGENTS.md` but should carry over, such as your corrections and preferences,
-goes into lcode's [memory](memory.md): short notes the model, you (`/remember`) or a short check at
-the end of a session save, and that every later session in the repository loads.
+goes into lcode's [memory](memory.md): short notes the model or you (`/remember`) save, and that
+every later session in the repository loads.
 
 ## Sessions
 
 Every conversation is saved after each request to `~/.local/state/lcode/sessions/`, so you can
-leave and pick up where you stopped.
+leave and pick up where you stopped. Upgrading lcode keeps them, and the installed lcode and a
+development checkout (`uv run lcode`) share them.
 
 ```text
 ❯ /rename auth refactor        # name the current session
-❯ /resume                      # list this folder's sessions and pick one
+❯ /resume                      # list the saved sessions and pick one
 ```
 
 ```text
-Saved sessions · /home/you/code/my-project
- #  Session                                  Last used   Requests
- 1  auth refactor                            2 h ago           14
+This folder · ~/code/my-project
+ #  Session                                  Last used   Requests  Context
+ 1  auth refactor                            2 h ago           14  41.3K / 128K (32%)
     Explain how login tokens are validated
- 2  The tests in tests/test_parser.py fail…  yesterday          6
+ 2  The tests in tests/test_parser.py fail…  yesterday          6  ~18K / 128K (14%)
+    in tests
+Elsewhere
+ #  Session                     Last used   Requests  Context           Folder
+ 3  Set up the release script   Oct 20             3  9.6K / 128K (8%)  ~/code/tools
   Resume which session? (number or name, Enter to cancel): 1
 ```
+
+- **This folder** lists the sessions saved in this folder, and anywhere else in its git
+  repository: a subfolder, a worktree, or another clone of the same repository (it has the same
+  first commit). A row from another folder says where it was.
+- **Elsewhere** lists the 20 newest sessions from other folders. Sessions from temporary folders
+  that no longer exist, such as scripted test runs, are left out. `/resume all` lists everything.
+- **Context** is what the conversation takes of the current context window. A `~` means it's an
+  estimate, for sessions saved before lcode 0.52. After resuming, the status bar shows it right
+  away, and a yellow number means lcode summarizes the conversation before your next request.
 
 Unnamed sessions are listed by their first request. After resuming, lcode shows your last request
 and the start of its last answer so you know where you left off.
 
 | From the shell | From a session | Resumes |
 |---|---|---|
-| `lcode -c` | | the most recently used session in this folder |
+| `lcode -c` | | the latest session in this folder, else the latest under "This folder" |
 | `lcode --resume` | `/resume` | one you pick from a list |
 | `lcode --resume "auth refactor"` | `/resume auth refactor` | a session by name, list number, id or a unique part of its title |
-| | `/resume all` | a session from any folder (lcode switches to that folder) |
+| `lcode --resume all` | `/resume all` | one you pick from every saved session |
 
-`/clear` starts a new conversation and keeps the old one saved. Files may have changed since a
-session was saved, so after resuming the model has to read a file again before editing it.
+A session from another folder takes lcode to that folder. `/clear` starts a new conversation and
+keeps the old one saved. Files may have changed since a session was saved, so after resuming the
+model has to read a file again before editing it.
+
+**Where are my sessions?** `lcode doctor` shows how many are saved and the folder they're in.
+`LCODE_HOME`, or `XDG_STATE_HOME`, moves that folder: a terminal that sets one of them (some IDEs
+and test scripts do) sees other sessions. `lcode bench` doesn't save its runs as sessions.
 
 ## Scripting
 

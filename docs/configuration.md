@@ -42,6 +42,7 @@ lcode config path                      # print the file location
 | `vision_model` | `auto` | The model that [looks at images](usage.md#images): `auto`, `off` or an Ollama model that can see |
 | `mcp_tools` | `auto` | How [MCP](mcp.md#context) tool definitions reach the model: `auto`, `direct` or `search` (on demand) |
 | `memory` | `ask` | [Notes that carry over](memory.md) to later sessions: `ask` (confirm each), `auto` or `off` |
+| `memory_check` | `false` | When a conversation ends, [ask the model what's worth remembering](memory.md#a-check-when-a-session-ends) (a model call before you can leave) |
 | `skills` | `all` | Which [skills](commands.md#skills) the model is offered: `all` (lcode's folders and the ones other agents share), `lcode` (only `.lcode/skills/` and `~/.config/lcode/skills/`) or `off` |
 | `repo_map` | `true` | Give the model a ranked [map of the repository](search.md) |
 | `embed_model` | `auto` | Embedding model for [semantic code search](search.md#semantic-code-search): `auto`, `off` or a model name |
@@ -93,20 +94,20 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `LCODE_SANDBOX` | `sandbox` |
 | `LCODE_MEMORY` | `memory` |
 | `OLLAMA_API_KEY`, `BRAVE_API_KEY`, `TAVILY_API_KEY` | API key for that [search provider](usage.md#web-search) (never stored in the config file) |
-| `LCODE_HOME` | where sessions and prompt history are stored |
+| `LCODE_HOME` | where sessions, notes and prompt history are stored, instead of `~/.local/state/lcode` |
 
 ## Files lcode creates
 
 | Path | Contents |
 |---|---|
 | `~/.config/lcode/config.toml` | Settings |
-| `~/.local/state/lcode/sessions/` | Saved conversations (for `lcode -c`) |
+| `~/.local/state/lcode/sessions/` | Saved conversations (for `/resume` and `lcode -c`), one JSON file each |
 | `~/.local/state/lcode/history` | Prompt history (++up++ in the prompt) |
 | `~/.config/lcode/mcp.json` | [MCP servers](mcp.md) (readable only by you; may contain tokens) |
 | `~/.local/state/lcode/mcp-auth/` | Sign-in tokens for remote MCP servers (readable only by you) |
 | `~/.local/state/lcode/mcp-logs/` | Error output of local MCP servers |
 | `~/.local/state/lcode/checkpoints/` | Checkpoints for `/undo` (copies of your project's files; deleted after 14 days) |
-| `~/.local/state/lcode/memory/` | [Memory](memory.md) notes: `user/` for every repository, `projects/<repository>/` for each one |
+| `~/.local/state/lcode/memory/` | [Memory](memory.md) notes: `user/` for every repository, `projects/<repository>/` for each one (`/memory path` shows this repository's) |
 | `~/.config/lcode/commands/`, `~/.config/lcode/skills/` | Your [commands and skills](commands.md) (a repository's go in `.lcode/`) |
 | `~/.local/state/lcode/extensions-approved.json` | Repositories whose commands, skills and agents you approved |
 | `~/.config/lcode/agents/` | Your [custom agents](agents.md#custom-agents) (a repository's go in `.lcode/agents/`) |

@@ -20,7 +20,7 @@ from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn, TimeR
 from rich.prompt import Confirm
 from rich.table import Table
 
-from lcode import __version__, backends, catalog, config, limits, web
+from lcode import __version__, backends, catalog, config, limits, sessions, web
 from lcode.agent import Settings
 from lcode.catalog import ModelSpec
 from lcode.cloud import is_cloud, signin_command
@@ -553,6 +553,7 @@ def cmd_doctor(args) -> None:
 
         project, user = Memory(Path.cwd()).counts()
         line("Memory", f"{cfg['memory']} · {project} note(s) for this repository, {user} for every repository", True)
+    line("Sessions", sessions_status(Path.cwd()), True)
     node = shutil.which("npx")
     line("Node.js", "found" if node else "not found (some MCP servers need npx)", True if node else None)
     sys.exit(0 if ok else 1)
@@ -773,6 +774,14 @@ def exit_on_hangup() -> None:
         if sig is not None:
             with contextlib.suppress(ValueError, OSError):  # only the main thread can
                 signal.signal(sig, leave)
+
+
+def sessions_status(cwd: Path) -> str:
+    """How many conversations are saved, and where: a terminal with another LCODE_HOME or XDG_STATE_HOME has
+    other ones."""
+    listing = sessions.grouped(cwd, everything=True)
+    saved = len(listing.here) + len(listing.elsewhere)
+    return f"{saved} saved, {len(listing.here)} for this folder · in {sessions.sessions_dir()}"
 
 
 def comfyui_status(cfg: dict) -> tuple[str, bool | None]:

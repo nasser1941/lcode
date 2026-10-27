@@ -6,6 +6,37 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`/resume` in two sections** (#141): *This folder* lists the conversations saved in this
+  folder and anywhere in its git repository, also from a subfolder, a worktree or another clone
+  (the same first commit). *Elsewhere* lists the 20 newest from other folders, with each one's
+  folder. They're numbered across both. Before, only sessions saved in exactly this folder were
+  listed, so starting lcode one folder up made them look lost.
+- **The context each conversation uses**, in the list: `18.2K / 32K (57%)` against the current
+  window, in yellow when resuming it means a summary first. Sessions now save what they used,
+  and the status bar shows it right after resuming. Older sessions get an estimate, marked `~`.
+- **Notes follow a repository that moved, was renamed or was cloned again.** A repository's
+  notes folder names its first commit (`repo.json`), and a checkout whose own folder has no notes
+  finds them by it. Notes from older versions get the file the first time lcode runs there.
+- `lcode doctor` shows how many sessions are saved, how many for this folder, and where.
+
+### Changed
+
+- **No memory check when a session ends, by default.** Quitting, `/clear` and summarizing no
+  longer wait for a model call asking what's worth remembering. Turn it back on with
+  `lcode config set memory_check true`. `/remember`, the model's memory tool and saved notes work
+  as before, and the conversation is always saved.
+- `lcode -c` continues the latest conversation in this folder, else the latest in its repository,
+  and says when that takes it to another folder.
+- `/resume` and `lcode --resume` leave out sessions from temporary folders that no longer exist,
+  such as scripted test runs; `/resume all` lists them, and everything else.
+
+### Fixed
+
+- A session file that isn't a conversation (broken JSON, a list, odd messages) no longer stops
+  `/resume` from listing the others.
+
 ## [0.51.0] - 2026-10-27
 
 ### Added

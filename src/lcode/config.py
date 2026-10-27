@@ -61,6 +61,11 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "vision_model": ("auto", str, "model that looks at images: auto | off | an Ollama model with vision"),
     "mcp_tools": ("auto", str, "how MCP tools reach the model: auto | direct | search (on demand, saves context)"),
     "memory": ("ask", str, "notes that carry over to later sessions: off | ask (confirm each) | auto"),
+    "memory_check": (
+        False,
+        bool,
+        "when a conversation ends (quit, /clear, or before it's summarized), ask the model what's worth remembering",
+    ),
     "skills": ("all", str, "skills to offer the model: all (also other agents' folders) | lcode | off"),
     "repo_map": (True, bool, "give the model a ranked map of the repository's symbols"),
     "embed_model": ("auto", str, "embedding model for semantic code search (lcode index): auto | off | a model"),
