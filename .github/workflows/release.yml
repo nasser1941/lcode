@@ -22,7 +22,7 @@ jobs:
       id-token: write # to prove to PyPI that the upload comes from this workflow
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.2
       - name: Check the release tag matches the package version
         run: |
           version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/lcode/__init__.py)
