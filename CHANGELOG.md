@@ -6,6 +6,14 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Screenshots of web pages when the browser starts slowly.** The first start after a restart
+  reads the browser from disk, which took up to 12 seconds on GitHub's machines and sometimes
+  over the 30 seconds lcode gave it, so the shot failed with "the browser didn't answer". The
+  browser now gets 90 seconds to start. An error says whether it didn't start in time, quit, or
+  didn't answer a command, and quotes the browser's last lines.
+
 ## [0.52.0] - 2026-10-27
 
 ### Added
