@@ -54,6 +54,10 @@ KEY_NAMES = {"enter": "Return", "return": "Return", "esc": "Escape", "escape": "
              "right": "Right"}  # fmt: skip
 MODIFIERS = ("ctrl", "shift", "alt", "meta")
 SERVER_TIMEOUT = 60  # seconds for a server started with `command` to answer at `url`
+COMMAND_TIMEOUT = 30  # seconds for the browser to answer a command
+# Seconds for the browser to start. The first start after a reboot reads it all from a cold disk: 6-12 s on GitHub's
+# machines, and over 30 s while they were busy installing. Later starts take a fraction of a second.
+STARTUP_TIMEOUT = 90
 GRACE = 25  # seconds beyond `wait` before a program that never showed a window is stopped
 QT_BINDINGS = ("PyQt6", "PyQt5", "PySide6", "PySide2")
 QT_IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:PyQt[56]|PySide[26])\b", re.M)
@@ -1067,22 +1071,35 @@ class DevTools:
             f"--user-data-dir={tmp / 'profile'}",
             "about:blank",
         ]
-        self.proc = subprocess.Popen(
-            ["bash", "-c", script, browser, *args],
-            pass_fds=(to_chrome_r, from_chrome_w),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        self.log = tmp / "browser.txt"  # what the browser prints: an error quotes its last lines
+        with open(self.log, "wb") as printed:
+            self.proc = subprocess.Popen(
+                ["bash", "-c", script, browser, *args],
+                pass_fds=(to_chrome_r, from_chrome_w),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=printed,
+                start_new_session=True,
+            )
         os.close(to_chrome_r)
         os.close(from_chrome_w)
         self.buffer = b""
         self.next_id = 0
         self.events: list[dict] = []
         self.session = ""
+        self.answered = False  # it has answered something, so it's running
+        self.closed = False  # it closed its end of the pipe: it stopped
 
-    def send(self, method: str, params: dict | None = None, timeout: float = 30, session: bool = True) -> dict:
+    def send(
+        self,
+        method: str,
+        params: dict | None = None,
+        timeout: float | None = None,
+        session: bool = True,
+        waiting: str = "",
+    ) -> dict:
+        """Run a command and return its result. `waiting` names what an error says it didn't do in time."""
+        timeout = COMMAND_TIMEOUT if timeout is None else timeout
         self.next_id += 1
         message = {"id": self.next_id, "method": method, "params": params or {}}
         if session and self.session:
@@ -1092,7 +1109,11 @@ class DevTools:
         while True:
             reply = self.read(deadline - time.time())
             if reply is None:
-                raise ShotError(f"the browser didn't answer ({method})")
+                waiting = waiting or f"answer {method}"
+                if self.closed:
+                    raise ShotError(f"the browser stopped before it could {waiting}{self.last_lines()}")
+                raise ShotError(f"the browser didn't {waiting} within {timeout:g} seconds{self.last_lines()}")
+            self.answered = True
             if reply.get("id") == self.next_id:
                 if "error" in reply:
                     raise ShotError(f"the browser refused {method}: {reply['error'].get('message')}")
@@ -1110,6 +1131,7 @@ class DevTools:
                 return None
             chunk = os.read(self.from_chrome, 1 << 20)
             if not chunk:
+                self.closed = True
                 return None
             self.buffer += chunk
             timeout -= time.time() - start
@@ -1132,9 +1154,21 @@ class DevTools:
                     return True
         return False
 
+    def last_lines(self) -> str:
+        """The browser's last lines, without the D-Bus complaints it prints on any machine without a desktop."""
+        try:
+            lines = self.log.read_text(errors="replace").splitlines()
+        except OSError:
+            return ""
+        # Chrome starts each line with [process:thread:date/time:LEVEL:source]
+        lines = [re.sub(r"^\[[^\]]*\]\s*", "", line).strip() for line in lines if "dbus" not in line.lower()]
+        lines = [line[:200] for line in lines if line][-3:]
+        return f". It printed: {' | '.join(lines)}" if lines else ""
+
     def close(self) -> None:
-        with contextlib.suppress(Exception):
-            self.send("Browser.close", session=False, timeout=3)
+        if self.answered and not self.closed:  # one that never answered won't answer this either
+            with contextlib.suppress(Exception):
+                self.send("Browser.close", session=False, timeout=3)
         for fd in (self.to_chrome, self.from_chrome):
             with contextlib.suppress(OSError):
                 os.close(fd)
@@ -1147,7 +1181,10 @@ def chrome_shot(
     w, h = screen
     tools = DevTools(browser, tmp)
     try:
-        target = tools.send("Target.createTarget", {"url": "about:blank"}, session=False)["targetId"]
+        # The first command, so its answer waits for the browser to start
+        target = tools.send(
+            "Target.createTarget", {"url": "about:blank"}, timeout=STARTUP_TIMEOUT, session=False, waiting="start"
+        )["targetId"]
         tools.session = tools.send("Target.attachToTarget", {"targetId": target, "flatten": True}, session=False)[
             "sessionId"
         ]

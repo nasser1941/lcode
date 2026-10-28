@@ -519,6 +519,9 @@ a screen and sees what you would, measured:
 - Needs: Xvfb for other desktop programs (`sudo apt install xvfb x11-apps`), and Chrome or
   Chromium for web pages. On macOS only Qt programs and web pages work, since there's no virtual
   display.
+- The first web page after a restart can take a few seconds longer, while the browser loads from
+  disk: lcode gives it 90 seconds to start. If it doesn't start, or quits, the error says which and
+  quotes the browser's last lines.
 
 ## Permissions
 

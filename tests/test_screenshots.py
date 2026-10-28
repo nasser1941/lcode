@@ -7,6 +7,7 @@ import struct
 import subprocess
 import sys
 import textwrap
+import time
 import zlib
 
 import pytest
@@ -333,6 +334,87 @@ def test_a_real_page_in_headless_chrome(tmp_path):
     report = "\n".join(shot.report)
     assert shot.image.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n" and read_png(shot.image.read_bytes())[:2] == (1024, 600)
     assert "1500x600 in a 1024x600 window" in report and "missingFunction is not defined" in report
+
+
+FAKE_CHROME = r"""
+import json, os, sys, time
+
+# A stand-in for Chrome on its DevTools pipe: commands on fd 3, answers on fd 4, each ending in a zero byte.
+time.sleep(float(os.environ.get("FAKE_CHROME_DELAY", "0")))
+if os.environ.get("FAKE_CHROME_QUITS"):
+    print("[9:9:1028/203402.769577:ERROR:dbus/bus.cc:405] Failed to connect to the bus", file=sys.stderr)
+    print("[9:9:1028/203402.770104:FATAL:zygote_host_impl_linux.cc:128] No usable sandbox!", file=sys.stderr)
+    sys.exit(1)
+results = {
+    "Target.createTarget": {"targetId": "T1"},
+    "Target.attachToTarget": {"sessionId": "S1"},
+    "Page.navigate": {"frameId": "F1"},
+    "Runtime.evaluate": {"result": {"value": {"title": "Fake", "page": [800, 600], "viewport": [800, 600]}}},
+    "Page.captureScreenshot": {"data": "iVBORw0KGgpmYWtl"},  # the PNG signature, then "fake"
+}
+buffer = b""
+while chunk := os.read(3, 1 << 16):
+    buffer += chunk
+    while b"\0" in buffer:
+        raw, _, buffer = buffer.partition(b"\0")
+        command = json.loads(raw)
+        method = command["method"]
+        if method == os.environ.get("FAKE_CHROME_IGNORES"):
+            continue
+        os.write(4, json.dumps({"id": command["id"], "result": results.get(method, {})}).encode() + b"\0")
+        if method == "Page.navigate":
+            os.write(4, json.dumps({"method": "Page.loadEventFired", "params": {}}).encode() + b"\0")
+        if method == "Browser.close":
+            sys.exit(0)
+"""
+
+
+@pytest.fixture
+def fake_chrome(tmp_path):
+    path = tmp_path / "fake-chrome"
+    path.write_text(f"#!{sys.executable}\n{FAKE_CHROME}")
+    path.chmod(0o755)
+    return str(path)
+
+
+def fake_shot(browser, tmp_path):
+    return sh.chrome_shot(browser, "file:///shop.html", (800, 600), 0, False, tmp_path / "shot.png", tmp_path)
+
+
+def test_the_browser_gets_longer_to_start_than_to_answer(fake_chrome, tmp_path, monkeypatch):
+    # The first start after a reboot reads the browser from a cold disk: it took up to 12 s on GitHub's machines
+    # and sometimes over the 30 s a command gets, so the test with a real Chrome failed now and then.
+    assert sh.STARTUP_TIMEOUT >= 60 and sh.COMMAND_TIMEOUT == 30
+    monkeypatch.setattr(sh, "STARTUP_TIMEOUT", 10)
+    monkeypatch.setattr(sh, "COMMAND_TIMEOUT", 0.5)
+    monkeypatch.setenv("FAKE_CHROME_DELAY", "1.5")
+    shot = fake_shot(fake_chrome, tmp_path)
+    assert shot.image.read_bytes().startswith(b"\x89PNG\r\n\x1a\n") and shot.how == "headless Chrome"
+    assert '- Page "Fake": 800x600 in a 800x600 window' in shot.report
+
+
+def test_a_browser_that_does_not_start_in_time(fake_chrome, tmp_path, monkeypatch):
+    monkeypatch.setattr(sh, "STARTUP_TIMEOUT", 0.5)
+    monkeypatch.setenv("FAKE_CHROME_DELAY", "30")
+    started = time.monotonic()
+    with pytest.raises(sh.ShotError, match=r"^the browser didn't start within 0\.5 seconds$"):
+        fake_shot(fake_chrome, tmp_path)
+    assert time.monotonic() - started < 5  # a browser that never answered isn't asked to close, it's stopped
+
+
+def test_a_browser_that_stops_while_starting(fake_chrome, tmp_path, monkeypatch):
+    monkeypatch.setenv("FAKE_CHROME_QUITS", "1")
+    with pytest.raises(sh.ShotError) as e:
+        fake_shot(fake_chrome, tmp_path)
+    # What it printed, without the D-Bus complaints every machine without a desktop gets
+    assert str(e.value) == "the browser stopped before it could start. It printed: No usable sandbox!"
+
+
+def test_a_browser_that_does_not_answer_a_command(fake_chrome, tmp_path, monkeypatch):
+    monkeypatch.setattr(sh, "COMMAND_TIMEOUT", 0.5)
+    monkeypatch.setenv("FAKE_CHROME_IGNORES", "Runtime.evaluate")
+    with pytest.raises(sh.ShotError, match=r"^the browser didn't answer Runtime\.evaluate within 0\.5 seconds$"):
+        fake_shot(fake_chrome, tmp_path)
 
 
 @pytest.mark.skipif(not sh.xvfb_available() or not shutil.which("xmessage"), reason="no Xvfb or xmessage")
