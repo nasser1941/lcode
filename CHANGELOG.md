@@ -13,6 +13,13 @@ All notable changes to lcode are documented here. The format follows
   over the 30 seconds lcode gave it, so the shot failed with "the browser didn't answer". The
   browser now gets 90 seconds to start. An error says whether it didn't start in time, quit, or
   didn't answer a command, and quotes the browser's last lines.
+- **What to do when Ollama in Docker doesn't answer.** lcode and `lcode doctor` suggested
+  installing Ollama even when it runs in a Docker container. They now name the container and give
+  the command to start it: `docker compose up` when Docker Compose made it, `docker start`
+  otherwise. A running container that doesn't answer gets `docker logs`. When there's no container
+  or Docker itself isn't running, the message says so.
+- **The Ollama commands on macOS.** When Ollama wasn't running, or had a new version out, lcode
+  showed the Linux install command on a Mac. It now shows the Homebrew one.
 
 ## [0.52.0] - 2026-10-27
 

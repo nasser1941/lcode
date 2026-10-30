@@ -17,8 +17,18 @@ Ollama isn't running (or isn't installed).
 
 - Linux: `sudo systemctl start ollama` (check with `systemctl status ollama`).
 - macOS: open the Ollama app, or `brew services start ollama`.
-- Docker: `docker start <container>`, and make sure port 11434 is published.
+- Docker: lcode looks for the Ollama container that publishes port 11434, and says how to start it: with
+  `docker compose up` when Docker Compose made it, or `docker start <container>`. If there's no such
+  container any more (for example after `docker system prune`), create it again; when its volume was removed
+  as well (`docker volume prune -a`), so were the models: download them again with `lcode setup`.
 - Remote server: `lcode config set ollama_host http://host:11434`.
+
+### Docker: `all predefined address pools have been fully subnetted`
+
+Docker Compose can't create a network for the Ollama container. A VPN that routes all traffic (for example
+with routes `0.0.0.0/1` and `128.0.0.0/1`) covers every address range Docker would use. Put the
+container on Docker's default network instead: add `network_mode: bridge` to the Ollama service in the
+compose file, and run `docker compose up -d` again.
 
 ### `lcode isn't set up yet` / `… is not installed yet`
 

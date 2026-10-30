@@ -18,12 +18,14 @@ from __future__ import annotations
 import contextlib
 import io
 import queue
+import shlex
 import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from rich.console import Console
 
@@ -40,8 +42,9 @@ STATUSES = ("success", "error", "max_steps", "loop", "interrupted")
 EXIT_CODES = {"success": 0, "error": 1, "max_steps": 3, "loop": 4, "interrupted": 130}
 OLLAMA_INSTALL = {
     "linux": "curl -fsSL https://ollama.com/install.sh | sh",
-    "darwin": "brew install ollama   (or download it from https://ollama.com/download)",
+    "macos": "brew install ollama && brew services start ollama   (or download the app from https://ollama.com/download)",
 }
+DOCKER_TIMEOUT = 10  # seconds for Docker to list its containers, when Ollama doesn't answer
 
 
 class SetupError(Exception):
@@ -114,12 +117,49 @@ def check_server(ollama, hw: Hardware | None = None) -> str:
     except OllamaError as e:
         from lcode.hardware import detect
 
-        hint = OLLAMA_INSTALL.get((hw or detect()).os, OLLAMA_INSTALL["linux"])
-        raise SetupError(f"{e}\n\nIs Ollama installed and running? Install it with:\n  {hint}") from e
+        raise SetupError(f"{e}\n\n{ollama_down(ollama.host, (hw or detect()).os)}") from e
     if version_tuple(version) < MIN_VERSION:
         needed = ".".join(map(str, MIN_VERSION))
         raise SetupError(f"Ollama {version} is too old; lcode needs {needed} or newer. Update Ollama.")
     return version
+
+
+def ollama_down(host: str, os_name: str) -> str:
+    """What to do when Ollama doesn't answer at `host`: start the Docker container it runs in, or install it."""
+    from lcode import update
+
+    docker = urlsplit(host).hostname in update.LOCAL_HOSTS and update.docker_installed()
+    containers, trouble = [], ""
+    try:
+        containers = update.ollama_containers(host, stopped=True, timeout=DOCKER_TIMEOUT) if docker else []
+    except (update.UpdateError, ValueError) as e:  # Docker isn't running, or doesn't let this user in
+        trouble = str(e).removeprefix("docker ps failed: ")
+    if len(containers) == 1:
+        container = containers[0]
+        if container.running:
+            return (
+                f"Ollama runs in Docker, in the container {container.name}, but doesn't answer. If it has just "
+                f"started, try again in a moment; if not, see why:\n  docker logs --tail 20 {container.name}"
+            )
+        compose = container.compose
+        if compose and compose["files"] and all(Path(f).is_file() for f in compose["files"]):
+            start = shlex.join(update.compose_up(compose)[0])
+        else:
+            start = f"docker start {container.name}"
+        return f"Ollama runs in Docker, in the container {container.name}, which is stopped. Start it with:\n  {start}"
+    if containers:
+        names = ", ".join(c.name for c in containers)
+        return f"Ollama runs in Docker here, in one of these containers: {names}. Start it with:\n  docker start <name>"
+    install = OLLAMA_INSTALL.get(os_name, OLLAMA_INSTALL["linux"])
+    hint = f"Is Ollama installed and running? Install it with:\n  {install}"
+    if trouble:
+        hint += f"\nIf you run Ollama in Docker, start Docker first. It says: {trouble}"
+    elif docker:
+        hint += (
+            "\nIf you ran Ollama in Docker, its container is gone: create it again (with Docker Compose: "
+            "docker compose up -d, in the folder of its compose file)."
+        )
+    return hint
 
 
 def switch(wanted: bool | None, configured: str, default_on: str) -> str:

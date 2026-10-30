@@ -37,9 +37,10 @@ HUB_TAGS = "https://hub.docker.com/v2/namespaces/ollama/repositories/ollama/tags
 PYPI = "https://pypi.org/pypi/lcode-cli/json"
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
 START_TIMEOUT = 120  # seconds for a recreated container to answer
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "0.0.0.0", None)
 NATIVE = {
     "linux": "curl -fsSL https://ollama.com/install.sh | sh",
-    "darwin": "brew upgrade ollama   (or let the Ollama app update itself)",
+    "macos": "brew upgrade ollama   (or let the Ollama app update itself)",
 }
 
 
@@ -239,21 +240,33 @@ class Container:
         return {"project": project, "service": service, "files": files,
                 "workdir": labels.get("com.docker.compose.project.working_dir", "")}  # fmt: skip
 
+    @property
+    def running(self) -> bool:
+        return bool((self.info.get("State") or {}).get("Running"))
+
+
+def docker_installed() -> bool:
+    return shutil.which("docker") is not None
+
 
 def docker_available() -> bool:
-    return shutil.which("docker") is not None and run(["docker", "info", "--format", "{{.ID}}"]).returncode == 0
+    return docker_installed() and run(["docker", "info", "--format", "{{.ID}}"]).returncode == 0
 
 
-def find_container(host: str) -> Container | None:
-    """The Ollama container that serves `host` (a local address), if Ollama runs in Docker."""
+def ollama_containers(host: str, stopped: bool = False, timeout: float = 120) -> list[Container]:
+    """The Ollama containers that publish the port of `host` (a local address); with `stopped`, stopped ones too."""
     parts = urlsplit(host)
-    if parts.hostname not in ("localhost", "127.0.0.1", "::1", "0.0.0.0", None):
-        return None
+    if parts.hostname not in LOCAL_HOSTS:
+        return []
     port = str(parts.port or 11434)
-    ids = run(["docker", "ps", "-q"]).stdout.split()
+    listed = run(["docker", "ps", "-aq" if stopped else "-q"], timeout=timeout)
+    if listed.returncode != 0:
+        said = (listed.stderr or listed.stdout or "").strip().splitlines()
+        raise UpdateError(f"docker ps failed: {said[0][:200] if said else f'exit code {listed.returncode}'}")
+    ids = listed.stdout.split()
     if not ids:
-        return None
-    infos = json.loads(run(["docker", "inspect", *ids]).stdout or "[]")
+        return []
+    infos = json.loads(run(["docker", "inspect", *ids], timeout=timeout).stdout or "[]")
     found = []
     for info in infos:
         image = (info.get("Config") or {}).get("Image", "")
@@ -262,6 +275,12 @@ def find_container(host: str) -> Container | None:
         bindings = ((info.get("HostConfig") or {}).get("PortBindings") or {}).get("11434/tcp") or []
         if any(str(b.get("HostPort")) == port for b in bindings):
             found.append(Container(info["Id"][:12], info["Name"].lstrip("/"), image, info))
+    return found
+
+
+def find_container(host: str) -> Container | None:
+    """The Ollama container that serves `host` (a local address), if Ollama runs in Docker."""
+    found = ollama_containers(host)
     return found[0] if len(found) == 1 else None
 
 
@@ -512,7 +531,7 @@ def update_ollama(console, check: bool, ask: Callable[[str], bool]) -> None:
         if not current:
             raise UpdateError(f"Ollama doesn't answer at {host}: start it, then run lcode update again")
         latest = latest_ollama()
-        local = urlsplit(host).hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0", None)
+        local = urlsplit(host).hostname in LOCAL_HOSTS
         if version_key(latest) <= version_key(current):
             console.print(f"[green]✓[/] Ollama {current} is the newest version.")
         elif not local:
