@@ -30,11 +30,6 @@ from lcode.ollama import MIN_VERSION, Ollama, OllamaError, redact, version_tuple
 
 console = Console(highlight=False)
 
-OLLAMA_INSTALL = {
-    "linux": "curl -fsSL https://ollama.com/install.sh | sh",
-    "macos": "brew install ollama && brew services start ollama   (or download the app from https://ollama.com)",
-}
-
 
 class NotInstalled(Exception):
     pass
@@ -382,7 +377,10 @@ def cmd_doctor(args) -> None:
         if openai:
             line("", f"start {ollama.name}'s server, or set its address: lcode config set base_url <url>", None)
         else:
-            line("", f"install: {OLLAMA_INSTALL.get(hw.os, OLLAMA_INSTALL['linux'])}", None)
+            from lcode import api
+
+            for text in api.ollama_down(ollama.host, hw.os).splitlines():
+                line("", escape(text.strip()), None)
         sys.exit(1)
     try:
         model, spec = resolve_model(ollama, cfg["model"])

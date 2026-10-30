@@ -1,12 +1,15 @@
 import io
 import json
+import shlex
 import subprocess
 import sys
 
 import pytest
 from rich.console import Console
 
-from lcode import __version__, update
+from lcode import __version__, api, cli, config, update
+from lcode.hardware import Hardware
+from lcode.ollama import OllamaError
 from lcode.update import Container, Install, UpdateError
 
 COMPOSE = """\
@@ -259,9 +262,130 @@ def test_up_to_date_and_pinned(docker, monkeypatch):
 
 def test_ollama_outside_docker_gets_instructions(docker, monkeypatch):
     monkeypatch.setattr(update, "find_container", lambda host: None)
+    monkeypatch.setattr("lcode.hardware.detect", lambda: Hardware("linux", "x", 31, "RTX 4080 Laptop", 12))
     console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "ollama", yes=True) == 0
     assert "Ollama 0.32.15 → 0.35.1 is out" in output_of(console) and docker["stream"] == []
+    assert "curl -fsSL https://ollama.com/install.sh | sh" in output_of(console)
+    monkeypatch.setattr("lcode.hardware.detect", lambda: Hardware("macos", "Apple M4 Max", 64, "Apple GPU", None, True))
+    console = Console(file=io.StringIO(), width=2000)
+    assert update.command(console, "ollama", yes=True) == 0
+    assert "update it with:\n  brew upgrade ollama" in output_of(console) and "curl" not in output_of(console)
+
+
+# ----------------------------------------------------------------------------- when Ollama doesn't answer
+
+
+def docker_with(monkeypatch, *infos, fails=""):
+    """Docker with these containers (as `docker inspect` describes them), or whose `docker ps` fails with `fails`."""
+    calls = []
+
+    def fake_run(argv, cwd=None, timeout=120):
+        calls.append(argv)
+        if argv[:2] == ["docker", "ps"]:
+            if fails:
+                return subprocess.CompletedProcess(argv, 1, "", f"{fails}\n")
+            return subprocess.CompletedProcess(argv, 0, "".join(f"{i['Id'][:12]}\n" for i in infos), "")
+        assert argv[:2] == ["docker", "inspect"], argv
+        return subprocess.CompletedProcess(argv, 0, json.dumps(list(infos)), "")
+
+    monkeypatch.setattr(update, "run", fake_run)
+    monkeypatch.setattr(update, "docker_installed", lambda: True)
+    return calls
+
+
+def test_a_stopped_compose_container_is_started_through_its_compose_file(monkeypatch, tmp_path):
+    container, path = compose_container(tmp_path)
+    calls = docker_with(monkeypatch, container.info)
+    assert api.ollama_down("http://localhost:11434", "linux") == (
+        "Ollama runs in Docker, in the container lab-ollama, which is stopped. Start it with:\n"
+        f"  docker compose -p lab --project-directory {shlex.quote(str(tmp_path))} -f {shlex.quote(str(path))} "
+        "up -d --no-deps ollama"
+    )
+    assert calls[0] == ["docker", "ps", "-aq"]  # stopped containers too
+    path.unlink()  # the compose file moved: Docker can still start the container itself
+    assert api.ollama_down("http://localhost:11434", "linux").endswith("Start it with:\n  docker start lab-ollama")
+
+
+def test_a_stopped_container_is_started_and_a_running_one_is_looked_into(monkeypatch):
+    stopped = inspect()
+    docker_with(monkeypatch, stopped)
+    assert api.ollama_down("http://127.0.0.1:11434", "linux") == (
+        "Ollama runs in Docker, in the container lab-ollama, which is stopped. Start it with:\n"
+        "  docker start lab-ollama"
+    )
+    running = {**inspect(), "State": {"Status": "running", "Running": True}}
+    docker_with(monkeypatch, running)
+    assert api.ollama_down("http://localhost:11434", "linux") == (
+        "Ollama runs in Docker, in the container lab-ollama, but doesn't answer. If it has just started, try again "
+        "in a moment; if not, see why:\n  docker logs --tail 20 lab-ollama"
+    )
+    docker_with(monkeypatch, stopped, inspect(name="old-ollama"))
+    assert api.ollama_down("http://localhost:11434", "linux") == (
+        "Ollama runs in Docker here, in one of these containers: lab-ollama, old-ollama. Start it with:\n"
+        "  docker start <name>"
+    )
+
+
+def test_without_an_ollama_container_lcode_says_how_to_get_one(monkeypatch):
+    other_port = inspect()
+    other_port["HostConfig"]["PortBindings"]["11434/tcp"][0]["HostPort"] = "11435"
+    docker_with(monkeypatch, inspect(name="db", image="postgres:16"), other_port)
+    assert api.ollama_down("http://localhost:11434", "linux") == (
+        "Is Ollama installed and running? Install it with:\n"
+        "  curl -fsSL https://ollama.com/install.sh | sh\n"
+        "If you ran Ollama in Docker, its container is gone: create it again (with Docker Compose: "
+        "docker compose up -d, in the folder of its compose file)."
+    )
+    docker_with(monkeypatch, fails="Cannot connect to the Docker daemon at unix:///var/run/docker.sock.")
+    assert api.ollama_down("http://localhost:11434", "linux").endswith(
+        "\nIf you run Ollama in Docker, start Docker first. It says: Cannot connect to the Docker daemon at "
+        "unix:///var/run/docker.sock."
+    )
+
+
+def test_without_docker_or_for_another_machine_lcode_says_how_to_install_ollama(monkeypatch):
+    calls = docker_with(monkeypatch, inspect())
+    assert api.ollama_down("http://gpu-box:11434", "linux") == (
+        "Is Ollama installed and running? Install it with:\n  curl -fsSL https://ollama.com/install.sh | sh"
+    )
+    monkeypatch.setattr(update, "docker_installed", lambda: False)
+    assert api.ollama_down("http://localhost:11434", "macos") == (
+        "Is Ollama installed and running? Install it with:\n"
+        "  brew install ollama && brew services start ollama   (or download the app from https://ollama.com/download)"
+    )
+    assert calls == []
+
+
+class Down:
+    host = "http://localhost:11434"
+
+    def version(self):
+        raise OllamaError("cannot reach Ollama at http://localhost:11434: Connection refused")
+
+
+def test_lcode_and_its_doctor_say_how_to_start_the_container(monkeypatch, tmp_path):
+    docker_with(monkeypatch, inspect())
+    hw = Hardware("linux", "x", 31, "RTX 4080 Laptop", 12)
+    with pytest.raises(api.SetupError) as error:
+        api.check_server(Down(), hw)
+    assert str(error.value) == (
+        "cannot reach Ollama at http://localhost:11434: Connection refused\n\n"
+        "Ollama runs in Docker, in the container lab-ollama, which is stopped. Start it with:\n"
+        "  docker start lab-ollama"
+    )
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
+    monkeypatch.setattr(cli, "Ollama", lambda host: Down())
+    monkeypatch.setattr(cli, "detect", lambda: hw)
+    monkeypatch.setattr(cli, "console", Console(file=io.StringIO(), width=2000, highlight=False))
+    with pytest.raises(SystemExit):
+        cli.main(["doctor"])
+    lines = cli.console.file.getvalue().splitlines()
+    assert lines[-3:] == [
+        "✗ Ollama     cannot reach Ollama at http://localhost:11434: Connection refused",
+        "!            Ollama runs in Docker, in the container lab-ollama, which is stopped. Start it with:",
+        "!            docker start lab-ollama",
+    ]
 
 
 # ----------------------------------------------------------------------------- lcode itself
