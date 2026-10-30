@@ -262,6 +262,7 @@ def test_up_to_date_and_pinned(docker, monkeypatch):
 
 def test_ollama_outside_docker_gets_instructions(docker, monkeypatch):
     monkeypatch.setattr(update, "find_container", lambda host: None)
+    monkeypatch.setattr("lcode.hardware.detect", lambda: Hardware("linux", "x", 31, "RTX 4080 Laptop", 12))
     console = Console(file=io.StringIO(), width=2000)
     assert update.command(console, "ollama", yes=True) == 0
     assert "Ollama 0.32.15 → 0.35.1 is out" in output_of(console) and docker["stream"] == []
