@@ -6,6 +6,21 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Run traces** (#196): each request in code mode is recorded on this machine as it runs: the
+  model's answers with the time to the first token, the total time and the tokens in and out;
+  each tool call with its result and time; the model's settings, the lcode version and the git
+  commit. Subagents get a lane of their own. Traces stay on this machine, are deleted after 30
+  days and take 200 MB at most; `lcode config set trace false` turns them off.
+- **`lcode trace`** lists the traces, `lcode trace show 1` shows one as a timeline, and
+  `lcode trace export 1` writes a copy for a bug report with secrets, home-folder paths, user
+  names, and email and IP addresses masked.
+- **`lcode trace replay 1`** runs a recorded request again with the recorded answers instead of a
+  model, in a copy of the folder at the recorded commit, and shows where the tool results now
+  differ. Shell commands keep their recorded results unless `--commands` runs them again. It
+  needs no GPU, and `lcode.replay.run` does the same in a test.
+
 ### Fixed
 
 - **Screenshots of web pages when the browser starts slowly.** The first start after a restart

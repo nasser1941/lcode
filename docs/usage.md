@@ -10,6 +10,7 @@ lcode doctor                 # check the installation (include this in bug repor
 lcode media [install MODEL]  # image and video models: what fits here, what's installed; install one
 lcode config [set|unset]     # show or change settings
 lcode bench [models]         # score models on small coding tasks on this machine
+lcode trace [action] [N]     # past requests: show one step by step, export or replay it (see Run traces)
 lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases… (see MCP servers)
 lcode acp                    # run inside an editor over the Agent Client Protocol (see Editors)
 lcode update [--check]       # update lcode, and Ollama when it runs in Docker (see Installation)
@@ -768,6 +769,10 @@ model has to read a file again before editing it.
 **Where are my sessions?** `lcode doctor` shows how many are saved and the folder they're in.
 `LCODE_HOME`, or `XDG_STATE_HOME`, moves that folder: a terminal that sets one of them (some IDEs
 and test scripts do) sees other sessions. `lcode bench` doesn't save its runs as sessions.
+
+Each request is also recorded as a [run trace](traces.md): its model and tool calls with their
+times and tokens. `lcode trace` lists them, and `lcode trace show 1` shows the last one step by
+step.
 
 ## Scripting
 

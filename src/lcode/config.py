@@ -88,6 +88,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "secret_check": (True, bool, "before git commit and git push, look for passwords, keys and tokens they'd add"),
     "compact_at": (65536, int, "summarize at this many tokens even when the window is larger (0: only at 85%)"),
     "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),
+    "trace": (True, bool, "record each request's steps, timings and tokens on this machine, for lcode trace"),
 }
 ENV_OVERRIDES = {
     "LCODE_MODEL": "model",

@@ -18,6 +18,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -41,6 +42,7 @@ from lcode import (
     review,
     sessions,
     subagents,
+    traces,
     vision,
     web,
 )
@@ -76,6 +78,9 @@ from lcode.tools import (
     truncate,
 )
 from lcode.unreachable import NOTE_AT, Sites
+
+if TYPE_CHECKING:
+    from lcode.replay import ReplayServer
 
 GPU_MEMORY_ERRORS = (
     "out of memory",
@@ -349,6 +354,7 @@ class Settings:
     escalate_model: str | None = None  # a stronger model to ask when stuck (lcode.escalate): provider/model
     escalate_url: str | None = None  # its server, when not the provider's usual one
     escalate_price: str | None = None  # dollars per million tokens in/out, e.g. "3/15", for the cost estimate
+    trace: bool = False  # record each request on this machine (lcode.traces)
 
 
 class Agent:
@@ -436,6 +442,8 @@ class Agent:
         self._repo: tuple[Path, repoid.Repo | None] | None = None  # the workspace's repository, for saved sessions
         self.last_speed = 0.0
         self.usage = {"requests": 0, "prompt_tokens": 0, "prompt_ns": 0, "output_tokens": 0, "output_ns": 0}
+        self.trace: traces.Lane | None = None  # the request's trace while it's recorded (lcode.traces)
+        self.replay: ReplayServer | None = None  # in a replay: the recorded results of tools and checks (lcode.replay)
         self.messages: list[dict] = []
         self.reset()
 
@@ -981,7 +989,10 @@ class Agent:
             added = "\n".join(f"- {note}" for note in self.turn_requests[1:])
             request += f"\n\nWhat the user added while you worked:\n{added}"
         try:
-            with self.console.status("Reviewing the change against your request…", spinner="dots"):
+            with (
+                self.console.status("Reviewing the change against your request…", spinner="dots"),
+                traces.purpose(self, "review"),
+            ):
                 problems = review.run(self, request, answer, diff)
         except OllamaError as e:
             self.say(f"The review didn't run: {e}", warning=True)
@@ -1043,8 +1054,12 @@ class Agent:
     def run_check(self, check: checks.Check, round_: int) -> str | None:
         """Run the checks after a change. Returns what to tell the model when they fail, else None."""
         self.say(f"Checking the work: {check.command} (from {check.source})")
-        result = self.tools.run("bash", {"command": check.command, "timeout": checks.TIMEOUT})
+        result = self.replay.check_result(check.command) if self.replay is not None else None
+        if result is None:
+            result = self.tools.run("bash", {"command": check.command, "timeout": checks.TIMEOUT})
         code = checks.exit_code(result)
+        if self.trace is not None:
+            self.trace.check(check.command, result, code)
         self.check_results.append({"command": check.command, "exit_code": code, "by": "lcode"})
         if code is None:
             self.say(f"The checks didn't run: {result.splitlines()[0][:200]}", warning=True)
@@ -1153,9 +1168,20 @@ class Agent:
     def run_turn(self, user_text: str) -> None:
         self.turn_started = time.monotonic()
         self.checkpoints.begin_turn(self.session_id, user_text, len(self.messages))
+        lane = traces.start(self, user_text)
+        status, error = "error", ""
         try:
             self._run_turn(user_text)
+            status = self.turn_status
+        except KeyboardInterrupt:
+            status = "interrupted"
+            raise
+        except Exception as e:
+            error = str(e) if isinstance(e, OllamaError) else f"{type(e).__name__}: {e}"
+            raise
         finally:
+            if lane is not None:
+                traces.finish(self, lane, status, error)
             self.checkpoints.end_turn()
             if self.hooks.hooks and self.allowed_tools is None:
                 payload = {"request": user_text[:2000], "cwd": str(self.cwd), "session": self.session_id}
@@ -1189,6 +1215,8 @@ class Agent:
 
     def sandbox_root(self) -> Path | None:
         """The folder the model is limited to while the sandbox is on (None when it's off)."""
+        if self.replay is not None:
+            return self.replay.root  # a replay changes nothing outside its copy of the folder (lcode.traces)
         if not self.sandbox:
             return None
         try:
@@ -1290,7 +1318,7 @@ class Agent:
                 why = "its replies went round in circles or ended without an answer, twice in this request"
                 if not escalated and self.can_escalate():
                     escalated = True
-                    advice = escalate.run(self, why)
+                    advice = self.ask_stronger(why)
                     if advice:
                         self.messages.append({"role": "user", "content": advice})
                         stalls = 0
@@ -1334,7 +1362,7 @@ class Agent:
                         if check_rounds >= checks.MAX_ROUNDS and not escalated and self.can_escalate():
                             escalated = True
                             why = f"the project's checks (`{check.command}`) failed {check_rounds} times in a row"
-                            advice = escalate.run(self, why, failure=feedback)
+                            advice = self.ask_stronger(why, failure=feedback)
                             if advice:
                                 self.messages.append({"role": "user", "content": advice})
                                 check_rounds -= 1  # the checks run once more after the advice
@@ -1376,8 +1404,11 @@ class Agent:
                     self.on_tool(name, args)
                 if name not in ("bash", "todo_write", "web_search", "web_fetch", "agent"):  # those print their own
                     self.console.print(Text(f"● {self.describe_call(name, args)}", style="bold magenta"))
+                began = time.monotonic()
+                if self.trace is not None:
+                    self.trace.tool_begin()
                 try:
-                    result = done[i] if i in done else self.tools.run(name, args)
+                    result = done[i] if i in done else self.run_tool(name, args)
                 except KeyboardInterrupt:
                     for rest in calls[i:]:
                         self.messages.append(
@@ -1425,6 +1456,8 @@ class Agent:
                     changed, verified = True, False
                 elif name == "bash" and changed and self.model_ran_checks(str(args.get("command", "")), result):
                     verified = True  # the model ran the checks itself, after its last change
+                if self.trace is not None:
+                    self.trace.tool(call.get("id", ""), name, args, result, time.monotonic() - began)
                 tool_msg = {"role": "tool", "tool_name": name, "content": result}
                 if call.get("id"):
                     tool_msg["tool_call_id"] = call["id"]
@@ -1451,7 +1484,7 @@ class Agent:
                     break
             if looping and not escalated and self.can_escalate():
                 escalated = True
-                advice = escalate.run(self, f"it kept making the same call with the same result: {looping}")
+                advice = self.ask_stronger(f"it kept making the same call with the same result: {looping}")
                 if advice:
                     self.messages.append({"role": "user", "content": advice})
                     self.repeats.reset()
@@ -1485,6 +1518,24 @@ class Agent:
             return
         self.turn_status = "success"
         self.print_stats()
+
+    def run_tool(self, name: str, args: dict) -> str:
+        if self.replay is not None:  # a replay gives some tools their recorded results (lcode.traces)
+            served = self.replay.tool_result(name, args)
+            if served is not None:
+                return served
+            args = self.replay.moved(args)  # the recorded folder's paths point into the replay's copy
+        return self.tools.run(name, args)
+
+    def ask_stronger(self, why: str, failure: str = "") -> str | None:
+        """The stronger model's advice for the local model, if one is set and the user agrees (lcode.escalate)."""
+        if self.replay is not None:
+            return self.replay.escalation(why)
+        with traces.inside(self, "escalate"):
+            advice = escalate.run(self, why, failure)
+        if self.trace is not None:
+            self.trace.escalation(why, advice)
+        return advice
 
     def keep_dropped(self, reply: dict) -> str:
         """Save a reply lcode dropped (its thinking too), so the user can see what went round in circles."""
@@ -1665,7 +1716,8 @@ class Agent:
         if len(self.messages) <= 2:
             return
         if self.interactive:
-            memory_notes.reflect(self)  # what the summary leaves out is gone for good
+            with traces.inside(self, "memory"):
+                memory_notes.reflect(self)  # what the summary leaves out is gone for good
         instructions = (
             "Summarize this conversation so the work can continue in a fresh context. Include: the user's goals "
             "and requests, key facts learned about the codebase (files, functions, paths with line numbers), "
@@ -1675,7 +1727,7 @@ class Agent:
         if focus:
             instructions += f" Focus especially on: {focus}"
         summary = ""
-        with self.console.status("[cyan]Compacting…[/]"):
+        with self.console.status("[cyan]Compacting…[/]"), traces.purpose(self, "summary"):
             for chunk in self.chat([*self.messages, {"role": "user", "content": instructions}], None, False):
                 summary += chunk.get("message", {}).get("content", "")
         requests = context_tools.user_requests(self.messages)

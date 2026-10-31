@@ -272,6 +272,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         escalate_url=cfg["escalate_url"],
         escalate_price=cfg["escalate_price"],
         compact_at=cfg["compact_at"],
+        trace=cfg["trace"],
     )
     agent = Agent(ollama, settings, cwd, console=console)
     agent.hardware = hw

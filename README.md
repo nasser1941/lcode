@@ -145,6 +145,7 @@ lcode
 | `lcode --model qwen3.5-9b --context 128k` | pick a model and context window for this session |
 | `lcode models` / `lcode doctor` | what fits this machine / check the installation |
 | `lcode bench qwen3.6-35b qwen3.5-9b` | compare models on small coding tasks on this machine |
+| `lcode trace` / `lcode trace show 1` | past requests, step by step with times and tokens; export or replay one |
 | `/undo`, `/rewind` | take back the last request's file changes, or go back further |
 | `lcode mcp catalog` / `lcode mcp add github` | ready-made MCP servers / add one |
 | `/rename`, `/resume` | name the current session, resume a saved one |
