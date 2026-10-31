@@ -394,7 +394,20 @@ def test_a_replay_writes_only_in_its_copy(make_agent, repo, original, tmp_path_f
     assert (copy / "inside.txt").read_text() == "in the project\n"
     assert not (repo / "inside.txt").exists() and not outside.exists()
     [difference] = report.differences
-    assert difference.what == f"write_file {outside}" and "outside the project" in difference.now
+    label = f"{outside.parent.name}/{outside.name}"  # a long path (macOS temp folders) keeps its end in the label
+    assert difference.what.startswith("write_file ") and difference.what.endswith(label)
+    assert "outside the project" in difference.now
+
+
+def test_summaries_keep_the_start_of_commands_and_the_end_of_paths():
+    deep = "/projects" + "/a-long-folder-name" * 5 + "/src/app.py"
+    assert traces.call_summary("read_file", {"path": deep}) == "read_file …" + "/a-long-folder-name" * 3 + "/src/app.py"
+    folder = "\\a-long-folder-name"
+    windows = "C:\\Users\\someone" + folder * 5 + "\\app.py"
+    assert traces.call_summary("edit_file", {"path": windows}) == "edit_file …" + folder * 3 + "\\app.py"
+    command = "pytest -q " + "tests/test_one.py " * 10
+    assert traces.call_summary("bash", {"command": command}) == "bash " + " ".join(command.split())[:70] + "…"
+    assert traces.call_summary("read_file", {"path": "/repo/src/app.py"}, "/repo") == "read_file src/app.py"
 
 
 def test_requests_in_the_interactive_session_are_recorded(make_agent, monkeypatch):

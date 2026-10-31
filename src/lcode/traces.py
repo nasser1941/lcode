@@ -58,6 +58,7 @@ MAX_TEXT = 200_000  # characters of one text in a trace: a tool result, an answe
 SHOWN_ARGUMENT = 2_000  # characters of one argument in a tool event (the whole call is in the model event)
 GIT_TIMEOUT = 2
 LIST_LIMIT = 20
+SUMMARY_WIDTH = 70  # characters of a command, path or query in a one-line summary of a tool call
 # The settings a request ran with that a replay of it uses too.
 REPLAYED = (
     "mode", "web", "memory", "subagents", "max_parallel_agents", "trust_project", "skills", "prune", "repo_map",
@@ -716,8 +717,21 @@ def call_summary(name: str, args: Any, cwd: str = "") -> str:
                 value = " ".join(value.split())
                 if cwd and cwd not in ("/", "."):
                     value = value.replace(cwd.rstrip("/") + "/", "")
-                return f"{name} {value[:70] + '…' if len(value) > 70 else value}"
+                return f"{name} {path_end(value) if key == 'path' else shortened(value)}"
     return name
+
+
+def shortened(text: str, width: int = SUMMARY_WIDTH) -> str:
+    return text[:width] + "…" if len(text) > width else text
+
+
+def path_end(path: str, width: int = SUMMARY_WIDTH) -> str:
+    """The end of a long path, where the file name is: …/tests/test_app.py."""
+    if len(path) <= width:
+        return path
+    tail = path[-width:]
+    cut = min((i for i in (tail.find("/"), tail.find("\\")) if i >= 0), default=0)
+    return "…" + tail[cut:]
 
 
 def result_summary(result: str) -> str:
