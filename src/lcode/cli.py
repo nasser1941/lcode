@@ -857,7 +857,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lcode",
         description="A local-first terminal coding agent powered by open-weight models via Ollama.",
-        epilog="Subcommands: lcode setup | models | doctor | config | bench | mcp | index | update "
+        epilog="Subcommands: lcode setup | models | doctor | config | bench | trace | mcp | index | update "
         "(lcode <subcommand> --help). "
         "Docs: https://nasser1941.github.io/lcode/",
     )
@@ -979,6 +979,25 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
         help="summarize at this many tokens, e.g. 64k (default: the compact_at setting; 0: only at 85%%)",
     )
     subs["bench"] = p
+    p = argparse.ArgumentParser(
+        prog="lcode trace",
+        description="Requests recorded on this machine (the trace setting): list them, show one step by step, "
+        "export one for a bug report with secrets and personal details masked, or replay one with the recorded "
+        "answers instead of a model and see where the tool results now differ.",
+    )
+    p.add_argument("action", nargs="?", default="list", help="list (default), show, export, replay or path")
+    p.add_argument("trace", nargs="?", help="a number from the list (1: the newest), a trace id or a trace file")
+    p.add_argument("-n", "--limit", type=int, default=20, help="list: how many (default: 20)")
+    p.add_argument("-v", "--verbose", action="store_true", help="show: also the model's answers and results")
+    p.add_argument(
+        "-o", "--output", help="export: the file to write (default: lcode-trace-<id>.jsonl here; - prints it)"
+    )
+    p.add_argument("--repo", help="replay: in a copy of this folder (default: the recorded folder, at its commit)")
+    p.add_argument(
+        "--commands", action="store_true", help="replay: run shell commands and the checks again too (in the copy)"
+    )
+    p.add_argument("--keep", action="store_true", help="replay: keep the copy it ran in")
+    subs["trace"] = p
     p = argparse.ArgumentParser(
         prog="lcode index",
         description="Build or refresh the semantic code search index of the repository (an Ollama embedding model).",
@@ -1137,6 +1156,12 @@ def cmd_media(args) -> None:
     console.print("[dim]Install one: lcode media install <model> · choose in image mode: /model <model>[/]")
 
 
+def cmd_trace(args) -> None:
+    from lcode import traces
+
+    sys.exit(traces.command(args, console))
+
+
 def cmd_mcp(args) -> None:
     from lcode.mcp.commands import run
 
@@ -1150,6 +1175,7 @@ COMMANDS = {
     "media": cmd_media,
     "config": cmd_config,
     "bench": cmd_bench,
+    "trace": cmd_trace,
     "mcp": cmd_mcp,
     "index": cmd_index,
     "action": cmd_action,

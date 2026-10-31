@@ -61,6 +61,7 @@ lcode config path                      # print the file location
 | `repeat_limit` | `3` | Identical tool calls with identical results before lcode [steps in](how-it-works.md#when-the-model-repeats-itself); `0` turns it off, along with the checks for [unreachable sites](how-it-works.md#when-a-site-cant-be-reached) and [thinking in circles](how-it-works.md#when-a-reply-goes-nowhere) |
 | `secret_check` | `true` | Before `git commit` and `git push`, look for passwords, keys and tokens they'd add ([details](usage.md#secrets-in-commits)) |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
+| `trace` | `true` | Record each request's model calls, tool calls, times and tokens on this machine, for [`lcode trace`](traces.md) (kept 30 days) |
 
 Besides these settings, `config.toml` can hold [hooks](hooks.md) (`[[hooks]]`) and
 [permission rules](hooks.md#permission-rules) (`[permissions]`); a repository can have its own in
@@ -115,9 +116,10 @@ Environment variables override the file, which is useful for one-off runs and CI
 | `~/.local/state/lcode/lsp-logs/` | Language servers' own output |
 | `~/.local/state/lcode/index/` | [Code search](search.md#semantic-code-search) indexes, one per repository (`lcode index`) |
 | `~/.local/state/lcode/outputs/` | The full text of long command output that was cut short for the model (kept a week) |
+| `~/.local/state/lcode/traces/` | [Run traces](traces.md): each request's steps, times and tokens, one file per request (kept 30 days, 200 MB at most) |
 | `~/.local/state/lcode/limits.json` | Context sizes that ran out of GPU memory on this machine (safe to delete) |
 
-Sessions contain everything the model read, including file contents. Delete the folder to clear them.
+Sessions and traces contain everything the model read, including file contents. Delete the folders to clear them.
 
 ## Tuning for speed and memory
 

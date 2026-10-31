@@ -43,7 +43,7 @@ from rich.markup import escape
 from rich.syntax import Syntax
 from rich.text import Text
 
-from lcode import config
+from lcode import config, traces
 from lcode.checkpoints import _clean_env, work_tree_for
 from lcode.frontmatter import split as frontmatter
 from lcode.ollama import OllamaError
@@ -478,6 +478,7 @@ class Run:
         child.on_tool = lambda name, args: self.line.tool(child.describe_call(name, args))
         child.messages[0]["content"] += ROLE_PROMPT.format(instructions=kind.instructions)
         child.ctx_used = len(child.messages[0]["content"]) // 3
+        traces.follow(parent, child)  # its calls go in a lane of the request's trace
         self.child = child
 
     def execute(self) -> None:
