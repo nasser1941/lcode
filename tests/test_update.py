@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -110,6 +111,21 @@ def test_how_lcode_was_installed(tmp_path):
     plain = tmp_path / "venv"
     plain.mkdir()
     assert update.lcode_install(plain, "").command[-3:] == ["install", "--upgrade", "lcode-cli"]
+
+
+def test_with_uvx_commands_get_your_python_not_lcodes(tmp_path):
+    uvx = tmp_path / ".cache" / "uv" / "archive-v0" / "abc"
+    (uvx / "bin").mkdir(parents=True)
+    path = os.pathsep.join([str(uvx / "bin"), "/usr/local/bin", "", "/usr/bin"])
+    env = {"PATH": path}
+    assert update.leave_own_environment(env, uvx, "")
+    assert env["PATH"] == os.pathsep.join(["/usr/local/bin", "", "/usr/bin"])
+    assert not update.leave_own_environment(env, uvx, "")  # nothing left to take off
+    # Any other install keeps PATH: a pip install or a checkout may be the project's own environment.
+    plain = tmp_path / "venv"
+    (plain / "bin").mkdir(parents=True)
+    env = {"PATH": os.pathsep.join([str(plain / "bin"), "/usr/bin"])}
+    assert not update.leave_own_environment(env, plain, "") and env["PATH"].startswith(str(plain / "bin"))
 
 
 # ----------------------------------------------------------------------------- Docker Compose

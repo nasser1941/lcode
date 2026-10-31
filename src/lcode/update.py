@@ -18,12 +18,13 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -155,6 +156,29 @@ def lcode_install(prefix: Path | None = None, direct_url: str | None = None) -> 
     if "/uv/" in text and ("archive-v" in text or "/cache/" in text or "/.cache/" in text):
         return Install("uvx")
     return Install("pip", [sys.executable, "-m", "pip", "install", "--upgrade", "lcode-cli"])
+
+
+def leave_own_environment(
+    env: MutableMapping[str, str] | None = None, prefix: Path | None = None, direct_url: str | None = None
+) -> bool:
+    """Take lcode's own environment off PATH when uvx put it there, so commands use your Python.
+
+    uvx puts the scripts folder of the temporary environment lcode runs in first on PATH. `python` in
+    the model's commands and in the checks was then lcode's own Python, which has none of the
+    project's packages ("No module named pytest"). Other installs (uv tool, pipx, Homebrew) don't
+    change PATH; a checkout or pip install may be the project's own environment, so they're kept.
+    Returns whether PATH changed.
+    """
+    if lcode_install(prefix, direct_url).kind != "uvx":
+        return False
+    env = os.environ if env is None else env
+    scripts = (prefix or Path(sys.prefix)).resolve() / ("Scripts" if os.name == "nt" else "bin")
+    entries = env.get("PATH", "").split(os.pathsep)
+    kept = [entry for entry in entries if not entry or Path(entry).resolve() != scripts]
+    if len(kept) == len(entries):
+        return False
+    env["PATH"] = os.pathsep.join(kept)
+    return True
 
 
 @dataclass
