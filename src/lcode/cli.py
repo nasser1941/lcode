@@ -594,6 +594,10 @@ def cmd_config(args) -> None:
 def cmd_bench(args) -> None:
     from lcode import bench
 
+    if args.harbor:
+        from lcode import harbor_bench
+
+        sys.exit(harbor_bench.command(args, console))
     if args.list:
         bench.print_tasks(console)
         return
@@ -942,6 +946,17 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument("--keep", action="store_true", help="keep each task's folder and transcript for inspection")
     p.add_argument("-v", "--verbose", action="store_true", help="show the model working, like a normal session")
     p.add_argument("--list", action="store_true", help="list the tasks and exit")
+    p.add_argument(
+        "--harbor",
+        choices=["dev", "held-out"],
+        help="public benchmarks instead: a slice of Terminal-Bench 2.0 and SWE-bench Verified, run with Harbor",
+    )
+    p.add_argument("--attempts", type=int, default=3, help="with --harbor: attempts per task (default: 3, for pass^3)")
+    p.add_argument(
+        "--docker-bridge",
+        action="store_true",
+        help="with --harbor: run the tasks on Docker's default network (when Docker can't make networks)",
+    )
     p.add_argument(
         "--session",
         action="store_true",
