@@ -113,19 +113,51 @@ def test_how_lcode_was_installed(tmp_path):
     assert update.lcode_install(plain, "").command[-3:] == ["install", "--upgrade", "lcode-cli"]
 
 
+def folder_with_python(folder):
+    folder.mkdir(parents=True)
+    python = folder / "python3"
+    python.write_text("#!/bin/sh\n")
+    python.chmod(0o755)
+    return str(folder)
+
+
 def test_with_uvx_commands_get_your_python_not_lcodes(tmp_path):
     uvx = tmp_path / ".cache" / "uv" / "archive-v0" / "abc"
-    (uvx / "bin").mkdir(parents=True)
-    path = os.pathsep.join([str(uvx / "bin"), "/usr/local/bin", "", "/usr/bin"])
-    env = {"PATH": path}
+    own = folder_with_python(uvx / "bin")
+    yours = folder_with_python(tmp_path / "usr" / "bin")
+    env = {"PATH": os.pathsep.join([own, "/no/such/folder", "", yours])}
     assert update.leave_own_environment(env, uvx, "")
-    assert env["PATH"] == os.pathsep.join(["/usr/local/bin", "", "/usr/bin"])
+    assert env["PATH"] == os.pathsep.join(["/no/such/folder", "", yours])
     assert not update.leave_own_environment(env, uvx, "")  # nothing left to take off
+    # Without a Python of your own on PATH, lcode's stays: it's better than none.
+    env = {"PATH": os.pathsep.join([own, str(tmp_path / "empty")])}
+    assert not update.leave_own_environment(env, uvx, "") and env["PATH"].startswith(own)
     # Any other install keeps PATH: a pip install or a checkout may be the project's own environment.
     plain = tmp_path / "venv"
-    (plain / "bin").mkdir(parents=True)
-    env = {"PATH": os.pathsep.join([str(plain / "bin"), "/usr/bin"])}
-    assert not update.leave_own_environment(env, plain, "") and env["PATH"].startswith(str(plain / "bin"))
+    venv = folder_with_python(plain / "bin")
+    env = {"PATH": os.pathsep.join([venv, yours])}
+    assert not update.leave_own_environment(env, plain, "") and env["PATH"].startswith(venv)
+
+
+def test_a_path_entry_that_cant_be_resolved_is_kept(tmp_path):
+    uvx = tmp_path / ".cache" / "uv" / "archive-v0" / "abc"
+    own = folder_with_python(uvx / "bin")
+    yours = folder_with_python(tmp_path / "usr" / "bin")
+    loop = tmp_path / "loop"
+    loop.symlink_to(loop)  # Python 3.10 and 3.11 raise on resolving it
+    env = {"PATH": os.pathsep.join([own, str(loop), yours])}
+    assert update.leave_own_environment(env, uvx, "")
+    assert env["PATH"] == os.pathsep.join([str(loop), yours])
+
+
+def test_lcode_starts_even_if_taking_its_environment_off_path_fails(monkeypatch, capsys):
+    def broken(*args, **kwargs):
+        raise RuntimeError("Symlink loop from '/somewhere'")
+
+    monkeypatch.setattr(update, "leave_own_environment", broken)
+    with pytest.raises(SystemExit) as done:
+        cli.main(["--version"])
+    assert done.value.code == 0 and f"lcode {__version__}" in capsys.readouterr().out
 
 
 # ----------------------------------------------------------------------------- Docker Compose

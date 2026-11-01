@@ -1188,7 +1188,8 @@ def main(argv: list[str] | None = None) -> None:
     from lcode import update
 
     argv = sys.argv[1:] if argv is None else argv
-    update.leave_own_environment()  # with uvx, `python` in commands and checks is yours, not lcode's
+    with contextlib.suppress(Exception):  # a convenience: it must never stop lcode from starting
+        update.leave_own_environment()  # with uvx, `python` in commands and checks is yours, not lcode's
     try:
         if argv and argv[0] in COMMANDS:
             parser = build_subparsers()[argv[0]]

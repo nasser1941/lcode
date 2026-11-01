@@ -167,6 +167,7 @@ def leave_own_environment(
     the model's commands and in the checks was then lcode's own Python, which has none of the
     project's packages ("No module named pytest"). Other installs (uv tool, pipx, Homebrew) don't
     change PATH; a checkout or pip install may be the project's own environment, so they're kept.
+    Without a Python of your own on PATH, lcode's stays: it's better than none.
     Returns whether PATH changed.
     """
     if lcode_install(prefix, direct_url).kind != "uvx":
@@ -174,11 +175,27 @@ def leave_own_environment(
     env = os.environ if env is None else env
     scripts = (prefix or Path(sys.prefix)).resolve() / ("Scripts" if os.name == "nt" else "bin")
     entries = env.get("PATH", "").split(os.pathsep)
-    kept = [entry for entry in entries if not entry or Path(entry).resolve() != scripts]
+    kept = [entry for entry in entries if not entry or not same_folder(entry, scripts)]
     if len(kept) == len(entries):
         return False
-    env["PATH"] = os.pathsep.join(kept)
+    rest = os.pathsep.join(kept)
+    if not any(is_python(shutil.which(name, path=rest)) for name in ("python3", "python")):
+        return False
+    env["PATH"] = rest
     return True
+
+
+def same_folder(entry: str, folder: Path) -> bool:
+    """Whether a PATH entry is this folder. One that can't be resolved (a symlink loop, say) isn't."""
+    try:
+        return Path(entry).resolve() == folder
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def is_python(found: str | None) -> bool:
+    """Whether a program found on PATH is a Python, not Windows' stand-in that offers the Store."""
+    return found is not None and Path(found).parent.name.lower() != "windowsapps"
 
 
 @dataclass
