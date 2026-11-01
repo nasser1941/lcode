@@ -6,6 +6,14 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Your Python when lcode runs with `uvx`.** `uvx` puts lcode's own temporary environment first
+  on `PATH`, so `python` in the model's commands and in the checks was lcode's Python, without the
+  project's packages, and the checks failed with "No module named pytest". lcode now takes that
+  environment off `PATH` when it starts, if you have a Python of your own on `PATH`. Other installs
+  don't change `PATH` and are left as they are.
+
 ## [0.53.0] - 2026-10-31
 
 ### Added
