@@ -104,6 +104,7 @@ nav:
       - Models & context windows: models.md
       - Other model servers: servers.md
       - Benchmarking models: bench.md
+      - Public benchmarks: public-benchmarks.md
       - Run traces: traces.md
       - MCP servers: mcp.md
       - Sandbox: sandbox.md

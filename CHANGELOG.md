@@ -6,6 +6,15 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Public benchmarks** (#197): `lcode bench --harbor dev` runs lcode on a slice of Terminal-Bench
+  2.0 and SWE-bench Verified with Harbor, each task in a fresh container with your local model, three
+  attempts each. It reports pass@1, pass^3, the spread between runs and the time and tokens per
+  task, and saves them with the lcode version, the model, the context and the command that
+  reproduces them. The `held-out` slice is for confirming a change, never for tuning on it. For
+  `harbor run` itself, the agent is `lcode.harbor:Lcode`.
+
 ### Fixed
 
 - **Your Python when lcode runs with `uvx`.** `uvx` puts lcode's own temporary environment first

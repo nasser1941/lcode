@@ -4,6 +4,9 @@
 coding on my machine?* It runs a fixed set of small coding tasks against one or more models and
 reports how many they solved, how fast they ran and how much memory they used.
 
+To compare with other agents on public benchmarks (Terminal-Bench 2.0 and SWE-bench Verified),
+see [Public benchmarks](public-benchmarks.md).
+
 ```bash
 lcode bench                           # the configured model
 lcode bench qwen3.6-35b qwen3.5-9b    # compare models
