@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-11-01
+
 ### Added
 
 - **Public benchmarks** (#197): `lcode bench --harbor dev` runs lcode on a slice of Terminal-Bench
@@ -1184,7 +1186,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.53.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.54.0...HEAD
+[0.54.0]: https://github.com/nasser1941/lcode/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/nasser1941/lcode/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/nasser1941/lcode/compare/v0.51.0...v0.52.0
 [0.51.0]: https://github.com/nasser1941/lcode/compare/v0.50.0...v0.51.0
