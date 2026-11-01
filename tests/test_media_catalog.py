@@ -18,6 +18,14 @@ LAPTOP = Hardware("linux", "x", 31, "RTX 4080 Laptop", 12)
 SMALL_GPU = Hardware("linux", "x", 16, "RTX 3060", 8)
 MAC = Hardware("macos", "M3", 16, "Apple M3", 0, True)
 NO_GPU = Hardware("linux", "x", 16)
+REAL_DISK_PROBLEM = catalog.disk_problem
+
+
+@pytest.fixture(autouse=True)
+def plenty_of_disk(monkeypatch):
+    """The downloads here are fake, so the free space of the machine running the tests mustn't matter: GitHub's
+    runners sometimes have under 14 GB free, less than the real models need."""
+    monkeypatch.setattr(catalog, "disk_problem", lambda folder, need_gb: "")
 
 
 def text(agent):
@@ -212,6 +220,7 @@ def test_installing_downloads_only_whats_missing(tmp_path, monkeypatch):
 def test_installing_checks_the_disk_and_asks_first(tmp_path, monkeypatch):
     install = fake_install(tmp_path)
     flux = catalog.load().models["flux2-klein-4b"]
+    monkeypatch.setattr(catalog, "disk_problem", REAL_DISK_PROBLEM)  # the real check, with a stand-in disk
     monkeypatch.setattr(catalog.shutil, "disk_usage", lambda path: type("Usage", (), {"free": 5 * 10**9})())
     with pytest.raises(catalog.CatalogError, match=r"not enough disk space for FLUX.2 klein 4B: needs 12.4 GB"):
         catalog.install(flux, install=install, ask=lambda q: True)
