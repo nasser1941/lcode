@@ -15,7 +15,7 @@ import pytest
 
 from comfy_standin import FLUX, StandIn, tiny_png
 from conftest import FakeOllama, output
-from lcode import catalog, cli, comfy, config, media
+from lcode import catalog, cli, comfy, config, doctor, media
 from lcode.comfy import cli_workspace as real_cli_workspace  # bound before conftest replaces them for each test
 from lcode.comfy import launch as real_launch
 from lcode.hardware import Hardware
@@ -335,19 +335,19 @@ def test_an_image_from_the_command_line(tmp_path, monkeypatch, capsys, standin, 
 
 def test_doctor_reports_comfyui(standin, tmp_path):
     cfg = {"comfyui_url": standin.url, "comfyui_path": None}
-    assert cli.comfyui_status(cfg) == (f"0.38.0 running at {standin.url} · image model: FLUX.2 klein 4B", True)
+    assert doctor.comfyui_status(cfg) == (f"0.38.0 running at {standin.url} · image model: FLUX.2 klein 4B", True)
     install = tmp_path / "ComfyUI"
     (install / "comfy").mkdir(parents=True)
     (install / "main.py").write_text("")
     cfg = {"comfyui_url": "http://127.0.0.1:9", "comfyui_path": str(install)}
-    status, good = cli.comfyui_status(cfg)
+    status, good = doctor.comfyui_status(cfg)
     assert "lcode starts it in image mode" in status and good is None
     assert "FLUX.2 klein 4B not installed: lcode media install flux2-klein-4b (12.4 GB)" in status
     for folder, names in FLUX.items():
         (install / "models" / folder).mkdir(parents=True)
         (install / "models" / folder / names[0]).write_text("")
-    assert cli.comfyui_status(cfg)[1] is True
-    status, good = cli.comfyui_status({"comfyui_url": "http://127.0.0.1:9", "comfyui_path": str(tmp_path / "none")})
+    assert doctor.comfyui_status(cfg)[1] is True
+    status, good = doctor.comfyui_status({"comfyui_url": "http://127.0.0.1:9", "comfyui_path": str(tmp_path / "none")})
     assert status.startswith("not found") and good is None
 
 
