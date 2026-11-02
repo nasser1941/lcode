@@ -10,18 +10,24 @@ model can try overnight: Terminal-Bench 2.0 without model training and with at m
 task, and SWE-bench Verified's two common difficulties. The dev slice is for everyday checks; the
 held-out set is never used for tuning, only to confirm a change helps beyond the tasks it was
 tuned on.
+
+Other agents run on the same slices and the same model for comparison (`--agent`): Claude Code,
+OpenCode and Codex, each set up the way `ollama launch` sets it up.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import shlex
 import statistics
 import subprocess
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+from lcode.ollama import OllamaError
 
 HARBOR = "harbor==0.25.0"  # the Harbor these slices were made and checked with
 HARBOR_PYTHON = "3.13"
@@ -65,6 +71,143 @@ OLLAMA_PORT = 11434
 HOME = "/logs/agent/lcode"  # lcode's sessions and traces: Harbor copies /logs/agent into the trial's folder
 LOG = "/logs/agent/lcode.txt"
 ON_PATH = 'export PATH="$HOME/.local/bin:$PATH";'  # where uv puts lcode and itself
+
+
+# ----------------------------------------------------------------------------- other agents on the same model
+
+# The agents compared with lcode (#198), by Harbor's names. Each is set up the way `ollama launch` sets it up (in
+# Ollama's cmd/launch), with your machine's Ollama as a task's container reaches it, approvals off (Harbor's).
+OTHER_AGENTS = ("claude-code", "opencode", "codex")
+OLLAMA_FROM_TASKS = f"http://host.docker.internal:{OLLAMA_PORT}"  # with the host-gateway entry in the overlay
+CODEX_CATALOG = "/opt/lcode-bench/codex-models.json"  # in the task's container
+CLAUDE_CODE_ENV = {  # what `ollama launch claude` sets besides the address, the key and each tier's model (Harbor's)
+    "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "CLAUDE_CODE_TOTAL_TOKENS_REMINDER": "off",
+    "DISABLE_ERROR_REPORTING": "1",
+    "DISABLE_FEEDBACK_COMMAND": "1",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1",
+    "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
+}
+CODEX_LEVELS = {  # Codex's reasoning efforts for Ollama's thinking values, with Ollama's descriptions
+    "none": "Turn thinking off",
+    "minimal": "Thinking effort",
+    "low": "Fast responses with lighter thinking",
+    "medium": "Balances speed and thinking depth for everyday tasks",
+    "high": "Greater thinking depth for complex tasks",
+    "xhigh": "Thinking effort",
+    "max": "Maximum thinking depth for the hardest tasks",
+    "ultra": "Thinking effort",
+}
+
+
+def variant_name(model: str, context: int) -> str:
+    """The Ollama model the other agents get: `model` with its context window set (lcode-qwen3.6-35b-64k), since
+    the APIs they use (OpenAI's, Anthropic's) can't set it per request and Ollama's default is small."""
+    from lcode.config import format_tokens
+
+    return f"{model.removesuffix(':latest')}-{format_tokens(context).lower()}"
+
+
+def agent_overlay(bridge: bool, catalog: Path | None = None) -> str:
+    """The Docker Compose override for another agent's tasks: host.docker.internal is your machine (Docker Desktop
+    has it; on Linux it's added), and Codex's model catalog is in the container."""
+    lines = ["services:", "  main:"]
+    if bridge:
+        lines.append("    network_mode: bridge")
+    lines += ["    extra_hosts:", '      - "host.docker.internal:host-gateway"']
+    if catalog is not None:
+        lines += ["    volumes:", f"      - {json.dumps(f'{catalog}:{CODEX_CATALOG}:ro')}"]
+    return "\n".join(lines) + "\n"
+
+
+def opencode_config(model: str, context: int, thinking: bool) -> dict:
+    """`ollama launch opencode`'s provider: Ollama's OpenAI-compatible API, and the model with the limits of the
+    context it runs at (a quarter of it for output, at most 8K)."""
+    entry: dict = {"name": model}
+    if thinking:  # a model that can think without levels: on, or "none"
+        entry["reasoning"] = True
+        entry["variants"] = {
+            "none": {"reasoningEffort": "none"},
+            "low": {"disabled": True},
+            "medium": {"disabled": True},
+            "high": {"disabled": True},
+        }
+    entry["limit"] = {"context": context, "input": context, "output": min(8192, context // 4)}
+    provider = {"npm": "@ai-sdk/openai-compatible", "name": "Ollama", "options": {"baseURL": f"{OLLAMA_FROM_TASKS}/v1"}}
+    return {"provider": {"ollama": {**provider, "models": {model: entry}}}}
+
+
+def codex_level(value: object) -> str | None:
+    if isinstance(value, bool):
+        return "high" if value else "none"
+    return value if isinstance(value, str) and value in CODEX_LEVELS and value != "none" else None
+
+
+def codex_catalog(model: str, context: int, thinking: dict | None) -> dict:
+    """`ollama launch codex`'s model catalog entry, so Codex knows the model (otherwise it warns that it falls back
+    to defaults that "can degrade performance"). `thinking`: Ollama's, as `/api/show` gives it."""
+    values = list((thinking or {}).get("values") or [])
+    levels: list[str] = []
+    for value in values:
+        if value is True and "high" in values:
+            continue
+        level = codex_level(value)
+        if level is not None and level not in levels:
+            levels.append(level)
+    default = codex_level((thinking or {}).get("default"))
+    if default not in levels or (len(values) == 1 and False in values):
+        default = None
+    entry = {
+        "slug": model,
+        "display_name": model,
+        "context_window": context,
+        "shell_type": "default",
+        "visibility": "list",
+        "supported_in_api": True,
+        "priority": 0,
+        "truncation_policy": {"mode": "bytes", "limit": 10000},
+        "input_modalities": ["text"],
+        "base_instructions": "",
+        "support_verbosity": True,
+        "default_verbosity": "low",
+        "supports_parallel_tool_calls": False,
+        "supports_reasoning_summaries": False,
+        "supported_reasoning_levels": [{"effort": level, "description": CODEX_LEVELS[level]} for level in levels],
+        "default_reasoning_level": default,
+        "experimental_supported_tools": [],
+    }
+    return {"models": [entry]}
+
+
+def codex_config() -> dict:
+    """`ollama launch codex`'s profile: Ollama's Responses API, and the model catalog."""
+    provider = {"name": "Ollama", "base_url": f"{OLLAMA_FROM_TASKS}/v1/", "wire_api": "responses"}
+    return {
+        "model_provider": "ollama-launch",
+        "model_providers": {"ollama-launch": provider},
+        "model_catalog_json": CODEX_CATALOG,
+    }
+
+
+def agent_setup(agent: str, model: str, context: int, show: dict, folder: Path) -> tuple[list[str], Path | None]:
+    """Harbor's arguments for another agent on `model` (the Ollama model at `context`), and Codex's model catalog,
+    written in `folder`. `show`: Ollama's `/api/show` for the model."""
+    thinking = "thinking" in (show.get("capabilities") or [])
+    if agent == "claude-code":
+        return [arg for name, value in CLAUDE_CODE_ENV.items() for arg in ("--ae", f"{name}={value}")], None
+    if agent == "opencode":
+        return ["--ak", "opencode_config=" + json.dumps(opencode_config(model, context, thinking))], None
+    if agent == "codex":
+        catalog = folder / "codex-models.json"
+        catalog.write_text(json.dumps(codex_catalog(model, context, show.get("thinking") if thinking else None)))
+        return ["--ak", "config=" + json.dumps(codex_config())], catalog
+    raise ValueError(f"unknown agent {agent!r}")
+
+
+def harbor_env() -> dict[str, str]:
+    """For Harbor itself: other agents reach Ollama through its `ollama/` provider, which needs a key (any)."""
+    return {"OLLAMA_BASE_URL": OLLAMA_FROM_TASKS, "OLLAMA_API_KEY": "ollama"}
 
 
 def find_ollama(routes: str = "/proc/net/route") -> str:
@@ -181,17 +324,22 @@ def harbor_argv(
     lcode_with: list[str] | None = None,
     wheel: Path | None = None,
     overlay: Path | None = None,
+    agent: str = "lcode",
+    agent_args: list[str] | None = None,
 ) -> list[str]:
-    """`harbor run` for some tasks of a dataset, with uvx, and lcode next to Harbor so it can import the agent."""
+    """`harbor run` for some tasks of a dataset, with uvx, and lcode next to Harbor so it can import the agent.
+    Another `agent` (Harbor's name) gets `model` as Harbor's `ollama/` model and `agent_args` (agent_setup)."""
     argv = ["uvx", "--python", HARBOR_PYTHON, "--from", HARBOR, *(lcode_with or []), "harbor", "run"]
-    argv += ["-d", DATASETS[dataset], "-a", AGENT, "-m", model, "-k", str(attempts), "-n", "1"]
+    harbor_agent, harbor_model = (AGENT, model) if agent == "lcode" else (agent, f"ollama/{model}")
+    argv += ["-d", DATASETS[dataset], "-a", harbor_agent, "-m", harbor_model, "-k", str(attempts), "-n", "1"]
     argv += ["-o", str(jobs), "--job-name", job_name, "-y"]
     for task in tasks:
         argv += ["-i", task, "-i", f"*/{task}"]  # the name alone, or with its organization in front
-    if context:
+    if context and agent == "lcode":  # the others get a model with the context set (variant_name)
         argv += ["--ak", f"context={context}"]
     if wheel:
         argv += ["--ak", f"wheel={wheel}"]
+    argv += agent_args or []
     if overlay:
         argv += ["--extra-docker-compose", str(overlay)]
     return argv
@@ -209,6 +357,7 @@ class Trial:
     tokens_in: int | None = None  # None: not known (no trace)
     tokens_out: int | None = None
     error: str = ""
+    version: str = ""  # the agent's, in the task's container
 
 
 def seconds_between(timing: dict | None) -> float | None:
@@ -250,6 +399,7 @@ def read_trials(job: Path, dataset: str) -> list[Trial]:
                 tokens_in=None if tokens_in is None else int(number(tokens_in)),
                 tokens_out=None if tokens_out is None else int(number(tokens_out)),
                 error=error,
+                version=str((result.get("agent_info") or {}).get("version") or ""),
             )
         )
     return trials
@@ -344,6 +494,32 @@ def took(seconds: float) -> str:
     return f"{hours} h {minutes} min" if hours else f"{minutes} min"
 
 
+def context_variant(settings: dict, model: str, context: int, console) -> tuple[str, dict]:
+    """The Ollama model for another agent (variant_name), made when it's missing, and Ollama's `/api/show` for it.
+    Making it copies nothing: it's the same files with one more parameter."""
+    from rich.markup import escape
+
+    from lcode.cli import NotInstalled, resolve_model
+    from lcode.config import format_tokens
+    from lcode.ollama import Ollama
+
+    if settings.get("backend", "ollama") != "ollama":
+        raise OllamaError("--agent runs the other agents on Ollama's models: lcode's backend here isn't Ollama.")
+    ollama = Ollama(settings["ollama_host"])
+    try:
+        tag, _ = resolve_model(ollama, model)
+    except NotInstalled as e:
+        raise OllamaError(str(e)) from e
+    name = variant_name(tag, context)
+    if name not in ollama.installed_names():
+        ollama.create_variant(name, tag, {"num_ctx": context})
+        console.print(
+            f"Made [bold]{escape(name)}[/]: {escape(tag)} with a {format_tokens(context)} context window, for the "
+            f"other agents, which can't set it per request. `ollama rm {escape(name)}` removes it."
+        )
+    return name, ollama.show(name)
+
+
 def print_slice(console, name: str) -> None:
     for dataset, tasks in SLICES[name].items():
         console.print(f"[bold]{DATASETS[dataset]}[/] ({len(tasks)}): {', '.join(tasks)}")
@@ -372,6 +548,7 @@ def command(args, console) -> int:
     model = args.models[0] if args.models else settings["model"]
     # Always given: in a task's container lcode sees no GPU and would pick a context for the CPU.
     context = config.parse_context(args.context or settings.get("context") or 32768)
+    agent = getattr(args, "agent", None) or "lcode"
     attempts = max(1, args.attempts)
     wanted = {name.strip() for name in args.tasks.split(",")} if args.tasks else None
     picked = {
@@ -383,11 +560,25 @@ def command(args, console) -> int:
             f"[red]Not in the {args.harbor} slice: {', '.join(unknown)}[/] (lcode bench --harbor {args.harbor} --list)"
         )
         return 2
-    jobs = config.STATE_DIR / "bench" / f"{args.harbor}-{dt.datetime.now():%Y%m%d-%H%M%S}"
+    ollama_model, show, agent_args, env = "", {}, None, None
+    if agent != "lcode":  # on Ollama's model at the context, set up like `ollama launch` does
+        try:
+            ollama_model, show = context_variant(settings, model, context, console)
+        except OllamaError as e:
+            console.print(f"[red]{escape(str(e))}[/]")
+            return 1
+    named = args.harbor if agent == "lcode" else f"{args.harbor}-{agent}"
+    jobs = config.STATE_DIR / "bench" / f"{named}-{dt.datetime.now():%Y%m%d-%H%M%S}"
     jobs.mkdir(parents=True, exist_ok=True)
     install = update.lcode_install()
     wheel = None
-    if install.kind == "checkout" and install.path:  # this checkout, in Harbor and in the containers
+    if agent != "lcode":
+        agent_args, catalog = agent_setup(agent, ollama_model, context, show, jobs)
+        overlay = jobs / "overlay.yaml"
+        overlay.write_text(agent_overlay(bool(args.docker_bridge), catalog))
+        lcode_with = None
+        env = {**os.environ, **harbor_env()}
+    elif install.kind == "checkout" and install.path:  # this checkout, in Harbor and in the containers
         lcode_with = ["--with-editable", str(install.path)]
         build = ["uv", "build", "--wheel", "-q", "-o", str(jobs / "wheel"), str(install.path)]
         if subprocess.run(build, capture_output=True, text=True).returncode != 0:
@@ -396,25 +587,32 @@ def command(args, console) -> int:
         wheel = next((jobs / "wheel").glob("*.whl"), None)
     else:
         lcode_with = ["--with", f"lcode-cli=={__version__}"]
-    overlay = None
-    if args.docker_bridge:
-        overlay = jobs / "bridge.yaml"
-        overlay.write_text(BRIDGE_OVERLAY)
+    if agent == "lcode":
+        overlay = None
+        if args.docker_bridge:
+            overlay = jobs / "bridge.yaml"
+            overlay.write_text(BRIDGE_OVERLAY)
     trials: list[Trial] = []
     started, began = dt.datetime.now().astimezone(), time.monotonic()
     for dataset, tasks in picked.items():
         if not tasks:
             continue
         argv = harbor_argv(
-            dataset, tasks, model, jobs, dataset, attempts=attempts, context=context, lcode_with=lcode_with,
-            wheel=wheel, overlay=overlay,
+            dataset, tasks, ollama_model or model, jobs, dataset, attempts=attempts, context=context,
+            lcode_with=lcode_with, wheel=wheel, overlay=overlay, agent=agent, agent_args=agent_args,
         )  # fmt: skip
         console.print(f"[bold]{DATASETS[dataset]}[/]: {len(tasks)} task(s), {attempts} attempt(s) each")
         console.print(f"[dim]{escape(shlex.join(argv))}[/]")
-        subprocess.call(argv)
+        if env is None:
+            subprocess.call(argv)
+        else:
+            subprocess.call(argv, env=env)
         trials += read_trials(jobs / dataset, dataset)
     summary = summarize(trials, attempts)
     seconds = time.monotonic() - began
+    version = next((trial.version for trial in trials if trial.version), "")
+    if agent != "lcode":
+        console.print(f"[bold]{agent}[/] {escape(version)} on {escape(ollama_model)}")
     print_summary(console, summary)
     console.print(f"Took {took(seconds)}.")
     if any("fully subnetted" in trial.error for trial in trials):
@@ -427,7 +625,10 @@ def command(args, console) -> int:
         "lcode": __version__,
         "harbor": HARBOR,
         "slice": args.harbor,
+        "agent": agent,
+        "agent_version": version,  # in the tasks' containers
         "model": model,
+        "ollama_model": ollama_model or None,  # the other agents': the model with the context set
         "context": context,
         "attempts": attempts,
         "docker_bridge": bool(args.docker_bridge),

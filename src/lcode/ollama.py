@@ -125,6 +125,13 @@ class Ollama:
         except requests.RequestException as e:
             raise OllamaError(f"pull failed: {e}") from e
 
+    def create_variant(self, name: str, base: str, parameters: dict) -> None:
+        """Create `name`: `base` with other parameters (a context window, say). It uses `base`'s files: nothing is
+        downloaded or copied."""
+        payload = {"model": name, "from": base, "parameters": parameters, "stream": False}
+        if self._post("/api/create", payload, timeout=600).get("status") != "success":
+            raise OllamaError(f"creating {name} failed")
+
     def create_text_only(self, name: str, base: str) -> bool:
         """Create `name` from `base` without its vision projector. Returns False if `base` has none.
 

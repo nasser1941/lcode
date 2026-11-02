@@ -11,6 +11,7 @@ lcode media [install MODEL]  # image and video models: what fits here, what's in
 lcode config [set|unset]     # show or change settings
 lcode bench [models]         # score models on small coding tasks on this machine
 lcode bench --harbor dev     # public benchmarks: Terminal-Bench 2.0 and SWE-bench Verified
+lcode bench --harbor dev --agent codex  # the same with another agent on your model, to compare
 lcode trace [action] [N]     # past requests: show one step by step, export or replay it (see Run traces)
 lcode mcp [catalog|add|list] # connect MCP servers: Jira, GitHub, AWS, databases… (see MCP servers)
 lcode acp                    # run inside an editor over the Agent Client Protocol (see Editors)

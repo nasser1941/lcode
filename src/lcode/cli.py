@@ -953,6 +953,12 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     )
     p.add_argument("--attempts", type=int, default=3, help="with --harbor: attempts per task (default: 3, for pass^3)")
     p.add_argument(
+        "--agent",
+        choices=["lcode", "claude-code", "opencode", "codex"],
+        default="lcode",
+        help="with --harbor: the agent to run, for a comparison on the same model (default: lcode)",
+    )
+    p.add_argument(
         "--docker-bridge",
         action="store_true",
         help="with --harbor: run the tasks on Docker's default network (when Docker can't make networks)",
