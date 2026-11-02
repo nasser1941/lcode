@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-11-02
+
 ### Added
 
 - **Six longer tasks in `lcode bench`** (#199), closer to real work, after the eight quick ones:
@@ -1240,7 +1242,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.57.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.58.0...HEAD
+[0.58.0]: https://github.com/nasser1941/lcode/compare/v0.57.0...v0.58.0
 [0.57.0]: https://github.com/nasser1941/lcode/compare/v0.56.0...v0.57.0
 [0.56.0]: https://github.com/nasser1941/lcode/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/nasser1941/lcode/compare/v0.54.0...v0.55.0
