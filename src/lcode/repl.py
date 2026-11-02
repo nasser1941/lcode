@@ -59,7 +59,7 @@ from lcode.repl_media import IMAGE_COMMANDS, film_command, image_command, make_i
 from lcode.repl_models import context_command, media_model_command, mode_command, model_command
 from lcode.repl_sessions import choose_session, print_recap, resume_session
 from lcode.steer import KeyReader, Steering
-from lcode.tools import IGNORE_DIRS
+from lcode.tool_helpers import IGNORE_DIRS
 
 COMMANDS = {
     "/help": "Show this help, or ask how to do something: /help how do I make a clip from two pictures?",

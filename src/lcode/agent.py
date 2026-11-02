@@ -59,7 +59,8 @@ from lcode.render import MarkdownStreamer
 from lcode.repeats import Circles, Repeats
 from lcode.sandbox import Sandbox, SandboxError, project_root
 from lcode.steer import NOTE_INTRO, Steering
-from lcode.tools import (
+from lcode.tool_helpers import ToolError, is_binary, tree, truncate
+from lcode.tool_schemas import (
     LCODE_HELP_SCHEMA,
     LSP_SCHEMA,
     MEMORY_SCHEMA,
@@ -70,13 +71,8 @@ from lcode.tools import (
     VIEW_IMAGE_SCHEMA,
     WEB_FETCH_SCHEMA,
     WEB_SEARCH_SCHEMA,
-    Toolbox,
-    ToolError,
-    is_binary,
-    parse_text_tool_calls,
-    tree,
-    truncate,
 )
+from lcode.tools import Toolbox, parse_text_tool_calls
 from lcode.unreachable import NOTE_AT, Sites
 
 if TYPE_CHECKING:
