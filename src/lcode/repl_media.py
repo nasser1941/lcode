@@ -11,6 +11,7 @@ from rich.markup import escape
 from rich.text import Text
 
 from lcode import (
+    clips,
     media,
     modes,
 )
@@ -161,7 +162,7 @@ def image_command(agent: Agent, cmd: str, arg: str) -> None:
             make_image(agent, run=lambda cancel, ask: media.apply_tool(agent, "sound", source, 1, cancel, ask, rest))
             return
         if cmd == "/restyle":
-            if not media.is_video(source):
+            if not clips.is_video(source):
                 c.print("[yellow]/restyle works on clips: /restyle 4 as a watercolor painting.[/]")
                 return
             text, options = imageopts.parse(rest, imageopts.replace_seed(agent.image_options, n=1))

@@ -23,7 +23,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from lcode import assistant, comfy, imageopts, media
+from lcode import assistant, clips, comfy, imageopts, media
 
 if TYPE_CHECKING:
     from lcode.agent import Agent
@@ -270,7 +270,7 @@ def stitch(
     if not ffmpeg:
         raise FilmError("Joining the shots needs ffmpeg: install it (apt install ffmpeg, brew install ffmpeg)")
     film = folder / "film.mp4"
-    command = join_command(ffmpeg, shots, film, board.transition, [media.clip_info(p)["seconds"] for p in shots])
+    command = join_command(ffmpeg, shots, film, board.transition, [clips.clip_info(p)["seconds"] for p in shots])
     with agent.console.status("Joining the shots…", spinner="dots"):
         done = subprocess.run(command, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if done.returncode != 0:
