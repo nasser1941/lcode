@@ -607,17 +607,18 @@ def cmd_bench(args) -> None:
     try:
         cfg = config.load()
         context = parse_context(args.context) if args.context else bench.DEFAULT_CONTEXT
-        tasks = bench.select_tasks(args.tasks) * (rounds if args.session else 1)
+        tasks = list(bench.TASKS) if args.quick and not args.tasks else bench.select_tasks(args.tasks)
+        tasks *= rounds if args.session else 1
     except (ConfigError, ValueError) as e:
         fail(str(e))
-    if args.timeout <= 0:
+    if args.timeout is not None and args.timeout <= 0:
         fail("--timeout must be a positive number of seconds")
     if args.attempts is not None and args.attempts < 1:
         fail("--attempts must be at least 1")
     if args.session:  # an attempt is one long conversation
         attempts = args.attempts or 1
     else:  # --rounds is what --attempts was called before 0.57
-        attempts = args.attempts or (rounds if rounds > 1 else bench.DEFAULT_ATTEMPTS)
+        attempts = args.attempts or (rounds if rounds > 1 else 1 if args.quick else bench.DEFAULT_ATTEMPTS)
     ollama = connect(cfg)
     hw = detect()
     version = check_ollama(ollama, hw)
@@ -949,13 +950,16 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument("models", nargs="*", help="catalog keys or Ollama tags (default: the configured model)")
     p.add_argument("--context", "--ctx", dest="context", help="context window (default: 32k, the same everywhere)")
     p.add_argument("--tasks", help="comma-separated task ids to run (default: all; see --list)")
-    p.add_argument("--timeout", type=float, default=300, help="seconds per task (default: 300)")
+    p.add_argument(
+        "--timeout", type=float, help="seconds per task (default: 300 for the quick tasks, 600 for the longer ones)"
+    )
     p.add_argument("--json", metavar="FILE", help="also save the results as JSON")
     p.add_argument("--markdown", action="store_true", help="also print a Markdown table for a test report")
     p.add_argument("--no-think", action="store_true", help="run without model reasoning")
     p.add_argument("--keep", action="store_true", help="keep each task's folder and transcript for inspection")
     p.add_argument("-v", "--verbose", action="store_true", help="show the model working, like a normal session")
     p.add_argument("--list", action="store_true", help="list the tasks and exit")
+    p.add_argument("--quick", action="store_true", help="only the eight quick tasks, one attempt each (as before 0.57)")
     p.add_argument(
         "--harbor",
         choices=["dev", "held-out"],
