@@ -19,6 +19,7 @@ import json
 import shlex
 import statistics
 import subprocess
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -108,21 +109,61 @@ def run_env(model: str | None) -> dict[str, str]:
 
 
 def trace_usage(home: Path) -> dict | None:
-    """How the newest request traced in `home` (lcode's LCODE_HOME in the task) went: its end event."""
+    """How the newest request traced in `home` (lcode's LCODE_HOME in the task) went: its end event. When lcode
+    was stopped before the request ended (at the task's time limit), the totals of what its trace recorded."""
     traces = sorted((home / "traces").glob("*.jsonl"), key=lambda path: path.stat().st_mtime)
     for path in reversed(traces):
         try:
             lines = path.read_text(errors="replace").splitlines()
         except OSError:
             continue
-        for line in reversed(lines):
+        events = []
+        for line in lines:
             try:
                 event = json.loads(line)
             except ValueError:
                 continue
-            if isinstance(event, dict) and event.get("type") == "end":
-                return event
+            if isinstance(event, dict):
+                events.append(event)
+        end = next((event for event in reversed(events) if event.get("type") == "end"), None)
+        if end is not None:
+            return end
+        if any(event.get("type") == "model" for event in events):
+            return unfinished_usage(events)
     return None
+
+
+def unfinished_usage(events: list[dict]) -> dict:
+    """An end event's totals for a request that never ended, from the events its trace has."""
+    usage: dict = {"type": "end", "status": "unfinished", "steps": 0, "model_calls": 0, "tool_calls": 0}
+    usage.update(dict.fromkeys(("tokens_in", "tokens_out", "estimated_in", "estimated_out"), 0))
+    usage.update(seconds=0.0, model_seconds=0.0, tool_seconds=0.0)
+    for event in events:
+        usage["seconds"] = max(usage["seconds"], number(event.get("at")))
+        if event.get("type") == "model":
+            usage["model_calls"] += 1
+            for key in ("tokens_in", "tokens_out", "estimated_in", "estimated_out"):
+                usage[key] += int(number(event.get(key)))
+            usage["model_seconds"] += number(event.get("seconds"))
+            if event.get("lane", "main") == "main" and event.get("kind") == "step":
+                usage["steps"] = max(usage["steps"], int(number(event.get("step"))))
+        elif event.get("type") == "tool":
+            usage["tool_calls"] += 1
+            usage["tool_seconds"] += number(event.get("seconds"))
+    return usage
+
+
+def number(value: object) -> float:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+
+def usage_tokens(usage: dict) -> tuple[int, int]:
+    """Tokens in and out of a traced request, with the estimates for replies lcode stopped before the server
+    counted them."""
+    return (
+        int(number(usage.get("tokens_in")) + number(usage.get("estimated_in"))),
+        int(number(usage.get("tokens_out")) + number(usage.get("estimated_out"))),
+    )
 
 
 # ----------------------------------------------------------------------------- running Harbor, and the report
@@ -165,8 +206,8 @@ class Trial:
     reward: float | None  # None: the task's tests didn't run (its container didn't start, say)
     started: str = ""
     seconds: float | None = None  # lcode's time on the task
-    tokens_in: int = 0
-    tokens_out: int = 0
+    tokens_in: int | None = None  # None: not known (no trace)
+    tokens_out: int | None = None
     error: str = ""
 
 
@@ -194,6 +235,11 @@ def read_trials(job: Path, dataset: str) -> list[Trial]:
         if error and problem.get("exception_message"):
             error += ": " + str(problem["exception_message"]).strip().splitlines()[-1][:300]
         name = str(result.get("task_name") or path.parent.name.rsplit("__", 1)[0])
+        tokens_in, tokens_out = agent.get("n_input_tokens"), agent.get("n_output_tokens")
+        if tokens_in is None and tokens_out is None:  # lcode 0.54.0 gave none for an attempt stopped at its limit
+            usage = trace_usage(path.parent / "agent" / "lcode")
+            if usage is not None:
+                tokens_in, tokens_out = usage_tokens(usage)
         trials.append(
             Trial(
                 dataset=dataset,
@@ -201,8 +247,8 @@ def read_trials(job: Path, dataset: str) -> list[Trial]:
                 reward=float(reward) if isinstance(reward, (int, float)) else None,
                 started=str(result.get("started_at") or ""),
                 seconds=seconds_between(result.get("agent_execution")),
-                tokens_in=int(agent.get("n_input_tokens") or 0),
-                tokens_out=int(agent.get("n_output_tokens") or 0),
+                tokens_in=None if tokens_in is None else int(number(tokens_in)),
+                tokens_out=None if tokens_out is None else int(number(tokens_out)),
                 error=error,
             )
         )
@@ -216,8 +262,8 @@ class TaskResult:
     passed: list[bool] = field(default_factory=list)  # each attempt whose tests ran, in the order they ran
     not_run: int = 0
     seconds: float | None = None  # per attempt, on average
-    tokens_in: int = 0
-    tokens_out: int = 0
+    tokens_in: int | None = None  # per attempt, on average, of those whose tokens are known
+    tokens_out: int | None = None
 
 
 @dataclass
@@ -242,6 +288,8 @@ def summarize(trials: list[Trial], attempts: int = ATTEMPTS) -> Summary:
     for (dataset, task), group in groups.items():
         ran = [t for t in group if t.reward is not None]
         timed = [t.seconds for t in ran if t.seconds is not None]
+        counted_in = [t.tokens_in for t in ran if t.tokens_in is not None]
+        counted_out = [t.tokens_out for t in ran if t.tokens_out is not None]
         tasks.append(
             TaskResult(
                 dataset,
@@ -249,8 +297,8 @@ def summarize(trials: list[Trial], attempts: int = ATTEMPTS) -> Summary:
                 [(t.reward or 0) >= 1 for t in ran],
                 len(group) - len(ran),
                 statistics.fmean(timed) if timed else None,
-                round(statistics.fmean(t.tokens_in for t in ran)) if ran else 0,
-                round(statistics.fmean(t.tokens_out for t in ran)) if ran else 0,
+                round(statistics.fmean(counted_in)) if counted_in else None,
+                round(statistics.fmean(counted_out)) if counted_out else None,
             )
         )
     scored = [t for t in tasks if t.passed]
@@ -278,7 +326,9 @@ def print_summary(console, summary: Summary) -> None:
     for t in summary.tasks:
         passed = f"{sum(t.passed)}/{len(t.passed)}" + (f" ({t.not_run} didn't run)" if t.not_run else "")
         took = "–" if t.seconds is None else f"{t.seconds / 60:.1f} min"
-        table.add_row(t.task, t.dataset, passed, took, f"{t.tokens_in:,}", f"{t.tokens_out:,}")
+        tokens_in = "–" if t.tokens_in is None else f"{t.tokens_in:,}"
+        tokens_out = "–" if t.tokens_out is None else f"{t.tokens_out:,}"
+        table.add_row(t.task, t.dataset, passed, took, tokens_in, tokens_out)
     console.print(table)
     k = summary.attempts
     line = f"pass@1 {percent(summary.pass_at_1)} · pass^{k} {percent(summary.pass_all)}"
@@ -287,6 +337,11 @@ def print_summary(console, summary: Summary) -> None:
     console.print(f"[bold]{line}[/]")
     if summary.not_run:
         console.print(f"[yellow]{summary.not_run} attempt(s) didn't run (their container didn't start, say).[/]")
+
+
+def took(seconds: float) -> str:
+    hours, minutes = divmod(round(seconds / 60), 60)
+    return f"{hours} h {minutes} min" if hours else f"{minutes} min"
 
 
 def print_slice(console, name: str) -> None:
@@ -346,6 +401,7 @@ def command(args, console) -> int:
         overlay = jobs / "bridge.yaml"
         overlay.write_text(BRIDGE_OVERLAY)
     trials: list[Trial] = []
+    started, began = dt.datetime.now().astimezone(), time.monotonic()
     for dataset, tasks in picked.items():
         if not tasks:
             continue
@@ -358,7 +414,9 @@ def command(args, console) -> int:
         subprocess.call(argv)
         trials += read_trials(jobs / dataset, dataset)
     summary = summarize(trials, attempts)
+    seconds = time.monotonic() - began
     print_summary(console, summary)
+    console.print(f"Took {took(seconds)}.")
     if any("fully subnetted" in trial.error for trial in trials):
         console.print(
             "Docker couldn't make a network for the tasks: all its address ranges overlap your routes (a VPN that "
@@ -375,6 +433,8 @@ def command(args, console) -> int:
         "docker_bridge": bool(args.docker_bridge),
         "machine": detect().describe(),
         "date": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "started": started.isoformat(timespec="seconds"),
+        "seconds": round(seconds),  # the whole run, every task's attempts
         "command": "lcode " + shlex.join(sys.argv[1:]),
         "tasks": picked,
         "summary": {

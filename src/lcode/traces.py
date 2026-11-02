@@ -6,11 +6,13 @@ in ~/.local/state/lcode/traces/<session id>-<request number>.jsonl. The lines, b
 - start: the request as typed, the model and its settings, lcode's version, the folder;
 - env: the git commit and the model's own sampling settings, looked up in the background;
 - message: what lcode or the user added to the conversation for the model (the request, lcode's notes);
-- model: one model call: its answer (text, thinking, tool calls), time to the first token, time and tokens;
+- model: one model call: its answer (text, thinking, tool calls), time to the first token, time and tokens. The
+  server counts a reply's tokens only when it ends, so a reply lcode stopped has 0 there and an estimate in
+  estimated_in and estimated_out (a token is about three characters);
 - tool: one tool call: its arguments, the result the model got, how long it took;
 - check: the project's checks, when lcode ran them; escalate: a stronger model's advice;
 - compacted: the conversation was summarized; full: the trace reached its size limit;
-- end: how the request ended, and its totals.
+- end: how the request ended, and its totals (estimated_in and estimated_out: the stopped replies' estimates).
 
 Events carry a "lane": the main agent's is "main", a subagent's "agent 1", "agent 2"…
 
@@ -88,6 +90,25 @@ def cut(text: str, limit: int = MAX_TEXT) -> str:
     return f"{text[:head]}\n[… {len(text) - limit} characters left out of the trace …]\n{tail}"
 
 
+def estimate(payload: dict, reply: dict) -> tuple[int, int]:
+    """About how many tokens a model call took, in and out, for a reply the server never counted: a token is about
+    three characters, as lcode.sessions.estimate_tokens counts. For qwen3.6, Ollama counted 2.7 to 3.4 characters
+    a token in replies and 3.2 in tool results (the JSON), and about 3.9 in lcode's system prompt and tools. The
+    prompt is its messages' and tools' JSON, images left out."""
+    try:
+        messages = [
+            {k: v for k, v in m.items() if k != "images"} if isinstance(m, dict) else m
+            for m in payload.get("messages") or []
+        ]
+        prompt = len(json.dumps(messages, default=str)) + len(json.dumps(payload.get("tools") or [], default=str))
+        calls = reply.get("tool_calls") or []
+        answer = len(str(reply.get("content") or "")) + len(str(reply.get("thinking") or ""))
+        answer += len(json.dumps(calls, default=str)) if calls else 0
+        return prompt // 3, answer // 3
+    except (TypeError, ValueError, RecursionError):  # an estimate never costs the model event
+        return 0, 0
+
+
 def nanos(value: Any) -> float | None:
     return round(value / 1e9, 3) if isinstance(value, (int, float)) and value else None
 
@@ -115,6 +136,8 @@ class Recorder:
             "tool_calls": 0,
             "tokens_in": 0,
             "tokens_out": 0,
+            "estimated_in": 0,  # replies lcode stopped, which the server never counted
+            "estimated_out": 0,
             "model_seconds": 0.0,
             "tool_seconds": 0.0,
         }
@@ -261,6 +284,9 @@ class Lane:
             event["error"] = error[:4000]
         elif not finished:
             event["stopped"] = True  # lcode closed the stream: it went round in circles, or was interrupted
+            if not final and first is not None:  # the server counts a reply only at its end: about what this took
+                event["estimated_in"], event["estimated_out"] = estimate(payload, reply)
+                self.recorder.add(estimated_in=event["estimated_in"], estimated_out=event["estimated_out"])
         self.recorder.add(model_calls=1, tokens_in=tokens_in, tokens_out=tokens_out, model_seconds=seconds)
         self.recorder.write(event)
 
@@ -374,6 +400,16 @@ class Recording:
                 message = (reply or {}).get("message") or {}
                 answer = {k: message.get(k) for k in ("content", "thinking", "tool_calls")}
                 self.lane.model("chat", payload, began, None, answer, reply or {}, error)
+
+
+def stopped_estimate(end: dict) -> str:
+    """The end line's note on replies lcode stopped, which the server never counted."""
+    if not (end.get("estimated_in") or end.get("estimated_out")):
+        return ""
+    return (
+        f" (and about {format_tokens(end.get('estimated_in') or 0)} in, "
+        f"{format_tokens(end.get('estimated_out') or 0)} out in stopped replies)"
+    )
 
 
 def next_number(folder: Path, session_id: str) -> int:
@@ -794,6 +830,11 @@ def show(info: Info, console: Console, verbose: bool = False) -> None:
             else:
                 head = f"model ({e.get('purpose') or e.get('inside') or e.get('kind')})"
             numbers = f"{format_tokens(e.get('tokens_in') or 0)} in · {format_tokens(e.get('tokens_out') or 0)} out"
+            if "estimated_out" in e:  # stopped before the server counted it
+                numbers = (
+                    f"about {format_tokens(e.get('estimated_in') or 0)} in · "
+                    f"{format_tokens(e.get('estimated_out') or 0)} out"
+                )
             if e.get("first_token") is not None:
                 numbers += f" · first token {duration(e['first_token'])}"
                 if (e.get("load_seconds") or 0) >= 1:  # what the wait was: loading the model, reading the prompt
@@ -840,7 +881,8 @@ def show(info: Info, console: Console, verbose: bool = False) -> None:
         console.print()
         line = (
             f"{escape(info.status)} · {end.get('model_calls', 0)} model call(s) · "
-            f"{format_tokens(end.get('tokens_in') or 0)} tokens in, {format_tokens(end.get('tokens_out') or 0)} out · "
+            f"{format_tokens(end.get('tokens_in') or 0)} tokens in, {format_tokens(end.get('tokens_out') or 0)} out"
+            f"{stopped_estimate(end)} · "
             f"model {duration(end.get('model_seconds'))} · tools {duration(end.get('tool_seconds'))} "
             f"({end.get('tool_calls', 0)} calls) · recording {end.get('trace_seconds', 0) * 1000:.0f} ms"
         )

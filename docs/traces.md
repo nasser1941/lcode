@@ -20,7 +20,9 @@ lcode trace path            # the folder the traces are in
   failed check, a note about a malformed tool call, a note you typed while it worked.
 - **Each model call:** the answer (text, reasoning and tool calls), the time to the first token,
   the total time, and the tokens in and out. With Ollama, also how long loading the model and
-  reading the prompt took.
+  reading the prompt took. The server counts a reply's tokens only when the reply ends, so for one
+  lcode stopped (it went round in circles, or you interrupted it) the trace has an estimate:
+  `estimated_in` and `estimated_out`, shown as "about".
 - **Each tool call:** its arguments, the result the model got, and how long it took. A result
   longer than 200,000 characters keeps its start and end. When lcode cut a long output for the
   model, the result says where the full output was saved.

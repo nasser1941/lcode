@@ -75,8 +75,10 @@ def isolated_state(tmp_path_factory, monkeypatch):
     """Every test gets its own state folder, so none writes into the user's (approvals, sessions…).
 
     And no test finds or starts the user's own ComfyUI: tests that need one use the stand-in (comfy_standin).
+    PATH is as it was after each test: lcode.cli.main takes uvx's environment off it (lcode.update).
     """
     monkeypatch.setattr("lcode.config.STATE_DIR", tmp_path_factory.mktemp("lcode-state"))
+    monkeypatch.setenv("PATH", os.environ.get("PATH", ""))
     monkeypatch.setattr("lcode.comfy.CANDIDATES", ())
     monkeypatch.setattr("lcode.comfy.cli_workspace", lambda: None)
     monkeypatch.setattr("lcode.hardware.gpu_used_gib", lambda: None)  # never this machine's GPU

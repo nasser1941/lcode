@@ -67,8 +67,10 @@ class Lcode(BaseInstalledAgent):
         end = harbor_bench.trace_usage(Path(self.logs_dir) / "lcode")
         if end is None:
             return
-        context.n_input_tokens = int(end.get("tokens_in") or 0)
-        context.n_output_tokens = int(end.get("tokens_out") or 0)
+        context.n_input_tokens, context.n_output_tokens = harbor_bench.usage_tokens(end)
         context.cost_usd = 0.0
-        keys = ("status", "seconds", "steps", "model_calls", "tool_calls", "model_seconds", "tool_seconds")
+        keys = (
+            *("status", "seconds", "steps", "model_calls", "tool_calls", "model_seconds", "tool_seconds"),
+            *("tokens_in", "tokens_out", "estimated_in", "estimated_out"),  # the estimates: replies lcode stopped
+        )
         context.metadata = {**(context.metadata or {}), "lcode": {key: end.get(key) for key in keys}}

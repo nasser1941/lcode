@@ -6,6 +6,19 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `lcode bench --harbor` says how long the whole run took, and `lcode-bench.json` saves when it
+  started and its duration (`started`, `seconds`).
+
+### Fixed
+
+- **Tokens of unfinished work in `lcode bench --harbor` and in traces.** An attempt stopped at its
+  task's time limit reported 0 tokens. So did a reply lcode stopped because it went round in
+  circles, since the server counts a reply only when it ends. The bench now counts what the
+  attempt's trace recorded, and the trace estimates a stopped reply's tokens (`estimated_in` and
+  `estimated_out`; `lcode trace show` marks them "about"). An attempt with no record shows `–`, not 0.
+
 ## [0.54.0] - 2026-11-01
 
 ### Added

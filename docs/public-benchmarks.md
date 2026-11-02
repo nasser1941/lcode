@@ -82,7 +82,9 @@ With three attempts, the last line also gives each run's pass rate and the sprea
 - **runs and spread**: the pass rate of each task's first attempt, its second and its third. Single
   runs of the same setup differ by several points, so differences smaller than the spread are noise.
 - **Time and tokens** per attempt, from lcode's own record of the request (its
-  [trace](traces.md)).
+  [trace](traces.md)). An attempt stopped at the task's time limit counts the tokens recorded
+  until then, and a reply lcode stopped counts with an estimate. `–` means no attempt of the task
+  has a record.
 
 Attempts whose container didn't start (a failed image download, say) count neither as passed nor
 as failed. The report shows how many there were.
@@ -90,7 +92,8 @@ as failed. The report shows how many there were.
 Everything is saved in `~/.local/state/lcode/bench/<slice>-<time>/`:
 
 - `lcode-bench.json`: the results, with the lcode and Harbor versions, the model, the context, the
-  machine, the date and the command that reproduces them. `--json FILE` saves a copy.
+  machine, when the run started and how long it took, and the command that reproduces them.
+  `--json FILE` saves a copy.
 - Harbor's own results: each attempt's log, the task's test output, and lcode's trace and session.
   `uvx --from harbor harbor view <folder>` browses them.
 
