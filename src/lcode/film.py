@@ -102,9 +102,9 @@ class Board:
             cast,
             shots[:MAX_SHOTS],
             str(data.get("idea") or ""),
-            data.get("transition") if data.get("transition") in TRANSITIONS else "cut",
+            str(data.get("transition")) if data.get("transition") in TRANSITIONS else "cut",
             str(data.get("sound") or ""),
-            data.get("quality") if data.get("quality") in imageopts.QUALITIES else "fast",
+            str(data.get("quality")) if data.get("quality") in imageopts.QUALITIES else "fast",
         )
 
 

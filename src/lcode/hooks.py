@@ -36,7 +36,7 @@ from pathlib import Path
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover
-    import tomli as tomllib
+    import tomli as tomllib  # pyright: ignore[reportMissingImports]  (installed on Python 3.10 only)
 
 from lcode import config
 from lcode.checkpoints import work_tree_for

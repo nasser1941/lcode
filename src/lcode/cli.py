@@ -12,11 +12,20 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import NoReturn, cast
 
 import requests
 from rich.console import Console
 from rich.markup import escape
-from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn, TimeRemainingColumn, TransferSpeedColumn
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TaskID,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 from rich.prompt import Confirm
 from rich.table import Table
 
@@ -35,7 +44,7 @@ class NotInstalled(Exception):
     pass
 
 
-def fail(message: str, code: int = 1):
+def fail(message: str, code: int = 1) -> NoReturn:
     console.print(f"[red]error:[/] {message}")
     sys.exit(code)
 
@@ -45,7 +54,7 @@ def connect(cfg: dict) -> Ollama:
     if cfg["backend"] == "ollama":
         return Ollama(cfg["ollama_host"])
     try:
-        return backends.connect(cfg)
+        return cast(Ollama, backends.connect(cfg))  # an OpenAI-compatible server stands in for Ollama
     except OllamaError as e:
         fail(str(e))
 
@@ -63,7 +72,7 @@ def resolve_model(ollama: Ollama, name: str) -> tuple[str, ModelSpec | None]:
     """Map a catalog key or Ollama tag to an installed Ollama model name (or a model the server serves)."""
     if backends.is_openai(ollama):
         try:
-            return backends.pick_model(ollama, name), None
+            return backends.pick_model(cast(backends.OpenAICompatible, ollama), name), None
         except OllamaError as e:
             raise NotInstalled(str(e)) from e
     spec = catalog.find(name)
@@ -86,7 +95,7 @@ def choose_context(
 ) -> tuple[int, str]:
     """Pick the context window: requested > largest that fits (catalog models) > 32K. Capped at the model max."""
     if backends.is_openai(ollama):
-        return backends.context_for(ollama, model, requested)
+        return backends.context_for(cast(backends.OpenAICompatible, ollama), model, requested)
     try:
         limit = ollama.max_context(model) or (spec.max_context if spec else None)
     except OllamaError:
@@ -253,7 +262,7 @@ def pull_with_progress(ollama: Ollama, tag: str) -> None:
         TimeRemainingColumn(),
     )
     with Progress(*columns, console=console) as progress:
-        tasks: dict[str, int] = {}
+        tasks: dict[str, TaskID] = {}
 
         def on_event(event: dict) -> None:
             digest, total = event.get("digest"), event.get("total")
@@ -418,10 +427,10 @@ def cmd_doctor(args) -> None:
             from lcode import clipboard
 
             line("Clipboard", *clipboard.status())
-        if limits.get(model):
+        if learned := limits.get(model):
             line(
                 "Limit",
-                f"{format_tokens(limits.get(model))} for {model}: larger contexts ran out of GPU memory "
+                f"{format_tokens(learned)} for {model}: larger contexts ran out of GPU memory "
                 f"here (delete {limits.path()} to try again)",
                 None,
             )
@@ -822,6 +831,7 @@ def comfyui_status(cfg: dict) -> tuple[str, bool | None]:
     if stats:
         where = f"{(stats.get('system') or {}).get('comfyui_version', '?')} running at {server.url}"
     else:
+        assert install is not None  # found, or this returned above
         where = f"{install.path} (lcode starts it in image mode)"
     _, missing = catalog.chosen_files(model, catalog.lister(server if stats else None, install))
     if missing:

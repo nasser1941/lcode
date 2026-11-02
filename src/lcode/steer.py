@@ -20,13 +20,14 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
+from typing import Any, cast
 
 from rich.text import Text
 
 try:
     import termios
 except ImportError:  # Windows: no steering, everything else works
-    termios = None  # type: ignore[assignment]
+    termios = cast(Any, None)
 
 MAX_NOTE = 4000  # characters in one note
 SHOWN = 45  # characters of the line being typed shown under the spinner (the line fits 80 columns)
@@ -177,6 +178,12 @@ class KeyReader:
         self.resume = threading.Event()
         self.decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
+    @property
+    def tty(self) -> int:
+        """The terminal's file descriptor, once start() has found it (everything below runs after that)."""
+        assert self.fd is not None
+        return self.fd
+
     def start(self) -> bool:
         """Start reading; False when this isn't a terminal lcode can read keys from."""
         if termios is None:
@@ -225,7 +232,7 @@ class KeyReader:
         self.held.wait(timeout=1)
         self._restore()
         with contextlib.suppress(termios.error):
-            termios.tcflush(self.fd, termios.TCIFLUSH)
+            termios.tcflush(self.tty, termios.TCIFLUSH)
         try:
             yield
         finally:
@@ -236,16 +243,16 @@ class KeyReader:
             self.resume.set()
 
     def _cbreak(self) -> None:
-        mode = termios.tcgetattr(self.fd)
+        mode = termios.tcgetattr(self.tty)
         mode[3] &= ~(termios.ECHO | termios.ICANON)  # lflags; ISIG stays, so Ctrl+C still interrupts
         mode[6][termios.VMIN] = 1
         mode[6][termios.VTIME] = 0
-        termios.tcsetattr(self.fd, termios.TCSANOW, mode)
+        termios.tcsetattr(self.tty, termios.TCSANOW, mode)
 
     def _restore(self) -> None:
         if self.saved is not None:
             with contextlib.suppress(termios.error):
-                termios.tcsetattr(self.fd, termios.TCSANOW, self.saved)
+                termios.tcsetattr(self.tty, termios.TCSANOW, self.saved)
 
     def _run(self) -> None:
         while not self.stopping.is_set():
@@ -254,17 +261,17 @@ class KeyReader:
                 self.resume.wait()
                 continue
             try:
-                ready, _, _ = select.select([self.fd], [], [], 0.1)
+                ready, _, _ = select.select([self.tty], [], [], 0.1)
                 if not ready or self.hold.is_set():
                     continue
-                data = os.read(self.fd, 1024)
+                data = os.read(self.tty, 1024)
                 if not data:
                     return  # the terminal is gone
                 while incomplete_escape(data):
-                    more, _, _ = select.select([self.fd], [], [], ESC_WAIT)  # the rest of an escape sequence?
+                    more, _, _ = select.select([self.tty], [], [], ESC_WAIT)  # the rest of an escape sequence?
                     if not more:
                         break  # a lone "\x1b" is then the Esc key
-                    data += os.read(self.fd, 1024)
+                    data += os.read(self.tty, 1024)
             except (OSError, ValueError):
                 return
             self.steering.feed(self.decoder.decode(data))

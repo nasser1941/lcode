@@ -16,7 +16,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from rich.markup import escape
 from rich.panel import Panel
@@ -274,7 +274,7 @@ def advise(agent: Agent, t: Target, text: str) -> tuple[str, dict]:
         from lcode.cli import NotInstalled, resolve_model
 
         try:
-            payload["model"], _ = resolve_model(talk, t.model)  # a catalog key (qwen3.8-27b) or an Ollama tag
+            payload["model"], _ = resolve_model(cast(Ollama, talk), t.model)  # a catalog key or an Ollama tag
         except (NotInstalled, OllamaError) as e:
             raise EscalateError(str(e)) from e
         payload["think"] = agent.settings.think

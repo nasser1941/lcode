@@ -12,11 +12,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from harbor.agents.installed.base import BaseInstalledAgent, with_prompt_template
-from harbor.agents.options import Env, InstalledAgentOptions
-from harbor.environments.base import BaseEnvironment
-from harbor.models.agent.context import AgentContext
-from pydantic import Field
+# Harbor and pydantic are there when Harbor imports this module, not in lcode's own environment.
+from harbor.agents.installed.base import BaseInstalledAgent, with_prompt_template  # pyright: ignore[reportMissingImports]
+from harbor.agents.options import Env, InstalledAgentOptions  # pyright: ignore[reportMissingImports]
+from harbor.environments.base import BaseEnvironment  # pyright: ignore[reportMissingImports]
+from harbor.models.agent.context import AgentContext  # pyright: ignore[reportMissingImports]
+from pydantic import Field  # pyright: ignore[reportMissingImports]
 
 from lcode import __version__, harbor_bench
 

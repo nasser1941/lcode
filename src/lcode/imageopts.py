@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import re
 import shlex
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 
 QUALITIES = ("fast", "balanced", "best")
@@ -112,7 +113,7 @@ class Options:
             return cls()
 
 
-def set_values(options: Options, values: dict[str, object]) -> Options:
+def set_values(options: Options, values: Mapping[str, object]) -> Options:
     """A copy of `options` with `values` (by name or alias) applied. Raises OptionError saying what's wrong."""
     out = replace(options)
     for raw_key, raw in values.items():
@@ -170,8 +171,8 @@ def check_size(value: str) -> str:
     v = value.lower().replace(" ", "")
     if v in SIZES:
         return v
-    if RATIO.match(v):
-        w, h = (int(x) for x in RATIO.match(v).groups())
+    if found := RATIO.match(v):
+        w, h = (int(x) for x in found.groups())
         if w and h and 1 / 4 <= w / h <= 4:
             return f"{w}:{h}"
     m = DIMENSIONS.match(v)

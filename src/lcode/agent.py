@@ -80,6 +80,8 @@ from lcode.tools import (
 from lcode.unreachable import NOTE_AT, Sites
 
 if TYPE_CHECKING:
+    from lcode.hardware import Hardware
+    from lcode.lsp import Manager as LspManager
     from lcode.replay import ReplayServer
 
 GPU_MEMORY_ERRORS = (
@@ -358,6 +360,8 @@ class Settings:
 
 
 class Agent:
+    _assistant_model: str  # image and video mode's prompt assistant, "" for none: set when first needed (lcode.media)
+
     def __init__(self, ollama: Ollama, settings: Settings, cwd: Path, console: Console | None = None):
         self.console = console or Console(highlight=False)
         self.ollama = ollama
@@ -371,7 +375,7 @@ class Agent:
         self.session_id = self.new_session_id()
         self.checkpoints = Checkpoints(self.console, settings.checkpoints)
         self.mcp: McpManager | None = None  # set by the CLI when MCP servers are configured
-        self.lsp = None  # an lcode.lsp.Manager, set by the CLI when language servers are installed
+        self.lsp: LspManager | None = None  # set by the CLI when language servers are installed
         from lcode.hooks import HookSet
 
         self.hooks = HookSet()  # set by the CLI from the settings (lcode.hooks)
@@ -387,7 +391,7 @@ class Agent:
         self.session_name = ""
         self.session_title = ""
         self.interactive = True  # False for `lcode -p`: no end-of-session questions
-        self.comfy_process = None  # the ComfyUI lcode started for image and video mode, stopped when it exits
+        self.comfy_process: subprocess.Popen | None = None  # the ComfyUI lcode started, stopped when it exits
         self.no_coding_model = ""  # why there's no coding model, when lcode started in image or video mode without
         from lcode.imageopts import Options as ImageOptions
 
@@ -413,7 +417,7 @@ class Agent:
         self.steering: Steering | None = None  # notes typed and pauses asked for during a request (lcode.repl)
         self.turn_requests: list[str] = []  # the request, then the notes added to it while it ran
         self.unsent = ""  # typed during the last request but never sent to the model: back in the prompt (lcode.repl)
-        self.on_tool = None  # called with (name, arguments) before each tool runs
+        self.on_tool: Callable[[str, dict], None] | None = None  # called before each tool runs
         self.jobs = Jobs()  # background commands (shared with subagents)
         self.turn_started = 0.0  # when the running request started (time.monotonic)
         self.on_event: Callable[[dict], None] | None = None  # each step and tool result, for --output stream-json
@@ -422,7 +426,7 @@ class Agent:
         # Decides on a presented plan instead of asking in the terminal: "ask", "auto-edit", or why not.
         self.plan_review: Callable[[str, str], str] | None = None
         self.max_steps = MAX_STEPS_PER_TURN
-        self.hardware = None  # an lcode.hardware.Hardware, set by the CLI: for what fits on the GPU
+        self.hardware: Hardware | None = None  # set by the CLI: for what fits on the GPU
         self.made_room_for = ""  # why the model was unloaded (the vision model, an MCP tool), for the reload line
         self.load_state = ""  # "loading" while the model loads in the background at startup (lcode.repl)
         self.autosave = False  # save the session after every step (sessions people resume; not the bench's)
@@ -590,7 +594,7 @@ class Agent:
         """The model that looks at images for this session, if any (see lcode.vision)."""
         if self._vision is False:
             self._vision = vision.pick_model(self.ollama, self.settings.model, self.settings.vision_model)
-        return self._vision or None
+        return self._vision if isinstance(self._vision, str) and self._vision else None
 
     def free_gpu(self) -> list[str]:
         """Unload lcode's models from Ollama so another program can use the GPU; the next request reloads.

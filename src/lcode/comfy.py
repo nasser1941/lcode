@@ -35,7 +35,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import requests
@@ -130,7 +130,8 @@ def install_command(folder: Path, hardware: Hardware) -> list[str]:
         gpu = "--nvidia"
     else:
         gpu = "--cpu"
-    comfy = [shutil.which("comfy")] if shutil.which("comfy") else ["uvx", "--from", "comfy-cli", "comfy"]
+    found = shutil.which("comfy")
+    comfy = [found] if found else ["uvx", "--from", "comfy-cli", "comfy"]
     return [*comfy, "--skip-prompt", "--workspace", str(folder), "install", gpu, "--fast-deps"]
 
 
@@ -390,7 +391,7 @@ class Events:
         readable, _, _ = select.select([self.sock], [], [], timeout)
         return bool(readable)
 
-    def next(self) -> tuple[str, object]:
+    def next(self) -> tuple[str, Any]:
         """The next message: ("json", dict) or ("binary", bytes). Answers pings on the way."""
         message, kind = b"", None
         while True:
@@ -449,7 +450,7 @@ PLACEHOLDER = re.compile(r"^\$([a-z_]+)$")
 def fill(graph: dict, values: dict) -> dict:
     """The workflow with each `"$name"` value replaced by values[name] (keeping its type)."""
 
-    def walk(node):
+    def walk(node: Any) -> Any:
         if isinstance(node, dict):
             return {k: walk(v) for k, v in node.items()}
         if isinstance(node, list):

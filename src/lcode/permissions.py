@@ -197,7 +197,7 @@ class Permissions:
         self.mode = mode
         self.always: set[str] = set()
         self.rules = Rules()  # allow and deny lists from the settings (lcode.hooks)
-        self.on_prompt = None  # called with the title before lcode asks the user (notification hooks)
+        self.on_prompt: Callable[[str], None] | None = None  # called with the title before lcode asks the user
         self.read_line: Callable[[str], str] | None = None  # asks instead of input() (lcode.steer, during a request)
         # Decides instead of asking (lcode.api, lcode acp): True, False, or a message saying why not.
         self.approve: Callable[[dict], bool | str] | None = None

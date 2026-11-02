@@ -472,7 +472,7 @@ class Run:
         child.lsp = parent.lsp
         child._vision = parent._vision
         child.interactive = False
-        child.allowed_tools = (kind.tools or parent.tool_names()) - NOT_FOR_SUBAGENTS
+        child.allowed_tools = set((kind.tools or parent.tool_names()) - NOT_FOR_SUBAGENTS)
         child.read_only = kind.read_only
         child.cancel = self.cancel
         child.on_tool = lambda name, args: self.line.tool(child.describe_call(name, args))

@@ -108,10 +108,10 @@ def locate(text: str, old: str, new: str) -> Found | Miss:
     """Where `old` goes in `text`, when it isn't there exactly; with `new` in its place."""
     # 1. Copying mistakes that leave the text itself right.
     for fix, how in ((strip_line_numbers, "without the line numbers"), (unescape, "with the escapes undone")):
-        fixed = fix(old) if fix is strip_line_numbers else unescape(old, text)
+        fixed = strip_line_numbers(old) if fix is strip_line_numbers else unescape(old, text)
         if fixed is None:
             continue
-        fixed_new = (fix(new) if fix is strip_line_numbers else unescape(new, text)) or new
+        fixed_new = (strip_line_numbers(new) if fix is strip_line_numbers else unescape(new, text)) or new
         if text.count(fixed) == 1:
             start = text.index(fixed)
             return Found(text.replace(fixed, fixed_new, 1), how, text.count("\n", 0, start) + 1)

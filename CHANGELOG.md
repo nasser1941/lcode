@@ -20,6 +20,8 @@ All notable changes to lcode are documented here. The format follows
   such as `No budgets set.` without budgets, or whose report listed the budgeted categories first.
   The task asks for neither behavior, so both pass now. With qwen3.6-35b, this had failed two
   attempts in three that were otherwise right.
+- The Valohai MCP server failed to describe an execution with an output that has no name; it now
+  shows it as `?`. Found by the type checks that CI now runs on `src/lcode` (#200).
 
 ## [0.58.0] - 2026-11-02
 

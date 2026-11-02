@@ -657,6 +657,7 @@ def command(args, console) -> int:
     jobs.mkdir(parents=True, exist_ok=True)
     install = update.lcode_install()
     wheel = None
+    overlay: Path | None = None
     if agent != "lcode":
         agent_args, catalog = agent_setup(agent, ollama_model, context, show, jobs)
         overlay = jobs / "overlay.yaml"
@@ -672,11 +673,9 @@ def command(args, console) -> int:
         wheel = next((jobs / "wheel").glob("*.whl"), None)
     else:
         lcode_with = ["--with", f"lcode-cli=={__version__}"]
-    if agent == "lcode":
-        overlay = None
-        if args.docker_bridge:
-            overlay = jobs / "bridge.yaml"
-            overlay.write_text(BRIDGE_OVERLAY)
+    if agent == "lcode" and args.docker_bridge:
+        overlay = jobs / "bridge.yaml"
+        overlay.write_text(BRIDGE_OVERLAY)
     trials: list[Trial] = []
     started, began = dt.datetime.now().astimezone(), time.monotonic()
     for dataset, tasks in picked.items():

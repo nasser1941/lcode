@@ -13,8 +13,10 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from lcode import config
 
@@ -34,24 +36,24 @@ class MissingVariable(ValueError):
     pass
 
 
-def expand(value, env: dict[str, str] | None = None):
-    """Replace ${NAME} and ${NAME:-default} in strings, lists and dicts."""
-    env = os.environ if env is None else env
+def expand(value: Any, env: Mapping[str, str] | None = None) -> Any:
+    """Replace ${NAME} and ${NAME:-default} in strings, lists and dicts (the result has the value's shape)."""
+    variables: Mapping[str, str] = os.environ if env is None else env
     if isinstance(value, str):
 
         def sub(m: re.Match) -> str:
             name, default = m.group(1), m.group(2)
-            if env.get(name):
-                return env[name]
+            if variables.get(name):
+                return variables[name]
             if default is not None:
                 return default
             raise MissingVariable(name)
 
         return VARIABLE.sub(sub, value)
     if isinstance(value, list):
-        return [expand(v, env) for v in value]
+        return [expand(v, variables) for v in value]
     if isinstance(value, dict):
-        return {k: expand(v, env) for k, v in value.items()}
+        return {k: expand(v, variables) for k, v in value.items()}
     return value
 
 

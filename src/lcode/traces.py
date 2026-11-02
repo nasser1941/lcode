@@ -27,7 +27,6 @@ import contextlib
 import datetime as dt
 import getpass
 import hashlib
-import io
 import ipaddress
 import json
 import os
@@ -40,14 +39,14 @@ from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TextIO, cast
 
 from rich.console import Console
 from rich.markup import escape
 
 from lcode import __version__, config
 from lcode.config import format_tokens
-from lcode.ollama import OllamaError
+from lcode.ollama import Ollama, OllamaError
 
 if TYPE_CHECKING:
     from lcode.agent import Agent
@@ -476,7 +475,7 @@ def start(agent: Agent, text: str) -> Lane | None:
     )
     inner = agent.ollama
     agent.trace = lane
-    agent.ollama = Recording(inner, lane)
+    agent.ollama = cast(Ollama, Recording(inner, lane))  # records each call, and passes it on
     threading.Thread(target=look_around, args=(recorder, inner, settings.model, agent.cwd, folder), daemon=True).start()
     return lane
 
@@ -504,7 +503,7 @@ def follow(parent: Agent, child: Agent) -> None:
         inner = inner.at(lane.name, child)
         child.replay = inner
     child.trace = lane
-    child.ollama = Recording(inner, lane)
+    child.ollama = cast(Ollama, Recording(inner, lane))
 
 
 @contextlib.contextmanager
@@ -586,7 +585,8 @@ def sampling(client: Any, model: str) -> dict:
         show = getattr(client, "show", None)
         if callable(show) and getattr(client, "kind", "ollama") == "ollama":
             with contextlib.suppress(Exception):
-                found = parse_parameters(str((show(model) or {}).get("parameters") or ""))
+                shown: Any = show(model) or {}
+                found = parse_parameters(str(shown.get("parameters") or ""))
         _SAMPLING[key] = found
     return _SAMPLING[key]
 
@@ -1044,7 +1044,7 @@ class Masker:
         return value
 
 
-def export(info: Info, out: io.TextIOBase | None = None, path: Path | None = None) -> Counter:
+def export(info: Info, out: TextIO | None = None, path: Path | None = None) -> Counter:
     """Write the trace with secrets and personal details masked; returns what was masked, by kind."""
     masker = Masker()
     lines = []

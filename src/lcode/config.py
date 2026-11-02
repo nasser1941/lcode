@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover
-    import tomli as tomllib
+    import tomli as tomllib  # pyright: ignore[reportMissingImports]  (installed on Python 3.10 only)
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "lcode"
 CONFIG_PATH = CONFIG_DIR / "config.toml"

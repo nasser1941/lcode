@@ -19,7 +19,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import requests
 from rich.text import Text
@@ -593,10 +593,12 @@ def edit_image(
         if pads:  # the original is the reference; the picture is the padded canvas, painted only in its border
             canvas, border = edits.pad_canvas(graph, links[0], pads)
             canvas = edits.add_references(graph, [canvas, *links[1:]], megapixels, size_from_first=True)
+            assert canvas is not None  # the canvas is the first of the pictures
             edits.outpaint(graph, canvas, border, megapixels)
         else:
             first = edits.add_references(graph, links, megapixels, size_from_first=keep_shape)
             if mask_name:
+                assert first is not None  # a mask comes with the picture it's for
                 edits.inpaint(graph, first, mask_name)
     except edits.EditError as e:
         raise MediaError(f"{model.name} can't do that edit: {e}") from e
@@ -771,7 +773,7 @@ def video_model(agent: Agent, task: str, quiet: bool = False) -> catalog.MediaMo
     return model
 
 
-def continue_clip(graph: dict, latent: str, clip_name: str, length: int) -> None:
+def continue_clip(graph: dict, latent: str | None, clip_name: str, length: int) -> None:
     """Extending a clip: start from its last frame, and join the new frames (without that first one) after it."""
     graph["8200"] = {"class_type": "LoadVideo", "inputs": {"file": clip_name}}
     graph["8201"] = {"class_type": "GetVideoComponents", "inputs": {"video": ["8200", 0]}}
@@ -942,7 +944,8 @@ def join_long(agent, ffmpeg, job, options, made, lengths, seed, clip, stem, star
     one = Made([out], models, seed, width, height, time.monotonic() - started, job["prompt"])
     one.thumbnail, one.poster = made[0].thumbnail, made[0].poster
     keys = ("kind", "prompt", "sources", "mask", "pads", "keep_shape", "extend", "size", "refs", "restyle")
-    plan = Plan(None, None, {}, meta, job["prompt"], seed, options, "video", job.get("sources") or [],
+    unused = cast(Any, None)  # the joined clip is only recorded, never run: it has no model or workflow of its own
+    plan = Plan(unused, unused, {}, meta, job["prompt"], seed, options, "video", job.get("sources") or [],
                 {k: job.get(k) for k in keys}, stem)  # fmt: skip
     one.numbers = record(agent, one, plan)
     show(agent, one)
@@ -1029,6 +1032,7 @@ def apply_tool(
     model = catalog.load().tool(task)
     files = ensure_installed(agent, model, server, ask)
     workflow = comfy.load_workflow(model.video_workflow if video and model.video_workflow else model.workflow)
+    info: dict = {}  # a clip's size, pace and length (the tasks that use it are for clips)
     try:
         name = server.upload(source)
         if video:

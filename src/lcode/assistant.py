@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -93,7 +94,7 @@ class Assistant:
     def __init__(self, ollama, model: str):
         self.ollama, self.model = ollama, model
 
-    def _ask(self, system: str, user: str, images: list[Path] = (), json_answer: bool = False) -> str:
+    def _ask(self, system: str, user: str, images: Sequence[Path] = (), json_answer: bool = False) -> str:
         message: dict = {"role": "user", "content": user}
         if images:
             message["images"] = [base64.b64encode(p.read_bytes()).decode() for p in images]

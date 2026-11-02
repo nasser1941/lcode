@@ -769,7 +769,7 @@ def work_tasks() -> list[Task]:
     ]
 
 
-def parts(module) -> tuple:
+def parts(module) -> tuple[str, dict[str, str], Callable[[Path, str], Check]]:
     """A task module's prompt, files and check."""
     return module.PROMPT, module.FILES, module.check
 

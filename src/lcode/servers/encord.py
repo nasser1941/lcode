@@ -16,6 +16,7 @@ import json
 import os
 import re
 from collections import Counter
+from typing import Any
 
 from lcode import __version__
 from lcode.mcp.server import Server, ToolFailure
@@ -88,7 +89,7 @@ def build(client, allow_writes: bool = False) -> Server:
             return "No datasets."
         lines = []
         for entry in found:
-            d = entry.get("dataset") if isinstance(entry, dict) else entry
+            d: Any = entry.get("dataset") if isinstance(entry, dict) else entry
             lines.append(f"{d.title}  hash={d.dataset_hash}  edited {str(getattr(d, 'last_edited_at', ''))[:10]}")
         return "\n".join(lines)
 
@@ -265,7 +266,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--allow-writes", action="store_true", help="also offer assigning tasks and setting priorities")
     args = parser.parse_args(argv)
     try:
-        from encord import EncordUserClient
+        from encord import EncordUserClient  # pyright: ignore[reportMissingImports]  (an optional dependency)
     except ImportError as e:
         parser.error(
             f'needs the Encord SDK ({e}): run it with uvx --isolated --from "lcode-cli[encord]" lcode-mcp-encord '

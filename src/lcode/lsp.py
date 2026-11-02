@@ -159,7 +159,7 @@ class Server:
             },
             timeout=60,
         )
-        self.capabilities = result.get("capabilities") or {}
+        self.capabilities = (result or {}).get("capabilities") or {}
         self.notify("initialized", {})
 
     # -- transport
@@ -328,11 +328,12 @@ class Manager:
             self.commands = available(self.root)
 
     def languages(self) -> list[str]:
-        return [NAMES[language] for language in self.commands if language not in self.failed]
+        return [NAMES[language] for language in self.commands or {} if language not in self.failed]
 
     def server_for(self, path: Path) -> Server | None:
         language = LANGUAGES.get(path.suffix.lower(), (None,))[0]
-        if language is None or language not in self.commands or language in self.failed:
+        commands = self.commands or {}  # set in __post_init__
+        if language is None or language not in commands or language in self.failed:
             return None
         server = self.servers.get(language)
         if server is not None and server.process.poll() is None:
@@ -340,7 +341,7 @@ class Manager:
         log = config.STATE_DIR / "lsp-logs" / f"{language}.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         problems = []
-        for command in self.commands[language]:  # e.g. typescript-language-server fails with TypeScript 7
+        for command in commands[language]:  # e.g. typescript-language-server fails with TypeScript 7
             try:
                 server = Server(language, command, self.root, log)
             except LspError as e:
@@ -439,7 +440,7 @@ class Manager:
         lines: list[str] = []
         running = [s for s in self.servers.values() if s.process.poll() is None]
         if not running:  # start the servers for the languages this repository has
-            for language in self.commands:
+            for language in self.commands or {}:
                 if any(next(self.root.glob(f"**/*{ext}"), None) for ext in EXTENSIONS[language][:3]):
                     server = self.server_for(self.root / f"x{EXTENSIONS[language][0]}")
                     if server is not None:
