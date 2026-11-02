@@ -254,7 +254,7 @@ SEEDS = 24
 
 
 def unittest_with_seed(folder: Path, seed: int, *names: str) -> subprocess.CompletedProcess:
-    from lcode.bench import CHECK_TIMEOUT
+    from lcode.bench_checks import CHECK_TIMEOUT
 
     env = {**os.environ, "PYTHONHASHSEED": str(seed), "PYTHONDONTWRITEBYTECODE": "1"}
     return subprocess.run(
@@ -269,7 +269,7 @@ def unittest_with_seed(folder: Path, seed: int, *names: str) -> subprocess.Compl
 
 
 def check(folder: Path, answer: str):
-    from lcode.bench import Check, last_line
+    from lcode.bench_checks import Check, last_line
 
     if not (folder / "stockroom" / "inventory.py").is_file():
         return Check(False, "stockroom/inventory.py is missing")

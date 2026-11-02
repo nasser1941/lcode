@@ -9,7 +9,7 @@ import pytest
 from rich.console import Console
 
 from conftest import FakeOllama, call, reply
-from lcode import bench
+from lcode import bench, bench_quick
 from lcode.agent import Settings
 from lcode.hardware import Hardware
 
@@ -59,7 +59,7 @@ def solve(task_id: str, folder: Path) -> str:
     if task_id == "fix-bug":
         replace(folder / "cart.py", "sum(price for", "sum(price * quantity for")
     elif task_id == "find-code":
-        line = bench.UPLOADER["uploader/backoff.py"].splitlines().index("def next_wait(attempt):") + 1
+        line = bench_quick.UPLOADER["uploader/backoff.py"].splitlines().index("def next_wait(attempt):") + 1
         return f"It's `next_wait` in uploader/backoff.py:{line}."
     elif task_id == "write-script":
         (folder / "stats.py").write_text(STATS)
@@ -119,18 +119,18 @@ def test_fix_bug_rejects_changed_tests(tmp_path):
     task = bench.select_tasks("fix-bug")[0]
     setup(task, tmp_path)
     replace(tmp_path / "test_cart.py", "4.25", "2.75")
-    assert bench.check_fix_bug(tmp_path, "").detail == "test_cart.py was changed; the fix belongs in cart.py"
+    assert bench_quick.check_fix_bug(tmp_path, "").detail == "test_cart.py was changed; the fix belongs in cart.py"
 
 
 def test_find_code_needs_the_right_line(tmp_path):
-    assert "cited backoff.py:3" in bench.check_find_code(tmp_path, "`next_wait` at uploader/backoff.py:3").detail
-    assert bench.check_find_code(tmp_path, "It's `jitter`.").detail == "named jitter instead of next_wait"
+    assert "cited backoff.py:3" in bench_quick.check_find_code(tmp_path, "`next_wait` at uploader/backoff.py:3").detail
+    assert bench_quick.check_find_code(tmp_path, "It's `jitter`.").detail == "named jitter instead of next_wait"
 
 
 def test_write_script_is_checked_on_unseen_data(tmp_path):
     task = bench.select_tasks("write-script")[0]
     setup(task, tmp_path)
-    hard_coded = "".join(f"print({line!r})\n" for line in bench.expected_stats(bench.NUMBERS))
+    hard_coded = "".join(f"print({line!r})\n" for line in bench_quick.expected_stats(bench_quick.NUMBERS))
     (tmp_path / "stats.py").write_text(hard_coded)
     result = task.check(tmp_path, "")
     assert not result.passed and "wrong output on other data" in result.detail

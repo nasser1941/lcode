@@ -462,7 +462,7 @@ PROMPT = (
 
 
 def check(folder: Path, answer: str):
-    from lcode.bench import Check
+    from lcode.bench_checks import Check
 
     lines = PACING.splitlines()
     start = next(i for i, line in enumerate(lines, 1) if line.startswith("def _cooldown_for"))

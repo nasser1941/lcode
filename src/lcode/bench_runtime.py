@@ -144,7 +144,7 @@ PROBLEMS = {
 
 
 def check(folder: Path, answer: str):
-    from lcode.bench import Check, last_line, run_python
+    from lcode.bench_checks import Check, last_line, run_python
 
     if not (folder / "wall.py").is_file():
         return Check(False, "wall.py is missing")

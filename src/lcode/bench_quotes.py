@@ -742,7 +742,7 @@ PROBLEMS = {
 def check(folder: Path, answer: str):
     import re
 
-    from lcode.bench import Check, last_line, run_python
+    from lcode.bench_checks import Check, last_line, run_python
 
     if not (folder / "quotes" / "orders" / "quote.py").is_file():
         return Check(False, "quotes/orders/quote.py is missing")

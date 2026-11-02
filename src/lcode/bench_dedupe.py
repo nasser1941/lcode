@@ -248,7 +248,7 @@ def rows(text: str) -> list[list[str]]:
 
 
 def check(folder: Path, answer: str):
-    from lcode.bench import Check, last_line
+    from lcode.bench_checks import Check, last_line
 
     if not (folder / "dedupe.py").is_file():
         return Check(False, "dedupe.py is missing")

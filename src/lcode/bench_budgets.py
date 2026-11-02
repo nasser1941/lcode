@@ -425,7 +425,7 @@ def json_problem(text: str) -> str | None:
 
 
 def check(folder: Path, answer: str):
-    from lcode.bench import Check, last_line, run_python
+    from lcode.bench_checks import Check, last_line, run_python
 
     if not (folder / "expenses" / "cli.py").is_file():
         return Check(False, "expenses/cli.py is missing")

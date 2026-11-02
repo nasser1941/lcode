@@ -294,7 +294,7 @@ def problem(r: subprocess.CompletedProcess, want: tuple[str, str, int], as_json:
 
 
 def check(folder: Path, answer: str):
-    from lcode.bench import Check
+    from lcode.bench_checks import Check
 
     script = folder / "logsum.py"
     if not script.is_file():
