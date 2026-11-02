@@ -1,8 +1,8 @@
 # Benchmarking models
 
 `lcode bench` answers the most common question about local models: *which one works best for
-coding on my machine?* It runs a fixed set of small coding tasks against one or more models and
-reports how many they solved, how fast they ran and how much memory they used.
+coding on my machine?* It runs a fixed set of small coding tasks against one or more models, three
+times each, and reports how many they solved, how fast they ran and how much memory they used.
 
 To compare with other agents on public benchmarks (Terminal-Bench 2.0 and SWE-bench Verified),
 see [Public benchmarks](public-benchmarks.md).
@@ -11,6 +11,7 @@ see [Public benchmarks](public-benchmarks.md).
 lcode bench                           # the configured model
 lcode bench qwen3.6-35b qwen3.5-9b    # compare models
 lcode bench --tasks fix-bug,rename    # run some of the tasks
+lcode bench --attempts 1              # each task once: quicker, but within the noise
 lcode bench --json results.json       # also save machine-readable results
 lcode bench --markdown                # also print a table to paste into a test report
 ```
@@ -20,23 +21,43 @@ Studio: `LCODE_BACKEND=llama.cpp lcode bench`. The server keeps the model loaded
 its memory use, so those columns stay empty.
 
 ```text
-lcode bench · NVIDIA GeForce RTX 4080 Laptop GPU (12 GB VRAM), 31 GB RAM · Ollama 0.32.15
+lcode bench · NVIDIA GeForce RTX 4080 Laptop GPU (12 GB VRAM), 31 GB RAM · Ollama 0.40.13
 
-lcode-qwen3.6-35b · 32K context · reasoning on · 8 tasks
-  Loaded in 16s · 22.3 GB, 45% on the GPU · reads prompts at 855 tok/s
+lcode-qwen3.6-35b · 32K context · reasoning on · 8 tasks · 3 attempts each
+  Loaded in 18s · 10.4 GB, 98% on the GPU · reads prompts at 905 tok/s
+  Attempt 1 of 3
   ✓ fix-bug       Fix a bug so the tests pass         22s  the tests pass
-  ✓ find-code     Answer with file:line                9s  next_wait at backoff.py:13
-  ✓ write-script  Write a script from a spec          13s  correct output, also on data it hadn't seen
-  ✓ rename        Rename a function across files      26s  its tests and extra checks pass
+  ✓ find-code     Answer with file:line                8s  next_wait at backoff.py:13
+  ✓ write-script  Write a script from a spec          12s  correct output, also on data it hadn't seen
+  ✓ rename        Rename a function across files      22s  its tests and extra checks pass
   ✓ precise-edit  One-line edit in a long file        10s  changed only service_087's timeout
-  ✓ recover       Recover from failing commands       30s  used --source and dropped the invalid line
-  ✓ spec-fix      Fix a function to match its spec    55s  follows the whole docstring
-  ✓ feature       Add a feature across files          71s  priorities work, including old todos
+  ✓ recover       Recover from failing commands       22s  used --source and dropped the invalid line
+  ✓ spec-fix      Fix a function to match its spec    78s  follows the whole docstring
+  ✓ feature       Add a feature across files          86s  priorities work, including old todos
+  Attempt 2 of 3
+  …
 ```
 
 At the end it prints a table comparing the models (see [results](#results-on-a-12-gb-laptop) below).
 
-A model usually takes 4 to 12 minutes; each task stops after 5 minutes (`--timeout`).
+A model usually takes 4 to 12 minutes per attempt; each task stops after 5 minutes (`--timeout`).
+
+### Three attempts at each task
+
+Models sample their answers, so a task near the edge of a model's ability can pass in one run and
+fail in the next. One run of each task is within that noise, so `lcode bench` makes three attempts
+at every task, each in a new folder and conversation: every task once, then every task again. The
+summary adds:
+
+| | |
+|---|---|
+| **pass@1** | The share of attempts that passed, averaged over the tasks: the chance that one attempt works |
+| **pass^3** | The share of tasks that passed all three attempts: the ones you can count on |
+| **Each attempt** | How many tasks passed in each attempt. The difference between the best and the worst is the spread between runs |
+
+They're counted as in the [public benchmarks](public-benchmarks.md). `--attempts 1` runs each task
+once, as `lcode bench` did before 0.57, in a third of the time; `--attempts 5` gives pass^5. In the
+summary, a task's time is that of one attempt, on average, and *Time* is the total.
 
 ### More tasks and features
 
@@ -57,8 +78,8 @@ would: no questions asked, since the flag is your OK. Comparing the two shows wh
 model's advice adds to the same second chance:
 
 ```bash
-lcode bench --tasks runtime-bug --retry --rounds 3
-lcode bench --tasks runtime-bug --retry --rounds 3 --escalate ollama/qwen3.8-27b
+lcode bench --tasks runtime-bug --retry --attempts 3
+lcode bench --tasks runtime-bug --retry --attempts 3 --escalate ollama/qwen3.8-27b
 ```
 
 The JSON report has, for each task, `first_passed` (with `--retry`, whether the first try passed)
@@ -77,7 +98,8 @@ lcode bench --context 32k --session --rounds 3
 lcode bench --context 32k --session --rounds 3 --no-prune
 ```
 
-`--rounds 3` runs the tasks three times, 24 in one conversation, which fills a 32K window several
+With `--session`, an attempt is one conversation, and `--attempts` is 1 unless you set it. `--rounds 3`
+runs the tasks three times in it, 24 in one conversation, which fills a 32K window several
 times over. With qwen3.6-35b on a 12 GB laptop (two runs each; runs vary a lot from one to the
 next):
 
@@ -130,8 +152,8 @@ and `feature` are checked with tests the model never saw.
 
 | | |
 |---|---|
-| **Passed** | Tasks solved within the time limit |
-| **Time** | Total time for the tasks (loading the model is reported separately) |
+| **Passed** | Attempts that solved their task within the time limit; with several, also pass@1, pass^3 and each attempt's ([above](#three-attempts-at-each-task)) |
+| **Time** | Total time for the tasks, every attempt (loading the model is reported separately) |
 | **Generation** | Output tokens per second, across all the model's responses |
 | **Prompt reading** | Prompt tokens per second: how fast the model reads files and tool output. Measured per model with fresh 4,000-token prompts (the faster of two readings, since the first one after loading includes warm-up), because during the tasks Ollama serves most of each request from its prompt cache |
 | **Tool-call errors** | Tool calls that failed (wrong arguments, editing without reading first, unmatched edits) or that the model wrote as invalid JSON |
@@ -144,7 +166,8 @@ to measure a model without reasoning.
 
 ## Results on a 12 GB laptop
 
-RTX 4080 Laptop GPU (12 GB) with 31 GB of RAM, Ollama 0.32.15, 32K context, reasoning on:
+RTX 4080 Laptop GPU (12 GB) with 31 GB of RAM, Ollama 0.32.15, 32K context, reasoning on, one
+attempt each (lcode 0.3):
 
 | | `qwen3.6-35b` | `qwen3.5-9b` | `qwen3.5-4b` |
 |---|---|---|---|
@@ -169,8 +192,8 @@ copying `read_file`'s line numbers into a data file, ignoring negative numbers, 
 of the spec, and running out of time.
 
 Models sample their answers, so a task near the edge of a model's ability can pass in one run and
-fail in the next (`qwen3.6-35b` scored 7/8 in an earlier run). Compare totals rather than single
-tasks, and run twice before drawing conclusions.
+fail in the next (`qwen3.6-35b` scored 7/8 in an earlier run), which is why `lcode bench` now makes
+three attempts at each task. Compare pass@1 and pass^3 rather than single tasks.
 
 ## Sharing results
 
@@ -192,10 +215,10 @@ existing fields keep their meaning until `schema` changes.
 ```json
 {
   "schema": 1,
-  "lcode": "0.3.1",
-  "ollama": "0.32.15",
-  "server": "Ollama 0.32.15",
-  "date": "2026-09-30T19:09:09+02:00",
+  "lcode": "0.57.0",
+  "ollama": "0.40.13",
+  "server": "Ollama 0.40.13",
+  "date": "2026-11-02T09:44:14+01:00",
   "hardware": {
     "os": "linux", "cpu": "13th Gen Intel(R) Core(TM) i9-13980HX", "ram_gib": 30.96,
     "gpu": "NVIDIA GeForce RTX 4080 Laptop GPU", "vram_gib": 11.99, "unified": false,
@@ -209,20 +232,22 @@ existing fields keep their meaning until `schema` changes.
       "context": 32768,
       "num_batch": null,
       "think": true,
-      "load_seconds": 16.2,
-      "prompt_tps": 854.6,
-      "memory_gb": 22.3,
-      "gpu_percent": 45,
-      "passed": 8,
-      "total": 8,
-      "seconds": 237.3,
-      "generation_tps": 71.4,
-      "tool_errors": 0,
-      "usage": {"requests": 56, "prompt_tokens": 221522, "prompt_ns": 73377987000,
-                "output_tokens": 11490, "output_ns": 161017657999},
+      "load_seconds": 17.8,
+      "prompt_tps": 904.6,
+      "memory_gb": 10.4,
+      "gpu_percent": 98,
+      "attempts": 3,
+      "passed": 24,
+      "total": 24,
+      "seconds": 756.2,
+      "generation_tps": 72.2,
+      "tool_errors": 2,
+      "summary": {"pass_at_1": 1.0, "pass^3": 1.0, "runs": [1.0, 1.0, 1.0], "spread": 0.0},
+      "usage": {"requests": 184, "prompt_tokens": 1058154, "prompt_ns": 199916607993,
+                "output_tokens": 38683, "output_ns": 535438114998},
       "tasks": [
-        {"id": "fix-bug", "passed": true, "seconds": 21.9, "detail": "the tests pass",
-         "steps": 5, "tool_errors": 0, "error": null},
+        {"id": "fix-bug", "passed": true, "seconds": 21.5, "detail": "the tests pass",
+         "steps": 5, "tool_errors": 0, "error": null, "attempt": 1},
         …
       ],
       "error": null,
@@ -241,6 +266,9 @@ existing fields keep their meaning until `schema` changes.
 | `runs[].generation_tps` | Output tokens per second across the tasks; `null` if Ollama reported no timings |
 | `runs[].prompt_tps` | Prompt tokens per second for a fresh 4,000-token prompt (the faster of two readings); `null` if it couldn't be measured |
 | `runs[].usage` | Totals over the tasks as Ollama reports them. `prompt_tokens` includes tokens served from the prompt cache |
+| `runs[].attempts` | Attempts at each task (`--attempts`) |
+| `runs[].summary` | `pass_at_1`, `pass^3` (with the number of attempts), `runs` (each attempt's pass rate) and `spread` (the best minus the worst), counted as in the [public benchmarks](public-benchmarks.md); `null` where there's nothing to count |
+| `runs[].tasks[]` | One entry per attempt at a task; `attempt` says which (1, 2, 3) |
 | `runs[].tasks[].steps` | Model responses in the task |
 | `runs[].tasks[].error` | Why the task stopped early (`timed out after 300s`, an Ollama error), otherwise `null` |
 | `runs[].error` | Why the model didn't run at all (for example, not installed), otherwise `null` |

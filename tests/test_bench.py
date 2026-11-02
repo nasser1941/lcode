@@ -250,7 +250,10 @@ def test_report_and_markdown(tmp_path):
         "errors_by_tool",
         "first_passed",
         "escalations",
+        "attempt",
     }
+    assert (first["attempts"], first["tasks"][0]["attempt"]) == (1, 1)
+    assert first["summary"] == {"pass_at_1": 0.5, "pass^1": 0.5, "runs": [0.5], "spread": None}
     assert data["runs"][1]["error"] == "not installed"
 
     md = bench.markdown([run, skipped], tasks, LAPTOP, "0.32.15")
@@ -321,6 +324,168 @@ def test_rounds_get_one_row_per_task_with_a_mark_per_run(monkeypatch, tmp_path):
     rows = dict(bench.summary_rows([run], tasks))
     assert rows["find-code: Answer with file:line"][0].startswith("✓✗ ")
     assert rows["Passed"] == ["1/2"]
+
+
+def concept_answer() -> str:
+    from lcode import bench_backend
+
+    line = next(i for i, text in enumerate(bench_backend.PACING.splitlines(), 1) if text.startswith("def _cooldown"))
+    return f"`_cooldown_for` at transport/pacing.py:{line}"
+
+
+def test_attempts_run_every_task_again_and_report_pass_rates(monkeypatch, tmp_path):
+    monkeypatch.setattr(bench.tempfile, "tempdir", str(tmp_path))
+    console = quiet()
+    tasks = bench.select_tasks("find-code,find-concept")
+    right = reply("It is `next_wait` in uploader/backoff.py:13.")
+    script = [right, reply(concept_answer()), reply("It's `jitter`."), reply(concept_answer())]
+    script += [reply("It is `next_wait` in uploader/backoff.py:13."), reply(concept_answer())]
+    run = bench.run_model(FakeOllama([probe(), probe(), *script]), "m", settings(), tasks, console, attempts=3)
+    assert [(t.id, t.attempt, t.passed) for t in run.tasks] == [
+        ("find-code", 1, True),
+        ("find-concept", 1, True),
+        ("find-code", 2, False),  # every task once, then every task again
+        ("find-concept", 2, True),
+        ("find-code", 3, True),
+        ("find-concept", 3, True),
+    ]
+    rates = run.rates()
+    assert (rates.tries, rates.pass_at_1, rates.pass_all) == (3, pytest.approx((2 / 3 + 1) / 2), 0.5)
+    assert (rates.attempts, rates.runs, rates.spread) == ([(2, 2), (1, 2), (2, 2)], [1.0, 0.5, 1.0], 0.5)
+    rows = dict(bench.summary_rows([run], tasks))
+    assert rows["find-code: Answer with file:line"][0].startswith("✓✗✓ ")
+    assert (rows["Passed"], rows["pass@1"], rows["pass^3"]) == (["5/6"], ["83%"], ["50%"])
+    assert rows["Each attempt"] == ["2/2, 1/2, 2/2"]
+    text = console.file.getvalue()
+    assert "2 tasks · 3 attempts each" in text and "Attempt 2 of 3" in text
+    data = run.to_json()
+    assert data["attempts"] == 3 and [t["attempt"] for t in data["tasks"]] == [1, 1, 2, 2, 3, 3]
+    assert data["summary"] == {"pass_at_1": rates.pass_at_1, "pass^3": 0.5, "runs": [1.0, 0.5, 1.0], "spread": 0.5}
+    assert not list(tmp_path.iterdir())  # every attempt's folder is cleaned up
+
+
+def test_one_attempt_reports_as_before(monkeypatch, tmp_path):
+    monkeypatch.setattr(bench.tempfile, "tempdir", str(tmp_path))
+    tasks = bench.select_tasks("find-code")
+    console = quiet()
+    run = bench.run_model(
+        FakeOllama([probe(), probe(), reply("`next_wait` in backoff.py:13")]), "m", settings(), tasks, console
+    )
+    rows = dict(bench.summary_rows([run], tasks))
+    assert rows["Passed"] == ["1/1"] and not {"pass@1", "pass^1", "Each attempt"} & set(rows)
+    assert "attempt" not in console.file.getvalue().lower()
+
+
+def test_with_a_session_each_attempt_is_a_conversation_of_its_own(monkeypatch, tmp_path):
+    monkeypatch.setattr(bench.tempfile, "tempdir", str(tmp_path))
+    tasks = bench.select_tasks("find-code") * 2  # --session --rounds 2
+    answers = [
+        "`next_wait` in backoff.py:13",
+        "`next_wait` in backoff.py:13",
+        "no idea",
+        "`next_wait` in backoff.py:13",
+    ]
+    ollama = FakeOllama([probe(), probe(), *[reply(answer) for answer in answers]])
+    run = bench.run_model(ollama, "m", settings(), tasks, quiet(), session=True, attempts=2)
+    question = bench.select_tasks("find-code")[0].prompt
+    last = ollama.payloads[-1]["messages"]
+    assert len(ollama.payloads) == 6 and sum(m.get("content") == question for m in last) == 2  # not 4: a new one
+    rates = run.rates()
+    assert (rates.tries, rates.attempts, rates.pass_all) == (4, [(2, 2), (1, 2)], 0.0)
+    assert dict(bench.summary_rows([run], tasks))["pass^4"] == ["0%"]
+
+
+def test_an_attempt_stopped_partway_is_left_out_of_the_spread():
+    def result(task: str, attempt: int, passed: bool) -> bench.TaskResult:
+        return bench.TaskResult(task, passed, 1.0, "", attempt=attempt)
+
+    results = [result("a", 1, True), result("b", 1, True), result("a", 2, False), result("b", 2, True)]
+    results.append(result("a", 3, False))  # Ctrl+C during the third attempt
+    rates = bench.pass_rates(results, 3)
+    assert rates.attempts == [(2, 2), (1, 2), (0, 1)] and rates.runs == [1.0, 0.5] and rates.spread == 0.5
+    assert rates.pass_all == 0.0  # only "a" ran all three times
+    assert rates.pass_at_1 == pytest.approx((1 / 3 + 1) / 2)
+    assert bench.pass_rates([], 3).pass_at_1 is None and bench.pass_rates([], 3).spread is None
+
+
+def test_pass_rates_count_as_lcode_bench_harbor_does():
+    from lcode import harbor_bench
+
+    outcomes = {"a": [True, True, False], "b": [False, True, False], "c": [True, True, True], "d": [False] * 3}
+    results = [
+        bench.TaskResult(t, passed, 1.0, "", attempt=i + 1)
+        for t, row in outcomes.items()
+        for i, passed in enumerate(row)
+    ]
+    trials = [
+        harbor_bench.Trial("dev", t, 1.0 if passed else 0.0, started=str(i))
+        for t, row in outcomes.items()
+        for i, passed in enumerate(row)
+    ]
+    ours, harbors = bench.pass_rates(results, 3), harbor_bench.summarize(trials, 3)
+    assert (ours.pass_at_1, ours.pass_all, ours.runs, ours.spread) == (
+        harbors.pass_at_1,
+        harbors.pass_all,
+        harbors.runs,
+        harbors.spread,
+    )
+
+
+@pytest.fixture
+def bench_cli(monkeypatch, tmp_path):
+    """`lcode bench` with a stand-in Ollama; records each model's (tasks per attempt, attempts)."""
+    from lcode import cli, config
+
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
+    monkeypatch.setattr(cli, "console", quiet())
+    monkeypatch.setattr(cli, "Ollama", lambda host: FakeOllama())
+    monkeypatch.setattr(cli, "detect", lambda: LAPTOP)
+    monkeypatch.setattr(cli, "check_ollama", lambda *args: "0.32.0")
+    seen: list[tuple[int, int]] = []
+
+    def run_model(ollama, name, settings, tasks, console, *args):
+        seen.append((len(tasks), args[-1]))
+        return bench.ModelRun(name, name)
+
+    monkeypatch.setattr(bench, "run_model", run_model)
+    return seen
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        ([], (1, 3)),
+        (["--attempts", "1"], (1, 1)),
+        (["--rounds", "2"], (1, 2)),  # what --attempts was called before 0.57
+        (["--session", "--rounds", "2"], (2, 1)),  # one conversation with the tasks twice
+        (["--session", "--attempts", "2"], (1, 2)),  # two conversations
+    ],
+)
+def test_lcode_bench_attempts(bench_cli, argv, expected):
+    from lcode import cli
+
+    cli.main(["bench", "qwen3.6-35b", "--tasks", "find-code", *argv])
+    assert bench_cli == [expected]
+
+
+def test_lcode_bench_needs_an_attempt(bench_cli):
+    from lcode import cli
+
+    with pytest.raises(SystemExit):
+        cli.main(["bench", "--attempts", "0"])
+    assert bench_cli == []
+
+
+def test_lcode_bench_harbor_still_makes_three_attempts(monkeypatch):
+    from lcode import cli, harbor_bench
+
+    seen = []
+    monkeypatch.setattr(harbor_bench, "command", lambda args, console: seen.append(args.attempts) or 0)
+    with pytest.raises(SystemExit):
+        cli.main(["bench", "--harbor", "dev"])
+    with pytest.raises(SystemExit):
+        cli.main(["bench", "--harbor", "dev", "--attempts", "1"])
+    assert seen == [3, 1]
 
 
 def test_runtime_bug_needs_the_real_cause(tmp_path):
