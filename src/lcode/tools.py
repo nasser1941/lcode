@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from lcode import screenshots, web
+from lcode import screenshots, screenshots_web, web
 from lcode.context import shorten
 from lcode.permissions import bash_key
 from lcode.planning import BLOCKED, PLAN_MODE_TOOLS
@@ -278,7 +278,7 @@ class Toolbox(FileChanges, ShellTools):
         try:
             size = screenshots.parse_screen(screen)
             if url:
-                url = screenshots.normalize_url(url, self.agent.cwd)
+                url = screenshots_web.normalize_url(url, self.agent.cwd)
             steps = screenshots.parse_actions(actions)
         except screenshots.ShotError as e:
             raise ToolError(str(e)) from e
@@ -299,7 +299,7 @@ class Toolbox(FileChanges, ShellTools):
             if not ok:
                 return feedback
             self.agent.checkpoint()  # the program may change files, like any command
-        if url and not screenshots.is_local(url):
+        if url and not screenshots_web.is_local(url):
             domain = web.urlparse(url).netloc or url
             ok, feedback = self._web_allowed(f"web:{domain}", "Open a web page for a screenshot", url)
             if not ok:
