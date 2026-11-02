@@ -16,7 +16,8 @@ from lcode import (
     residency,
 )
 from lcode import context as context_tools
-from lcode.agent import AUTO_COMPACT_RATIO, Agent
+from lcode.agent import Agent
+from lcode.agent_context import AUTO_COMPACT_RATIO
 from lcode.catalog import MIN_USEFUL_CONTEXT
 from lcode.cloud import is_cloud
 from lcode.cloud import notice as cloud_notice
