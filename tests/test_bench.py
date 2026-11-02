@@ -235,6 +235,7 @@ def test_report_and_markdown(tmp_path):
     bench.write_json(tmp_path / "r.json", document)
     data = json.loads((tmp_path / "r.json").read_text())
     assert data["schema"] == 1 and data["ollama"] == "0.32.15"
+    assert [t["id"] for t in data["tasks"]] == [t.id for t in bench.default_tasks()]
     assert data["hardware"]["gpu"] == "RTX 4080 Laptop"
     first = data["runs"][0]
     assert (first["passed"], first["total"], first["generation_tps"], first["context"]) == (1, 2, 50.0, 32768)
@@ -263,7 +264,10 @@ def test_report_and_markdown(tmp_path):
 
 
 def test_select_tasks():
-    assert [t.id for t in bench.select_tasks(None)] == [t.id for t in bench.TASKS]
+    quick = [t.id for t in bench.TASKS]
+    longer = ["cli-tool", "flaky-test", "repo-bug", "wide-feature", "fast-dedupe", "runtime-bug"]
+    assert [t.id for t in bench.select_tasks(None)] == [*quick, *longer]  # the quick ones first
+    assert [t.id for t in bench.select_tasks("repo-bug,find-concept")] == ["repo-bug", "find-concept"]
     assert [t.id for t in bench.select_tasks("rename, fix-bug")] == ["rename", "fix-bug"]
     with pytest.raises(ValueError, match="unknown task"):
         bench.select_tasks("fix-bug,nope")
@@ -466,6 +470,34 @@ def test_lcode_bench_attempts(bench_cli, argv, expected):
 
     cli.main(["bench", "qwen3.6-35b", "--tasks", "find-code", *argv])
     assert bench_cli == [expected]
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        ([], (len(bench.default_tasks()), 3)),
+        (["--quick"], (8, 1)),  # what lcode bench ran before 0.57
+        (["--quick", "--attempts", "3"], (8, 3)),
+        (["--quick", "--tasks", "find-code"], (1, 1)),
+    ],
+)
+def test_lcode_bench_quick(bench_cli, argv, expected):
+    from lcode import cli
+
+    cli.main(["bench", "qwen3.6-35b", *argv])
+    assert bench_cli == [expected]
+
+
+def test_lcode_bench_lists_every_task(monkeypatch):
+    from lcode import cli
+
+    out = quiet()
+    monkeypatch.setattr(cli, "console", out)
+    cli.main(["bench", "--list"])
+    text = out.file.getvalue()
+    for task in [*bench.default_tasks(), *bench.extra_tasks()]:
+        assert task.id in text and task.title in text
+    assert "not with --quick" in text and "only with --tasks" in text
 
 
 def test_lcode_bench_needs_an_attempt(bench_cli):

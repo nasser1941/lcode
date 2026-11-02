@@ -39,6 +39,7 @@ from lcode.ollama import Ollama, OllamaError
 SCHEMA_VERSION = 1
 DEFAULT_CONTEXT = 32768  # the same everywhere, so results compare across machines
 DEFAULT_TIMEOUT = 300  # seconds per task
+LONGER_TIMEOUT = 600  # for the longer tasks, which take a strong model up to five minutes
 DEFAULT_ATTEMPTS = 3  # each task's attempts: one run is within the noise between runs
 CHECK_TIMEOUT = 60
 PROBE_WORDS = 3000  # about 4,000 tokens
@@ -65,6 +66,7 @@ class Task:
     prompt: str
     files: dict[str, str]
     check: Callable[[Path, str], Check]  # (task folder, the model's final answer) -> result
+    timeout: float = DEFAULT_TIMEOUT  # seconds before it stops, unless --timeout says otherwise
 
 
 # ----------------------------------------------------------------------------- helpers for checks
@@ -747,32 +749,41 @@ TASKS = [
 
 
 def extra_tasks() -> list[Task]:
-    """Tasks that only run when asked for with --tasks (they're slower, or test optional features)."""
-    from lcode import bench_backend, bench_runtime
+    """Tasks that only run when asked for with --tasks (for optional features such as --code-search)."""
+    from lcode import bench_backend
+
+    return [Task("find-concept", "Find code by what it does (40 files)", *parts(bench_backend))]
+
+
+def work_tasks() -> list[Task]:
+    """Tasks closer to real work, after the quick ones: longer, and where good models still slip."""
+    from lcode import bench_budgets, bench_dedupe, bench_flaky, bench_logsum, bench_quotes, bench_runtime
 
     return [
-        Task(
-            "find-concept",
-            "Find code by what it does (40 files)",
-            bench_backend.PROMPT,
-            bench_backend.FILES,
-            bench_backend.check,
-        ),
-        Task(
-            "runtime-bug",
-            "Fix a bug that shows only when it runs",
-            bench_runtime.PROMPT,
-            bench_runtime.FILES,
-            bench_runtime.check,
-        ),
+        Task("cli-tool", "Build a tool from a spec", *parts(bench_logsum), LONGER_TIMEOUT),
+        Task("flaky-test", "Find why a test is flaky", *parts(bench_flaky), LONGER_TIMEOUT),
+        Task("repo-bug", "Fix a bug in a 47-file repo", *parts(bench_quotes), LONGER_TIMEOUT),
+        Task("wide-feature", "Add a feature across modules", *parts(bench_budgets), LONGER_TIMEOUT),
+        Task("fast-dedupe", "Make a slow job fast, same output", *parts(bench_dedupe), LONGER_TIMEOUT),
+        Task("runtime-bug", "Fix a bug that shows only when it runs", *parts(bench_runtime), LONGER_TIMEOUT),
     ]
+
+
+def parts(module) -> tuple:
+    """A task module's prompt, files and check."""
+    return module.PROMPT, module.FILES, module.check
+
+
+def default_tasks() -> list[Task]:
+    """What `lcode bench` runs: the quick tasks, then the longer ones."""
+    return [*TASKS, *work_tasks()]
 
 
 def select_tasks(ids: str | None) -> list[Task]:
     if not ids:
-        return list(TASKS)
+        return default_tasks()
     wanted = [i.strip() for i in ids.split(",") if i.strip()]
-    known = {task.id: task for task in [*TASKS, *extra_tasks()]}
+    known = {task.id: task for task in [*default_tasks(), *extra_tasks()]}
     unknown = [i for i in wanted if i not in known]
     if unknown:
         raise ValueError(f"unknown task(s) {', '.join(unknown)}; choose from {', '.join(known)}")
@@ -1082,7 +1093,7 @@ def run_model(
     settings: Settings,
     tasks: list[Task],
     console: Console,
-    timeout: float = DEFAULT_TIMEOUT,
+    timeout: float | None = None,
     keep: bool = False,
     verbose: bool = False,
     session: bool = False,
@@ -1133,6 +1144,7 @@ def run_model(
             pruned, compacted = pruned + shared.pruned, compacted + shared.compacted
             shared = None
         for task in tasks:
+            limit = timeout or task.timeout  # --timeout, or the task's own
             log = console if verbose else Console(file=io.StringIO(), width=120, force_terminal=False)
             if session and shared is None:
                 shared = Agent(ollama, settings, Path(tempfile.gettempdir()), console=log)
@@ -1141,10 +1153,10 @@ def run_model(
             try:
                 if verbose:
                     console.rule(f"{task.id}: {task.title}")
-                    result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared, retry)
+                    result = run_task(ollama, settings, task, limit, log, keep, run.usage, shared, retry)
                 else:
                     with console.status(Elapsed(f"  {task.id:<13} {task.title}")):
-                        result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared, retry)
+                        result = run_task(ollama, settings, task, limit, log, keep, run.usage, shared, retry)
             except KeyboardInterrupt:
                 console.print("  [yellow]Stopped.[/]")
                 run.interrupted = True
@@ -1250,7 +1262,7 @@ def report(runs: list[ModelRun], hardware: Hardware, ollama_version: str, server
         "server": server or f"Ollama {ollama_version}",
         "date": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "hardware": {**asdict(hardware), "description": hardware.describe()},
-        "tasks": [{"id": t.id, "title": t.title} for t in TASKS],
+        "tasks": [{"id": t.id, "title": t.title} for t in default_tasks()],
         "runs": [run.to_json() for run in runs],
     }
 
@@ -1280,7 +1292,11 @@ def print_tasks(console: Console) -> None:
     table = Table(title="lcode bench tasks", title_justify="left", header_style="bold")
     table.add_column("Task", style="cyan")
     table.add_column("What it tests")
-    for task in TASKS:
-        table.add_row(task.id, task.title)
+    table.add_column("Runs", style="dim")
+    for tasks, when in [(TASKS, "always"), (work_tasks(), "not with --quick"), (extra_tasks(), "only with --tasks")]:
+        for task in tasks:
+            table.add_row(task.id, task.title, when)
     console.print(table)
-    console.print("[dim]Run a subset with --tasks, e.g. lcode bench --tasks fix-bug,rename[/]")
+    console.print(
+        "[dim]--quick runs the quick ones once; --tasks picks some, e.g. lcode bench --tasks fix-bug,rename[/]"
+    )

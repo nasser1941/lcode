@@ -6,6 +6,24 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Six longer tasks in `lcode bench`** (#199), closer to real work, after the eight quick ones:
+  a command-line tool built from a spec (`cli-tool`), a test that fails now and then (`flaky-test`),
+  a bug reported only by its symptom in a 47-file repository (`repo-bug`), a feature across modules
+  with older data files still working (`wide-feature`), a slow job made fast with the same output
+  (`fast-dedupe`), and a bug that shows only when the code runs (`runtime-bug`, until now only with
+  `--tasks`). Each check runs on data or tests the model never saw. With
+  qwen3.6-35b at 32K on a 12 GB laptop GPU, 14 of 18 attempts passed: none at `runtime-bug`, and 2
+  of 3 at `fast-dedupe`, where after lcode made room in the context the model lost track and
+  repeated itself until the loop breaker stopped it.
+- `lcode bench --quick` runs only the eight quick tasks, once each, as `lcode bench` did before 0.57.
+
+### Changed
+
+- In `lcode bench`, the longer tasks stop after 10 minutes and the quick ones after 5. `--timeout`
+  sets one limit for all.
+
 ## [0.57.0] - 2026-11-02
 
 ### Changed

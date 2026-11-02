@@ -1,8 +1,8 @@
 # Benchmarking models
 
 `lcode bench` answers the most common question about local models: *which one works best for
-coding on my machine?* It runs a fixed set of small coding tasks against one or more models, three
-times each, and reports how many they solved, how fast they ran and how much memory they used.
+coding on my machine?* It runs a fixed set of coding tasks against one or more models, three times
+each, and reports how many they solved, how fast they ran and how much memory they used.
 
 To compare with other agents on public benchmarks (Terminal-Bench 2.0 and SWE-bench Verified),
 see [Public benchmarks](public-benchmarks.md).
@@ -11,6 +11,7 @@ see [Public benchmarks](public-benchmarks.md).
 lcode bench                           # the configured model
 lcode bench qwen3.6-35b qwen3.5-9b    # compare models
 lcode bench --tasks fix-bug,rename    # run some of the tasks
+lcode bench --quick                   # only the eight quick tasks, once each
 lcode bench --attempts 1              # each task once: quicker, but within the noise
 lcode bench --json results.json       # also save machine-readable results
 lcode bench --markdown                # also print a table to paste into a test report
@@ -40,7 +41,8 @@ lcode-qwen3.6-35b · 32K context · reasoning on · 8 tasks · 3 attempts each
 
 At the end it prints a table comparing the models (see [results](#results-on-a-12-gb-laptop) below).
 
-A model usually takes 4 to 12 minutes per attempt; each task stops after 5 minutes (`--timeout`).
+A model usually takes 4 to 12 minutes per attempt at the quick tasks; each stops after 5 minutes,
+and the [longer tasks](#longer-tasks) after 10 (`--timeout` sets one limit for all).
 
 ### Three attempts at each task
 
@@ -62,12 +64,10 @@ summary, a task's time is that of one attempt, on average, and *Time* is the tot
 ### More tasks and features
 
 `--tasks find-concept` adds a task in a larger repository: 40 files of a small backend where the
-model has to find a function by what it does. `--tasks runtime-bug` adds a bug that shows only
-when the code runs: a camera wall's window grows taller with every video frame and can't be made
-smaller again. Reading the code suggests band-aids that fail the hidden test; running it shows the
-cause. Neither is in the default set, so results stay comparable with earlier versions. `--repo-map` gives the model the [repository map](search.md) and
-`--code-search` indexes each task's folder for [semantic search](search.md#semantic-code-search);
-both are off in `lcode bench` by default, for the same reason.
+model has to find a function by what it does. It's there to measure `--repo-map`, which gives the
+model the [repository map](search.md), and `--code-search`, which indexes each task's folder for
+[semantic search](search.md#semantic-code-search). Both are off in `lcode bench` by default, so
+results compare across machines and versions.
 
 ### A second try, and a stronger model
 
@@ -132,6 +132,8 @@ Every task runs in a new temporary folder, with every permission granted (`yolo`
 access off, and ends with an automatic check. The folders are deleted afterwards unless you pass
 `--keep`, which also keeps each task's transcript (`lcode-bench.log`).
 
+### Quick tasks
+
 | Task | The model has to | Passes when |
 |---|---|---|
 | `fix-bug` | Find and fix a bug so the failing unit tests pass | The tests pass and the test file is unchanged |
@@ -147,6 +149,29 @@ The first six tasks are everyday work that good models get right; the last two n
 reading and are where smaller models tend to slip. The checks are deterministic and can't be passed
 by hard-coding: for example, `write-script` reruns the script on new data, and `rename`, `spec-fix`
 and `feature` are checked with tests the model never saw.
+
+### Longer tasks
+
+Good models now get every quick task right: qwen3.6-35b passed all 24 attempts. Four longer tasks,
+closer to real work, tell good models from great ones:
+
+| Task | The model has to | Passes when |
+|---|---|---|
+| `cli-tool` | Write `logsum.py`, which summarizes web server logs, from a spec: options, text and JSON output, standard input, malformed lines, unreadable files and exit codes | 14 runs on logs it never saw give the same output and exit status as a reference implementation |
+| `flaky-test` | Find why a test fails in about half the runs, with the same code, and fix it without changing the tests | The original tests pass under 24 hash seeds, and so does a hidden test of the order the code promises |
+| `repo-bug` | Fix a bug reported only by its symptom (a second quote gets the first one's shipping cost) in a 47-file repository, keeping its lookups cached | Hidden tests of the report, of the same cause elsewhere and of the cache pass, and so do the repository's own tests |
+| `wide-feature` | Add monthly budgets to an expense tracker: a new command, the report in text and JSON, and the data file, with older data files still working | Its tests pass, and a scripted session from an older data file gives exactly the expected output |
+| `fast-dedupe` | Make a job that merges duplicate customer records fast, from hours to seconds for 200,000 records, without changing its output | On 60,000 records it never saw, it finishes within a minute and its output is the old job's, byte for byte |
+| `runtime-bug` | Fix a camera wall whose window grows taller with every video frame and can't be made smaller again. Reading the code suggests band-aids; running it shows the cause | A hidden test: the window keeps its size, can be made smaller, and the video fits its cell |
+
+qwen3.6-35b at 32K passed 14 of the 18 attempts: all of them at the first four, 2 of 3 at
+`fast-dedupe` (in the third, after lcode made room in the context, the model lost track and repeated
+itself until the loop breaker stopped it) and none at `runtime-bug`, where it settled for band-aids.
+
+Each rewards what a careful developer does: reading the whole spec, running a flaky test more than
+once, fixing the cause rather than the symptom, trying old data, and comparing the new output with
+the old. The longer tasks stop after 10 minutes instead of 5. `--quick` leaves them out and runs the
+quick tasks once, as `lcode bench` did before 0.57.
 
 ## What's measured
 
