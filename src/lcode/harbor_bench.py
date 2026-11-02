@@ -19,6 +19,7 @@ import json
 import shlex
 import statistics
 import subprocess
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -338,6 +339,11 @@ def print_summary(console, summary: Summary) -> None:
         console.print(f"[yellow]{summary.not_run} attempt(s) didn't run (their container didn't start, say).[/]")
 
 
+def took(seconds: float) -> str:
+    hours, minutes = divmod(round(seconds / 60), 60)
+    return f"{hours} h {minutes} min" if hours else f"{minutes} min"
+
+
 def print_slice(console, name: str) -> None:
     for dataset, tasks in SLICES[name].items():
         console.print(f"[bold]{DATASETS[dataset]}[/] ({len(tasks)}): {', '.join(tasks)}")
@@ -395,6 +401,7 @@ def command(args, console) -> int:
         overlay = jobs / "bridge.yaml"
         overlay.write_text(BRIDGE_OVERLAY)
     trials: list[Trial] = []
+    started, began = dt.datetime.now().astimezone(), time.monotonic()
     for dataset, tasks in picked.items():
         if not tasks:
             continue
@@ -407,7 +414,9 @@ def command(args, console) -> int:
         subprocess.call(argv)
         trials += read_trials(jobs / dataset, dataset)
     summary = summarize(trials, attempts)
+    seconds = time.monotonic() - began
     print_summary(console, summary)
+    console.print(f"Took {took(seconds)}.")
     if any("fully subnetted" in trial.error for trial in trials):
         console.print(
             "Docker couldn't make a network for the tasks: all its address ranges overlap your routes (a VPN that "
@@ -424,6 +433,8 @@ def command(args, console) -> int:
         "docker_bridge": bool(args.docker_bridge),
         "machine": detect().describe(),
         "date": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "started": started.isoformat(timespec="seconds"),
+        "seconds": round(seconds),  # the whole run, every task's attempts
         "command": "lcode " + shlex.join(sys.argv[1:]),
         "tasks": picked,
         "summary": {

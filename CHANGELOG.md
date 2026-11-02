@@ -6,6 +6,11 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `lcode bench --harbor` says how long the whole run took, and `lcode-bench.json` saves when it
+  started and its duration (`started`, `seconds`).
+
 ### Fixed
 
 - **Tokens of unfinished work in `lcode bench --harbor` and in traces.** An attempt stopped at its

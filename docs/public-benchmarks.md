@@ -92,7 +92,8 @@ as failed. The report shows how many there were.
 Everything is saved in `~/.local/state/lcode/bench/<slice>-<time>/`:
 
 - `lcode-bench.json`: the results, with the lcode and Harbor versions, the model, the context, the
-  machine, the date and the command that reproduces them. `--json FILE` saves a copy.
+  machine, when the run started and how long it took, and the command that reproduces them.
+  `--json FILE` saves a copy.
 - Harbor's own results: each attempt's log, the task's test output, and lcode's trace and session.
   `uvx --from harbor harbor view <folder>` browses them.
 

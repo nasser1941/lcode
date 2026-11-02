@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 from rich.console import Console
@@ -192,6 +193,36 @@ def test_tokens_of_attempts_stopped_at_their_time_limit(tmp_path):
     harbor_bench.print_summary(console, summary)
     [lost] = [line for line in console.file.getvalue().splitlines() if line.startswith("lost")]
     assert lost.split()[-2:] == ["–", "–"]
+
+
+def test_lcode_bench_harbor_runs_harbor_then_reports_and_saves(capsys, monkeypatch):
+    from lcode import cli, config, hardware, update
+
+    monkeypatch.setattr(shutil, "which", lambda name, *a, **k: f"/usr/bin/{name}")
+    monkeypatch.setattr(update, "docker_available", lambda: True)
+    monkeypatch.setattr(update, "lcode_install", lambda *a, **k: update.Install("uvx"))  # lcode from PyPI
+    monkeypatch.setattr(hardware, "detect", lambda: hardware.Hardware("linux", "test CPU", 32.0))
+    runs = []
+
+    def harbor(argv):
+        runs.append(argv)
+        job = Path(argv[argv.index("-o") + 1]) / argv[argv.index("--job-name") + 1]
+        write_trial(job, "prove-plus-comm__a", "terminal-bench/prove-plus-comm", 1.0, 0, (2000, 200))
+        return 0
+
+    monkeypatch.setattr(subprocess, "call", harbor)
+    with pytest.raises(SystemExit) as done:
+        cli.main(
+            ["bench", "--harbor", "dev", "qwen3.6-35b", "--tasks", "prove-plus-comm", "--attempts", "1", "--ctx", "32k"]
+        )
+    out = " ".join(capsys.readouterr().out.split())
+    assert done.value.code == 0 and len(runs) == 1 and "--with lcode-cli==" in " ".join(runs[0])
+    assert "pass@1 100%" in out and "Took 0 min." in out
+    [saved] = (config.STATE_DIR / "bench").glob("dev-*/lcode-bench.json")
+    report = json.loads(saved.read_text())
+    assert (report["model"], report["context"], report["attempts"]) == ("qwen3.6-35b", 32768, 1)
+    assert report["started"] <= report["date"] and 0 <= report["seconds"] < 60
+    assert report["results"][0]["tokens_in"] == 2000 and report["summary"]["pass_at_1"] == 1.0
 
 
 def test_lcode_bench_harbor_lists_its_slice_and_refuses_other_tasks(capsys, monkeypatch):
