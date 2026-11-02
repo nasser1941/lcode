@@ -6,6 +6,14 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`lcode bench --compare BEFORE AFTER`** (#199) compares two `--harbor` results: the tasks whose
+  results changed, and whether pass@1 moved by more than the noise, which it estimates from how
+  much each task's attempts disagree (about 9 points on the dev slice). It exits with 1 after a
+  drop beyond the noise. Releases that change prompts, tools or context handling now go through it
+  on the dev slice: see *Releases* in the contributing guide.
+
 ## [0.58.0] - 2026-11-02
 
 ### Added

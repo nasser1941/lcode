@@ -1,8 +1,8 @@
 # Public benchmarks
 
-`lcode bench` has eight small tasks of its own, and good models solve all of them. To see progress
-past that, and to compare with other agents, lcode runs on two public benchmarks that anyone can
-rerun:
+`lcode bench` has [tasks of its own](bench.md) that say which model works best on your machine. To
+measure lcode against published results and other agents, it also runs on two public benchmarks
+that anyone can rerun:
 
 - [Terminal-Bench 2.0](https://www.tbench.ai/): tasks in a terminal, from fixing a git repository
   to building software, recovering data or setting up servers.
@@ -80,7 +80,8 @@ With three attempts, the last line also gives each run's pass rate and the sprea
 - **pass^3**: the share of tasks whose three attempts all passed. That shows how dependable lcode is,
   not just how often it gets lucky.
 - **runs and spread**: the pass rate of each task's first attempt, its second and its third. Single
-  runs of the same setup differ by several points, so differences smaller than the spread are noise.
+  runs of the same setup differ by several points; `--compare` ([below](#comparing-two-runs)) says
+  whether a change between two results is more than that.
 - **Time and tokens** per attempt, from lcode's own record of the request (its
   [trace](traces.md)). An attempt stopped at the task's time limit counts the tokens recorded
   until then, and a reply lcode stopped counts with an estimate. `–` means no attempt of the task
@@ -96,6 +97,29 @@ Everything is saved in `~/.local/state/lcode/bench/<slice>-<time>/`:
   `--json FILE` saves a copy.
 - Harbor's own results: each attempt's log, the task's test output, and lcode's trace and session.
   `uvx --from harbor harbor view <folder>` browses them.
+
+## Comparing two runs
+
+`lcode bench --compare` compares two saved results, for example the dev slice before and after a
+change, given as their folders or their `lcode-bench.json`:
+
+```bash
+lcode bench --compare ~/.local/state/lcode/bench/dev-20261101-161623 ~/.local/state/lcode/bench/dev-20261105-201500
+```
+
+It says which lcode, model and context each one ran, warns when they don't match, lists the tasks
+whose results changed (`3/3 → 1/3`), and compares pass@1 over the tasks both ran: within the noise,
+better, or a drop beyond the noise.
+
+The noise is how far pass@1 moves between runs of the same setup, estimated from how much each
+task's attempts disagree: a task that always passes or always fails adds nothing, one that passes
+half the time the most. A change counts when it's more than twice the standard error of the
+difference. On the dev slice, with three attempts per task, that's about 9 points. `--compare` exits
+with 1 when the second result dropped beyond the noise, so a script can stop on it.
+
+**The release rule:** a release that changes lcode's prompts, tools or context handling ships only
+if the dev slice doesn't drop beyond the noise against the last baseline, and the comparison goes on
+its pull request. See the [release steps](contributing.md#releases).
 
 ## Other agents on the same model
 

@@ -341,3 +341,68 @@ def test_lcode_bench_harbor_lists_its_slice_and_refuses_other_tasks(capsys, monk
     with pytest.raises(SystemExit) as done:
         cli.main(["bench", "--harbor", "dev", "--tasks", "fix-git"])  # in Terminal-Bench, not in the dev slice
     assert done.value.code == 2 and "Not in the dev slice: fix-git" in " ".join(capsys.readouterr().out.split())
+
+
+# ----------------------------------------------------------------------------- comparing two runs
+
+
+def saved(folder: Path, passed: dict[str, list[bool]], **fields) -> Path:
+    """A saved lcode-bench.json with these attempts, in a folder of its own like a real run's."""
+    folder.mkdir(parents=True)
+    data = {"lcode": "0.57.0", "slice": "dev", "model": "qwen3.6-35b", "context": 32768, "attempts": 3}
+    data |= fields
+    data["results"] = [{"dataset": "terminal-bench", "task": task, "passed": runs} for task, runs in passed.items()]
+    (folder / "lcode-bench.json").write_text(json.dumps(data))
+    return folder
+
+
+def compared(tmp_path, before: dict, after: dict, **after_fields) -> tuple[int, str]:
+    console = Console(file=io.StringIO(), width=200)
+    old = saved(tmp_path / "before", before)
+    new = saved(tmp_path / "after", after, **after_fields)
+    code = harbor_bench.compare_command([str(old), str(new / "lcode-bench.json")], console)
+    return code, console.file.getvalue()
+
+
+SOMETIMES = [True, True, False]
+
+
+def test_compare_calls_a_small_change_noise(tmp_path):
+    before = {f"t{n}": SOMETIMES for n in range(6)}
+    code, text = compared(tmp_path, before, {**before, "t0": [True, False, False]})
+    assert code == 0 and "t0: 2/3 → 1/3" in text
+    assert "pass@1 67% → 61% over the 6 tasks in both: within the noise (-6 points; the noise is ±38)" in text
+
+
+def test_compare_fails_a_drop_beyond_the_noise(tmp_path):
+    before = {f"t{n}": [True] * 3 for n in range(10)}
+    after = {**before, **{f"t{n}": [False] * 3 for n in range(5)}}
+    code, text = compared(tmp_path, before, after)
+    assert code == 1 and "pass@1 100% → 50%" in text and "a drop beyond the noise (-50 points" in text
+
+
+def test_compare_says_when_its_better_and_what_differs(tmp_path):
+    before = {"t0": [False] * 3, "t1": [False] * 3, "gone": [True] * 3}
+    code, text = compared(tmp_path, before, {"t0": [True] * 3, "t1": [True] * 3, "new": [True] * 3}, context=65536)
+    assert code == 0 and "better, beyond the noise (+100 points" in text
+    assert "Not the same context: 32768 and 65536." in text
+    assert "terminal-bench/gone: only before, left out" in text and "terminal-bench/new: only after, left out" in text
+    assert "Before: lcode 0.57.0 · qwen3.6-35b at 32K" in text and "at 64K" in text
+
+
+def test_compare_needs_two_results(tmp_path):
+    console = Console(file=io.StringIO(), width=200)
+    (tmp_path / "other.json").write_text('{"schema": 1, "runs": []}')
+    code = harbor_bench.compare_command([str(tmp_path / "missing"), str(tmp_path / "other.json")], console)
+    assert code == 2 and "isn't a result of lcode bench --harbor" in console.file.getvalue()
+
+
+def test_lcode_bench_compare_exits_with_the_verdict(tmp_path, monkeypatch):
+    from lcode import cli
+
+    monkeypatch.setattr(cli, "console", Console(file=io.StringIO(), width=200))
+    old = saved(tmp_path / "before", {"t0": [True] * 3})
+    new = saved(tmp_path / "after", {"t0": [False] * 3})
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["bench", "--compare", str(old), str(new)])
+    assert stopped.value.code == 1

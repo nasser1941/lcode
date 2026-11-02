@@ -594,6 +594,10 @@ def cmd_config(args) -> None:
 def cmd_bench(args) -> None:
     from lcode import bench
 
+    if args.compare:
+        from lcode import harbor_bench
+
+        sys.exit(harbor_bench.compare_command(args.compare, console))
     if args.harbor:
         from lcode import harbor_bench
 
@@ -960,6 +964,12 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
     p.add_argument("-v", "--verbose", action="store_true", help="show the model working, like a normal session")
     p.add_argument("--list", action="store_true", help="list the tasks and exit")
     p.add_argument("--quick", action="store_true", help="only the eight quick tasks, one attempt each (as before 0.57)")
+    p.add_argument(
+        "--compare",
+        nargs=2,
+        metavar=("BEFORE", "AFTER"),
+        help="compare two --harbor results (lcode-bench.json or its folder): fails if AFTER dropped beyond the noise",
+    )
     p.add_argument(
         "--harbor",
         choices=["dev", "held-out"],
