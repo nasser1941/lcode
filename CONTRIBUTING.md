@@ -95,6 +95,28 @@ Commit messages: short imperative summary (`Add laguna-xs-2.1 to the catalog`), 
 if needed. [Conventional Commits](https://www.conventionalcommits.org/) prefixes are welcome but not
 required.
 
+## Releases
+
+Maintainers release from `main`:
+
+1. **If anything since the last release changes prompts, tools or context handling**, run the dev
+   slice of the [public benchmarks](https://nasser1941.github.io/lcode/public-benchmarks/) with it
+   and compare with the last baseline, with the same model and context:
+
+   ```bash
+   lcode bench --harbor dev qwen3.6-35b --context 32k
+   lcode bench --compare BASELINE NEW
+   ```
+
+   Release only if pass@1 didn't drop beyond the noise (`--compare` exits with 0), and put its
+   output on the release pull request. Otherwise the pull request says there's no such change.
+2. A release pull request bumps `__version__` in `src/lcode/__init__.py` and the banner in
+   `docs/quickstart.md`, and dates the *Unreleased* section of `CHANGELOG.md`.
+3. Once it's merged, publish a GitHub release for the merge commit: `gh release create vX.Y.Z
+   --target <commit>`. That uploads the package to PyPI.
+4. The [Homebrew tap](https://github.com/nasser1941/homebrew-tap) picks up the release within a
+   day.
+
 ## Code of conduct
 
 This project follows the [Contributor Covenant](https://github.com/nasser1941/lcode/blob/main/CODE_OF_CONDUCT.md). By participating you agree to

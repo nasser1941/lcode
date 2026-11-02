@@ -11,4 +11,5 @@
 - [ ] `uv run pytest` and `uv run ruff check .` pass
 - [ ] Tests cover the change
 - [ ] Docs and `CHANGELOG.md` (*Unreleased*) are updated for user-facing changes
+- [ ] Changes to prompts, tools or context handling: the dev slice before and after is under "How was it tested?" (`lcode bench --compare`)
 - [ ] No secrets, tokens, personal paths or private data are included

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import os
 import shlex
 import statistics
@@ -487,6 +488,90 @@ def print_summary(console, summary: Summary) -> None:
     console.print(f"[bold]{line}[/]")
     if summary.not_run:
         console.print(f"[yellow]{summary.not_run} attempt(s) didn't run (their container didn't start, say).[/]")
+
+
+# ----------------------------------------------------------------------------- comparing two runs (the release gate)
+
+SAME = ("slice", "agent", "model", "context", "attempts")  # results compare fairly only when these match
+
+
+@dataclass
+class Saved:
+    """A saved `lcode bench --harbor` result: lcode-bench.json, or the folder it's in."""
+
+    path: Path
+    data: dict
+    passed: dict[str, list[bool]]  # "benchmark/task" -> each attempt that ran, passed or not
+
+    @classmethod
+    def load(cls, path: Path) -> Saved:
+        file = path / "lcode-bench.json" if path.is_dir() else path
+        try:
+            data = json.loads(file.read_text())
+            passed = {f"{r['dataset']}/{r['task']}": [bool(p) for p in r.get("passed") or []] for r in data["results"]}
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise ValueError(f"{file} isn't a result of lcode bench --harbor: {e}") from None
+        return cls(file, data, passed)
+
+    def describe(self) -> str:
+        d = self.data
+        context = f"{d['context'] // 1024}K" if isinstance(d.get("context"), int) else "?"
+        agent = "" if d.get("agent", "lcode") == "lcode" else f"{d.get('agent')} {d.get('agent_version') or ''} on "
+        return f"{agent}lcode {d.get('lcode', '?')} · {d.get('model', '?')} at {context} · {d.get('date', '?')[:10]}"
+
+
+def pass_at_1(passed: list[list[bool]]) -> float:
+    return statistics.fmean(statistics.fmean(p) for p in passed)
+
+
+def standard_error(passed: list[list[bool]]) -> float:
+    """How much pass@1 would move between runs, from how much each task's attempts disagree: a task that always
+    passes or always fails adds nothing, one that passes half the time the most."""
+    variance = sum(statistics.fmean(p) * (1 - statistics.fmean(p)) / max(len(p) - 1, 1) for p in passed)
+    return math.sqrt(variance) / len(passed)
+
+
+def compare(old: Saved, new: Saved) -> tuple[list[str], bool]:
+    """Lines to print, and whether the new result is no worse than the old one beyond the noise."""
+    lines = [f"Before: {old.describe()}", f"After:  {new.describe()}"]
+    for key in SAME:
+        if old.data.get(key, "lcode" if key == "agent" else None) != new.data.get(
+            key, "lcode" if key == "agent" else None
+        ):
+            lines.append(f"[yellow]Not the same {key}: {old.data.get(key)} and {new.data.get(key)}.[/]")
+    both = sorted(task for task in old.passed if old.passed[task] and new.passed.get(task))
+    for task in sorted(set(old.passed) | set(new.passed)):
+        before, after = old.passed.get(task) or [], new.passed.get(task) or []
+        if task not in both:
+            lines.append(f"  {task}: only {'after' if after else 'before'}, left out")
+        elif sum(before) * len(after) != sum(after) * len(before):
+            lines.append(f"  {task}: {sum(before)}/{len(before)} → {sum(after)}/{len(after)}")
+    if not both:
+        return [*lines, "[red]No task ran in both, so there's nothing to compare.[/]"], False
+    a, b = pass_at_1([old.passed[t] for t in both]), pass_at_1([new.passed[t] for t in both])
+    noise = 2 * math.hypot(standard_error([old.passed[t] for t in both]), standard_error([new.passed[t] for t in both]))
+    change = f"{(b - a) * 100:+.0f} points; the noise is ±{noise * 100:.0f}"
+    if a - b > noise + 1e-9:
+        verdict = f"[red]a drop beyond the noise ({change})[/]"
+    elif b - a > noise + 1e-9:
+        verdict = f"[green]better, beyond the noise ({change})[/]"
+    else:
+        verdict = f"within the noise ({change})"
+    lines.append(f"pass@1 {a * 100:.0f}% → {b * 100:.0f}% over the {len(both)} tasks in both: {verdict}")
+    return lines, a - b <= noise + 1e-9
+
+
+def compare_command(paths: list[str], console) -> int:
+    """`lcode bench --compare BEFORE AFTER`: 0 when AFTER is no worse beyond the noise, 1 when it is, 2 on an error."""
+    try:
+        old, new = (Saved.load(Path(p).expanduser()) for p in paths)
+    except ValueError as e:
+        console.print(f"[red]{e}[/]")
+        return 2
+    lines, ok = compare(old, new)
+    for line in lines:
+        console.print(line)
+    return 0 if ok else 1
 
 
 def took(seconds: float) -> str:
