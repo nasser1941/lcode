@@ -28,7 +28,8 @@ from rich.markup import escape
 
 from lcode import config
 from lcode.ollama import Ollama, OllamaError
-from lcode.traces import TERMINAL, Info, Lane, Recorder, Recording, call_summary, home, load
+from lcode.trace_view import Info, call_summary, home, load
+from lcode.traces import TERMINAL, Lane, Recorder, Recording
 
 if TYPE_CHECKING:
     from lcode.agent import Agent

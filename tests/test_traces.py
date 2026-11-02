@@ -12,7 +12,7 @@ import time
 import pytest
 
 from conftest import call, output, reply
-from lcode import __version__, cli, config, replay, traces
+from lcode import __version__, cli, config, replay, trace_export, trace_view, traces
 from lcode.ollama import OllamaError
 from lcode.tools import Toolbox
 
@@ -41,8 +41,8 @@ def fresh_copy(original, tmp_path_factory, name="replay"):
     return copy
 
 
-def only_trace() -> traces.Info:
-    [info] = traces.list_traces()
+def only_trace() -> trace_view.Info:
+    [info] = trace_view.list_traces()
     return info
 
 
@@ -55,7 +55,7 @@ def test_a_request_is_recorded_step_by_step(make_agent, repo):
     assert info.id == f"{agent.session_id}-1"
     assert info.status == "success"
     assert info.path.parent == config.STATE_DIR / "traces"
-    events = traces.load(info.path)
+    events = trace_view.load(info.path)
     assert events[0]["type"] == "start" and events[-1]["type"] == "end"
     start = events[0]
     assert start["text"] == "What's in the math module?"
@@ -90,7 +90,7 @@ def test_a_request_is_recorded_step_by_step(make_agent, repo):
 def test_nothing_is_recorded_with_the_setting_off(make_agent):
     agent = make_agent([reply("Hello.")])  # what the bench and subagents get: no trace of their own
     agent.run_turn("hi")
-    assert traces.list_traces() == []
+    assert trace_view.list_traces() == []
     assert config.SETTINGS["trace"][0] is True  # lcode itself records unless you turn it off
 
 
@@ -98,8 +98,8 @@ def test_each_request_of_a_session_gets_the_next_number(make_agent):
     agent = make_agent([reply("One."), reply("Two.")], trace=True)
     agent.run_turn("first")
     agent.run_turn("second")
-    assert sorted(i.id for i in traces.list_traces()) == [f"{agent.session_id}-1", f"{agent.session_id}-2"]
-    assert traces.list_traces()[0].text == "second"  # newest first
+    assert sorted(i.id for i in trace_view.list_traces()) == [f"{agent.session_id}-1", f"{agent.session_id}-2"]
+    assert trace_view.list_traces()[0].text == "second"  # newest first
 
 
 def test_a_failed_request_still_ends_its_trace(make_agent):
@@ -108,7 +108,7 @@ def test_a_failed_request_still_ends_its_trace(make_agent):
         agent.run_turn("go")
     info = only_trace()
     assert info.status == "error" and "the model crashed" in info.end["error"]
-    [model] = [e for e in traces.load(info.path) if e["type"] == "model"]
+    [model] = [e for e in trace_view.load(info.path) if e["type"] == "model"]
     assert model["error"] == "Ollama error: the model crashed"
     assert agent.trace is None and not isinstance(agent.ollama, traces.Recording)
 
@@ -128,7 +128,7 @@ def test_a_reply_lcode_stopped_gets_an_estimate_of_its_tokens(make_agent, capsys
     agent.run_turn("Build the APK")
     output(agent)
     info = only_trace()
-    events = traces.load(info.path)
+    events = trace_view.load(info.path)
     stopped, answered = [e for e in events if e["type"] == "model"]
     assert stopped["stopped"] and (stopped["tokens_in"], stopped["tokens_out"]) == (0, 0)
     assert stopped["estimated_out"] == len(stopped["reply"]["thinking"]) // 3 > 0  # what streamed until it stopped
@@ -149,7 +149,7 @@ def test_a_reply_that_failed_has_no_estimate(make_agent):
     agent = make_agent([Raises("Ollama error: the model crashed")], trace=True)
     with pytest.raises(OllamaError):
         agent.run_turn("go")
-    events = traces.load(only_trace().path)
+    events = trace_view.load(only_trace().path)
     [model] = [e for e in events if e["type"] == "model"]
     assert "estimated_in" not in model and (events[-1]["estimated_in"], events[-1]["estimated_out"]) == (0, 0)
 
@@ -170,7 +170,7 @@ def test_a_trace_replays_without_a_model_server(make_agent, original, tmp_path_f
     )
     agent.run_turn("Swap the operands in add")
     copy = fresh_copy(original, tmp_path_factory)
-    report = replay.run(traces.load(only_trace().path), copy)
+    report = replay.run(trace_view.load(only_trace().path), copy)
     assert report.ok, report.differences
     assert report.status == ("success", "success") and report.steps == (3, 3)
     # read_file and edit_file ran again, with the same results; the shell command got its recorded result
@@ -188,7 +188,7 @@ def test_replay_shows_where_a_tool_now_answers_differently(make_agent, original,
         return grep(self, *args, **kwargs) + "\n(a harness change)"
 
     monkeypatch.setattr(Toolbox, "t_grep", changed)
-    report = replay.run(traces.load(only_trace().path), fresh_copy(original, tmp_path_factory))
+    report = replay.run(trace_view.load(only_trace().path), fresh_copy(original, tmp_path_factory))
     assert not report.ok
     [difference] = report.differences
     assert (difference.lane, difference.step, difference.what) == ("main", 1, "grep def add")
@@ -201,7 +201,7 @@ def test_replay_runs_commands_only_when_asked(make_agent, repo, tmp_path_factory
     agent = make_agent([reply(tool_calls=[call("bash", command="touch made-by-bash")]), reply("Made it.")], trace=True)
     agent.run_turn("make a file")
     assert (repo / "made-by-bash").exists()
-    events = traces.load(only_trace().path)
+    events = trace_view.load(only_trace().path)
     quiet = tmp_path_factory.mktemp("quiet")
     report = replay.run(events, quiet)
     assert report.ok and report.served == 1 and report.rerun == 0
@@ -225,7 +225,7 @@ def test_subagents_replay_in_lanes_of_their_own(make_agent, original, tmp_path_f
         subagents=True,
     )
     agent.run_turn("where is add?")
-    events = traces.load(only_trace().path)
+    events = trace_view.load(only_trace().path)
     assert {e["lane"] for e in events if e["type"] in ("model", "tool")} == {"main", "agent 1"}
     [task] = [e for e in events if e["type"] == "message" and e["lane"] == "agent 1"]
     assert task["content"] == "Find where add is defined"
@@ -241,7 +241,7 @@ def test_a_malformed_call_and_its_retry_replay_the_same(make_agent, original, tm
         trace=True,
     )
     agent.run_turn("read the math module")
-    events = traces.load(only_trace().path)
+    events = trace_view.load(only_trace().path)
     assert any(e["type"] == "message" and e["by"] == "lcode" for e in events)  # "your last tool call…"
     report = replay.run(events, fresh_copy(original, tmp_path_factory))
     assert report.ok, report.differences
@@ -262,7 +262,7 @@ def test_an_approved_plan_replays_out_of_plan_mode(make_agent, original, tmp_pat
     agent.run_turn("plan, then write notes.txt")
     assert agent.perms.mode == "auto-edit"
     copy = fresh_copy(original, tmp_path_factory)
-    report = replay.run(traces.load(only_trace().path), copy)
+    report = replay.run(trace_view.load(only_trace().path), copy)
     assert report.ok, report.differences
     assert (copy / "notes.txt").read_text() == "notes\n"
 
@@ -274,7 +274,7 @@ def test_the_checks_are_recorded_and_replayed(make_agent, original, tmp_path_fac
         checks="python -c pass",
     )
     agent.run_turn("write new.txt")
-    events = traces.load(only_trace().path)
+    events = trace_view.load(only_trace().path)
     [check] = [e for e in events if e["type"] == "check"]
     assert (check["command"], check["exit_code"]) == ("python -c pass", 0)
     report = replay.run(events, fresh_copy(original, tmp_path_factory))
@@ -307,7 +307,7 @@ def test_an_exported_trace_has_no_secrets_home_paths_or_names(make_agent, tmp_pa
     info = only_trace()
     assert all(any(s in line for line in info.path.read_text().splitlines()) for s in (token, str(home)))
     out = tmp_path_factory.mktemp("export") / "trace.jsonl"
-    counts = traces.export(info, path=out)
+    counts = trace_export.export(info, path=out)
     exported = out.read_text()
     for secret in [*leaked, "hunter2hunter2", "otheruser"]:
         assert secret not in exported, secret
@@ -340,7 +340,7 @@ def test_a_trace_stops_growing_at_its_size_limit(make_agent, monkeypatch):
     )
     agent.run_turn("write a big file")
     info = only_trace()
-    events = traces.load(info.path)
+    events = trace_view.load(info.path)
     assert any(e["type"] == "full" for e in events)
     assert info.end["full"] and info.end["status"] == "success" and info.size < 6000
     assert replay.Recorded(events).full
@@ -402,7 +402,7 @@ def test_replay_starts_from_the_recorded_commit(make_agent, git_repo, capsys):
     agent.run_turn("Rename the heading")
     assert (git_repo / "README.md").read_text() == "# Demo app\n"
     info = only_trace()
-    env = next(e for e in traces.load(info.path) if e["type"] == "env")
+    env = next(e for e in trace_view.load(info.path) if e["type"] == "env")
     assert env["git"]["commit"] and env["git"]["dirty"] is False
     assert info.start["read"] == ["README.md"]  # read before the request: no need to read it again
     with pytest.raises(SystemExit) as done:
@@ -430,7 +430,7 @@ def test_a_replay_writes_only_in_its_copy(make_agent, repo, original, tmp_path_f
     outside.unlink()
     (repo / "inside.txt").unlink()
     copy = fresh_copy(original, tmp_path_factory)
-    report = replay.run(traces.load(only_trace().path), copy)
+    report = replay.run(trace_view.load(only_trace().path), copy)
     # The recorded folder's path points into the copy; nothing outside the copy is written.
     assert (copy / "inside.txt").read_text() == "in the project\n"
     assert not (repo / "inside.txt").exists() and not outside.exists()
@@ -442,13 +442,16 @@ def test_a_replay_writes_only_in_its_copy(make_agent, repo, original, tmp_path_f
 
 def test_summaries_keep_the_start_of_commands_and_the_end_of_paths():
     deep = "/projects" + "/a-long-folder-name" * 5 + "/src/app.py"
-    assert traces.call_summary("read_file", {"path": deep}) == "read_file …" + "/a-long-folder-name" * 3 + "/src/app.py"
+    assert (
+        trace_view.call_summary("read_file", {"path": deep})
+        == "read_file …" + "/a-long-folder-name" * 3 + "/src/app.py"
+    )
     folder = "\\a-long-folder-name"
     windows = "C:\\Users\\someone" + folder * 5 + "\\app.py"
-    assert traces.call_summary("edit_file", {"path": windows}) == "edit_file …" + folder * 3 + "\\app.py"
+    assert trace_view.call_summary("edit_file", {"path": windows}) == "edit_file …" + folder * 3 + "\\app.py"
     command = "pytest -q " + "tests/test_one.py " * 10
-    assert traces.call_summary("bash", {"command": command}) == "bash " + " ".join(command.split())[:70] + "…"
-    assert traces.call_summary("read_file", {"path": "/repo/src/app.py"}, "/repo") == "read_file src/app.py"
+    assert trace_view.call_summary("bash", {"command": command}) == "bash " + " ".join(command.split())[:70] + "…"
+    assert trace_view.call_summary("read_file", {"path": "/repo/src/app.py"}, "/repo") == "read_file src/app.py"
 
 
 def test_requests_in_the_interactive_session_are_recorded(make_agent, monkeypatch):
@@ -476,7 +479,7 @@ def test_requests_in_the_interactive_session_are_recorded(make_agent, monkeypatc
     monkeypatch.setattr("lcode.repl.preload", lambda agent, session: None)
     monkeypatch.setattr("lcode.repl.start_steering", lambda agent: None)
     repl(agent, prompt=None, hardware=Hardware("linux", "x", 31, "GPU", 12))
-    infos = traces.list_traces()
+    infos = trace_view.list_traces()
     assert sorted(i.text for i in infos) == ["thanks", "what's in math.py?"]
     assert all(i.status == "success" and i.start["interactive"] for i in infos)
     assert {i.id for i in infos} == {f"{agent.session_id}-1", f"{agent.session_id}-2"}
