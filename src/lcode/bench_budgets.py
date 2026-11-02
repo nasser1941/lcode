@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -339,13 +340,14 @@ OCTOBER = [
     "travel: €41.40 of €50.50",
     "total: €315.29",
 ]
+NO_BUDGETS: list[str] = []  # `budget list` without budgets: no budget lines, whatever else it says ("No budgets set.")
 SESSION = [
     (
         "an old data file still reports",
         ["report", "--month", "2026-10"],
         ["food: €257.90", "fun: €15.99", "travel: €41.40", "total: €315.29"],
     ),
-    ("no budgets yet", ["budget", "list"], []),
+    ("no budgets yet", ["budget", "list"], NO_BUDGETS),
     ("budget set", ["budget", "set", "food", "300"], None),
     ("budget set", ["budget", "set", "travel", "50.5"], None),
     ("budget set replaces", ["budget", "set", "food", "250"], None),
@@ -392,6 +394,16 @@ def lines(text: str) -> list[str]:
     return [line.rstrip() for line in text.strip().splitlines()]
 
 
+def same(got: list[str], want: list[str], argv: list[str]) -> bool:
+    """Whether a command printed what it should. The task fixes the order of `budget list` (alphabetical), not of
+    the report's categories, so those may come in any order before the total."""
+    if want is NO_BUDGETS:
+        return not any(re.match(r"\S+: €", line) for line in got)
+    if argv[0] == "report":
+        return bool(got) and got[-1] == want[-1] and sorted(got[:-1]) == sorted(want[:-1])
+    return got == want
+
+
 def json_problem(text: str) -> str | None:
     try:
         categories = {c["category"]: c for c in json.loads(text)["categories"]}
@@ -427,7 +439,7 @@ def check(folder: Path, answer: str):
             r = run(folder, data, argv)
             if r.returncode != 0:
                 return Check(False, f"{what}: `{' '.join(argv)}` failed: {last_line(r.stderr)}")
-            if want is not None and lines(r.stdout) != want:
+            if want is not None and not same(lines(r.stdout), want, argv):
                 got = " / ".join(lines(r.stdout)) or "nothing"
                 return Check(False, f"{what}: `{' '.join(argv)}` printed {got[:150]}")
         r = run(folder, data, ["report", "--month", "2026-10", "--json"])

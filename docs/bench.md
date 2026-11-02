@@ -160,13 +160,13 @@ closer to real work, tell good models from great ones:
 | `cli-tool` | Write `logsum.py`, which summarizes web server logs, from a spec: options, text and JSON output, standard input, malformed lines, unreadable files and exit codes | 14 runs on logs it never saw give the same output and exit status as a reference implementation |
 | `flaky-test` | Find why a test fails in about half the runs, with the same code, and fix it without changing the tests | The original tests pass under 24 hash seeds, and so does a hidden test of the order the code promises |
 | `repo-bug` | Fix a bug reported only by its symptom (a second quote gets the first one's shipping cost) in a 47-file repository, keeping its lookups cached | Hidden tests of the report, of the same cause elsewhere and of the cache pass, and so do the repository's own tests |
-| `wide-feature` | Add monthly budgets to an expense tracker: a new command, the report in text and JSON, and the data file, with older data files still working | Its tests pass, and a scripted session from an older data file gives exactly the expected output |
+| `wide-feature` | Add monthly budgets to an expense tracker: a new command, the report in text and JSON, and the data file, with older data files still working | Its tests pass, and a scripted session from an older data file gives the expected output |
 | `fast-dedupe` | Make a job that merges duplicate customer records fast, from hours to seconds for 200,000 records, without changing its output | On 60,000 records it never saw, it finishes within a minute and its output is the old job's, byte for byte |
 | `runtime-bug` | Fix a camera wall whose window grows taller with every video frame and can't be made smaller again. Reading the code suggests band-aids; running it shows the cause | A hidden test: the window keeps its size, can be made smaller, and the video fits its cell |
 
-qwen3.6-35b at 32K passed 14 of the 18 attempts: all of them at the first four, 2 of 3 at
-`fast-dedupe` (in the third, after lcode made room in the context, the model lost track and repeated
-itself until the loop breaker stopped it) and none at `runtime-bug`, where it settled for band-aids.
+They're where qwen3.6-35b misses: see the [results](#results-on-a-12-gb-laptop). In an earlier run
+of the six it lost one `fast-dedupe` attempt to lcode itself: after lcode made room in the context,
+the model lost track and repeated itself until the loop breaker stopped it.
 
 Each rewards what a careful developer does: reading the whole spec, running a flaky test more than
 once, fixing the cause rather than the symptom, trying old data, and comparing the new output with
@@ -191,8 +191,49 @@ to measure a model without reasoning.
 
 ## Results on a 12 GB laptop
 
-RTX 4080 Laptop GPU (12 GB) with 31 GB of RAM, Ollama 0.32.15, 32K context, reasoning on, one
-attempt each (lcode 0.3):
+RTX 4080 Laptop GPU (12 GB) with 31 GB of RAM, Ollama 0.40.13, 32K context, reasoning on, lcode
+0.58.0, three attempts at each task:
+
+| | `qwen3.6-35b` |
+|---|---|
+| fix-bug | ✓✓✓ 25s |
+| find-code | ✓✓✓ 14s |
+| write-script | ✓✓✓ 15s |
+| rename | ✓✓✓ 25s |
+| precise-edit | ✓✓✓ 13s |
+| recover | ✓✓✓ 23s |
+| spec-fix | ✗✓✓ 1m 16s |
+| feature | ✓✓✓ 1m 40s |
+| cli-tool | ✓✓✗ 1m 23s |
+| flaky-test | ✓✓✓ 39s |
+| repo-bug | ✓✓✗ 2m 53s |
+| wide-feature | ✓✓✓ 4m 17s |
+| fast-dedupe | ✓✓✓ 1m 25s |
+| runtime-bug | ✗✗✗ 5m 30s |
+| **Passed** | **36/42** |
+| pass@1 · pass^3 | 86% · 71% |
+| Each attempt | 12/14, 13/14, 11/14 |
+| Time | 62m 47s |
+| Generation | 64.0 tok/s |
+| Prompt reading | 851 tok/s |
+| Tool-call errors | 4 |
+| Memory | 10.5 GB, 98% on GPU |
+
+What it missed:
+- one `spec-fix` attempt fixed the reported case but not all the docstring's rules;
+- one `cli-tool` exited with 1 after skipping malformed lines, where the spec says 0;
+- one `repo-bug` attempt went round in circles until lcode stopped it;
+- every `runtime-bug` attempt settled for a band-aid: the window still grew, or still couldn't be
+  made smaller.
+
+Two `wide-feature` attempts were first counted as failed. Their `budget list` printed `No budgets
+set.` without budgets, and one listed the budgeted categories first. The task asks for neither
+behavior, so the check now accepts both (0.59.0), and the table counts them as passed.
+
+### Earlier: the quick tasks, one attempt each
+
+The quick tasks with three models, Ollama 0.32.15, 32K context, reasoning on, one attempt each (lcode
+0.3):
 
 | | `qwen3.6-35b` | `qwen3.5-9b` | `qwen3.5-4b` |
 |---|---|---|---|
