@@ -113,6 +113,47 @@ def test_a_failed_request_still_ends_its_trace(make_agent):
     assert agent.trace is None and not isinstance(agent.ollama, traces.Recording)
 
 
+LOOP = (
+    "Let me try to check the actual download page for the correct URL.\n\n"
+    "Let me check if there's a way to get the NDK from the Android SDK Manager.\n\n"
+    "Actually, let me try a completely different approach with the android.ndk_path option.\n\n"
+)
+
+
+def test_a_reply_lcode_stopped_gets_an_estimate_of_its_tokens(make_agent, capsys, tmp_path_factory, original):
+    """The server counts a reply's tokens only when it ends. For one lcode stopped, the trace has an estimate
+    beside the counts, which stay what the server said: a replay serves those."""
+    looping = [{"message": {"thinking": LOOP}, "done": False} for _ in range(200)]
+    agent = make_agent([looping, reply("The NDK downloads fail from this network.")], trace=True)
+    agent.run_turn("Build the APK")
+    output(agent)
+    info = only_trace()
+    events = traces.load(info.path)
+    stopped, answered = [e for e in events if e["type"] == "model"]
+    assert stopped["stopped"] and (stopped["tokens_in"], stopped["tokens_out"]) == (0, 0)
+    assert stopped["estimated_out"] == len(stopped["reply"]["thinking"]) // 3 > 0  # what streamed until it stopped
+    assert stopped["estimated_in"] > 1000  # at least the system prompt and the tools
+    assert "estimated_in" not in answered and (answered["tokens_in"], answered["tokens_out"]) == (1000, 50)
+    end = events[-1]
+    assert (end["tokens_in"], end["tokens_out"]) == (1000, 50)
+    assert (end["estimated_in"], end["estimated_out"]) == (stopped["estimated_in"], stopped["estimated_out"])
+    with pytest.raises(SystemExit):
+        cli.main(["trace", "show", "1"])
+    shown = " ".join(capsys.readouterr().out.split())
+    assert "model 1 about " in shown and "stopped" in shown and "out in stopped replies)" in shown
+    report = replay.run(events, fresh_copy(original, tmp_path_factory))
+    assert report.ok and report.steps == (2, 2)  # the replay stops the same reply at the same place
+
+
+def test_a_reply_that_failed_has_no_estimate(make_agent):
+    agent = make_agent([Raises("Ollama error: the model crashed")], trace=True)
+    with pytest.raises(OllamaError):
+        agent.run_turn("go")
+    events = traces.load(only_trace().path)
+    [model] = [e for e in events if e["type"] == "model"]
+    assert "estimated_in" not in model and (events[-1]["estimated_in"], events[-1]["estimated_out"]) == (0, 0)
+
+
 def test_a_trace_replays_without_a_model_server(make_agent, original, tmp_path_factory):
     agent = make_agent(
         [

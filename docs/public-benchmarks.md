@@ -82,7 +82,9 @@ With three attempts, the last line also gives each run's pass rate and the sprea
 - **runs and spread**: the pass rate of each task's first attempt, its second and its third. Single
   runs of the same setup differ by several points, so differences smaller than the spread are noise.
 - **Time and tokens** per attempt, from lcode's own record of the request (its
-  [trace](traces.md)).
+  [trace](traces.md)). An attempt stopped at the task's time limit counts the tokens recorded
+  until then, and a reply lcode stopped counts with an estimate. `–` means no attempt of the task
+  has a record.
 
 Attempts whose container didn't start (a failed image download, say) count neither as passed nor
 as failed. The report shows how many there were.

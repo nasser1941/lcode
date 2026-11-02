@@ -1,9 +1,11 @@
+import io
 import json
 import os
 import shutil
 import subprocess
 
 import pytest
+from rich.console import Console
 
 from lcode import harbor_bench
 
@@ -80,6 +82,32 @@ def test_the_newest_traces_end_tells_how_the_request_went(tmp_path):
     assert harbor_bench.trace_usage(tmp_path) == {"type": "end", "tokens_in": 1}
 
 
+def write_unfinished_trace(home):
+    """A request killed at its time limit: no end event, and its last reply was one lcode stopped."""
+    (home / "traces").mkdir(parents=True)
+    events = [
+        {"type": "start", "at": 0.0},
+        {"type": "model", "at": 30.0, "lane": "main", "kind": "step", "step": 1, "seconds": 30.0,
+         "tokens_in": 9000, "tokens_out": 300},
+        {"type": "tool", "at": 32.5, "lane": "main", "step": 1, "seconds": 2.5},
+        {"type": "model", "at": 40.0, "lane": "agent 1", "kind": "step", "step": 1, "seconds": 5.0,
+         "tokens_in": 2000, "tokens_out": 100},
+        {"type": "model", "at": 90.0, "lane": "main", "kind": "step", "step": 2, "seconds": 57.5, "tokens_in": 0,
+         "tokens_out": 0, "stopped": True, "estimated_in": 9500, "estimated_out": 4000},
+    ]  # fmt: skip
+    (home / "traces" / "a-1.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events) + '{"type": "mod')
+
+
+def test_a_request_stopped_at_its_time_limit_counts_what_its_trace_recorded(tmp_path):
+    write_unfinished_trace(tmp_path)
+    usage = harbor_bench.trace_usage(tmp_path)
+    assert usage is not None and (usage["status"], usage["steps"], usage["seconds"]) == ("unfinished", 2, 90.0)
+    assert (usage["model_calls"], usage["tool_calls"], usage["tool_seconds"]) == (3, 1, 2.5)
+    assert (usage["tokens_in"], usage["tokens_out"]) == (11000, 400)
+    assert harbor_bench.usage_tokens(usage) == (20500, 4400)  # with the estimate for the reply lcode stopped
+    assert harbor_bench.usage_tokens({"type": "end", "tokens_in": 900, "tokens_out": 40}) == (900, 40)
+
+
 def test_harbor_runs_the_tasks_with_lcode_next_to_it(tmp_path):
     argv = harbor_bench.harbor_argv(
         "terminal-bench",
@@ -110,7 +138,7 @@ def write_trial(job, name, task, reward, minute, tokens=(1000, 100)):
             "started_at": f"2026-11-01T01:{minute:02d}:00Z",
             "finished_at": f"2026-11-01T01:{minute + 2:02d}:30Z",
         },
-        "agent_result": {"n_input_tokens": tokens[0], "n_output_tokens": tokens[1]},
+        "agent_result": {"n_input_tokens": tokens and tokens[0], "n_output_tokens": tokens and tokens[1]},
         "verifier_result": None if reward is None else {"rewards": {"reward": reward}},
     }
     if reward is None:
@@ -142,6 +170,28 @@ def test_pass_rates_spread_and_cost_from_harbors_results(tmp_path):
     # A task's second run is its second attempt that ran: for "never", that's its third attempt.
     assert summary.runs == pytest.approx([2 / 3, 1 / 3, 1.0])
     assert summary.spread == pytest.approx(2 / 3) and summary.not_run == 1
+
+
+def test_tokens_of_attempts_stopped_at_their_time_limit(tmp_path):
+    """lcode 0.54.0 gave Harbor no tokens for an attempt stopped at its time limit: they come from its trace, and
+    an attempt without one counts as unknown, not as 0."""
+    job = tmp_path / "terminal-bench"
+    write_trial(job, "slow__0", "terminal-bench/slow", 0.0, 0, None)
+    write_unfinished_trace(job / "slow__0" / "agent" / "lcode")
+    write_trial(job, "slow__1", "terminal-bench/slow", 1.0, 10, (1500, 600))
+    write_trial(job, "slow__2", "terminal-bench/slow", 0.0, 20, None)  # no trace either
+    write_trial(job, "lost__0", "terminal-bench/lost", 0.0, 30, None)
+    trials = harbor_bench.read_trials(job, "terminal-bench")
+    slow = [(t.tokens_in, t.tokens_out) for t in trials if t.task == "slow"]
+    assert slow == [(20500, 4400), (1500, 600), (None, None)]
+    summary = harbor_bench.summarize(trials, attempts=3)
+    tasks = {t.task: t for t in summary.tasks}
+    assert (tasks["slow"].tokens_in, tasks["slow"].tokens_out) == (11000, 2500)  # of the two attempts known
+    assert (tasks["lost"].tokens_in, tasks["lost"].tokens_out) == (None, None)
+    console = Console(file=io.StringIO(), width=200)
+    harbor_bench.print_summary(console, summary)
+    [lost] = [line for line in console.file.getvalue().splitlines() if line.startswith("lost")]
+    assert lost.split()[-2:] == ["–", "–"]
 
 
 def test_lcode_bench_harbor_lists_its_slice_and_refuses_other_tasks(capsys, monkeypatch):
