@@ -456,7 +456,7 @@ def test_closing_stops_comfyui_even_when_the_terminal_is_gone(make_agent, monkey
 
 
 def test_what_you_type_while_an_image_is_made_waits_in_the_next_prompt(image_agent, standin, monkeypatch):
-    from lcode import repl
+    from lcode import repl_media
 
     class Reader:
         def __init__(self, steering):
@@ -469,7 +469,7 @@ def test_what_you_type_while_an_image_is_made_waits_in_the_next_prompt(image_age
         def stop(self):
             pass
 
-    monkeypatch.setattr(repl, "KeyReader", Reader)
+    monkeypatch.setattr(repl_media, "KeyReader", Reader)  # make_image reads the keys while the job runs
     respond(image_agent, "a lighthouse")
     assert image_agent.unsent == "a cat on a windowsill" and "is in the prompt below" in text(image_agent)
 
