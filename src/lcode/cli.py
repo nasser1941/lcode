@@ -597,18 +597,27 @@ def cmd_bench(args) -> None:
     if args.harbor:
         from lcode import harbor_bench
 
+        if args.attempts is None:
+            args.attempts = harbor_bench.ATTEMPTS
         sys.exit(harbor_bench.command(args, console))
     if args.list:
         bench.print_tasks(console)
         return
+    rounds = max(1, args.rounds)
     try:
         cfg = config.load()
         context = parse_context(args.context) if args.context else bench.DEFAULT_CONTEXT
-        tasks = bench.select_tasks(args.tasks) * max(1, args.rounds)
+        tasks = bench.select_tasks(args.tasks) * (rounds if args.session else 1)
     except (ConfigError, ValueError) as e:
         fail(str(e))
     if args.timeout <= 0:
         fail("--timeout must be a positive number of seconds")
+    if args.attempts is not None and args.attempts < 1:
+        fail("--attempts must be at least 1")
+    if args.session:  # an attempt is one long conversation
+        attempts = args.attempts or 1
+    else:  # --rounds is what --attempts was called before 0.57
+        attempts = args.attempts or (rounds if rounds > 1 else bench.DEFAULT_ATTEMPTS)
     ollama = connect(cfg)
     hw = detect()
     version = check_ollama(ollama, hw)
@@ -663,8 +672,9 @@ def cmd_bench(args) -> None:
             embed_model=cfg["embed_model"] if args.code_search else "off",
         )
         run = bench.run_model(
-            ollama, name, settings, tasks, console, args.timeout, args.keep, args.verbose, args.session, args.retry
-        )
+            ollama, name, settings, tasks, console, args.timeout, args.keep, args.verbose, args.session, args.retry,
+            attempts,
+        )  # fmt: skip
         runs.append(run)
         if run.interrupted:
             break
@@ -951,7 +961,12 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
         choices=["dev", "held-out"],
         help="public benchmarks instead: a slice of Terminal-Bench 2.0 and SWE-bench Verified, run with Harbor",
     )
-    p.add_argument("--attempts", type=int, default=3, help="with --harbor: attempts per task (default: 3, for pass^3)")
+    p.add_argument(
+        "--attempts",
+        type=int,
+        help="attempts per task, each in a new folder and conversation (default: 3, for pass@1 and pass^3; "
+        "with --session: 1)",
+    )
     p.add_argument(
         "--agent",
         choices=["lcode", "claude-code", "opencode", "codex"],
@@ -969,7 +984,11 @@ def build_subparsers() -> dict[str, argparse.ArgumentParser]:
         help="run all tasks in one conversation, to test a long session and its context management",
     )
     p.add_argument(
-        "--rounds", type=int, default=1, help="run the tasks this many times (with --session: a longer session)"
+        "--rounds",
+        type=int,
+        default=1,
+        help="with --session: the tasks this many times in the conversation, for a longer session "
+        "(without --session: the same as --attempts)",
     )
     p.add_argument("--repo-map", action="store_true", help="give the model the repository map (off by default)")
     p.add_argument("--code-search", action="store_true", help="index each task's folder and offer semantic code search")

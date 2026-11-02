@@ -6,6 +6,15 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **`lcode bench` makes three attempts at each task** (#199), each in a new folder and conversation,
+  and reports pass@1, pass^3 and how many tasks passed in each attempt, counted as in the public
+  benchmarks. One run of each task was within the noise between runs. `--attempts 1` runs each task
+  once, as before, in a third of the time. In the summary, a task's time is per attempt, on average.
+  The JSON adds `attempts`, `summary` and each task's `attempt`. Without `--session`, `--rounds` is
+  another name for `--attempts`.
+
 ## [0.56.0] - 2026-11-02
 
 ### Added

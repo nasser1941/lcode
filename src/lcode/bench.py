@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -38,6 +39,7 @@ from lcode.ollama import Ollama, OllamaError
 SCHEMA_VERSION = 1
 DEFAULT_CONTEXT = 32768  # the same everywhere, so results compare across machines
 DEFAULT_TIMEOUT = 300  # seconds per task
+DEFAULT_ATTEMPTS = 3  # each task's attempts: one run is within the noise between runs
 CHECK_TIMEOUT = 60
 PROBE_WORDS = 3000  # about 4,000 tokens
 PROBE_TEXT = (
@@ -792,6 +794,46 @@ class TaskResult:
     errors_by_tool: dict[str, int] = field(default_factory=dict)  # which tools failed, "malformed" for unreadable calls
     first_passed: bool | None = None  # with --retry: whether the first try passed (None: no retry was needed)
     escalations: int = 0  # times the stronger model was asked (--escalate)
+    attempt: int = 1  # which of the task's attempts this was (--attempts)
+
+
+@dataclass
+class PassRates:
+    """How often the tasks passed, as `lcode bench --harbor` counts it (lcode.harbor_bench.summarize)."""
+
+    tries: int  # k: each task's tries, its attempts (times the rounds of a --session)
+    pass_at_1: float | None  # the share of tries that passed, averaged over the tasks
+    pass_all: float | None  # pass^k: the share of tasks that passed every try (of those with all k)
+    attempts: list[tuple[int, int]]  # (passed, tasks run) in each attempt, in order
+
+    @property
+    def runs(self) -> list[float]:
+        """The pass rate of each attempt that ran every task."""
+        full = max((ran for _, ran in self.attempts), default=0)
+        return [passed / ran for passed, ran in self.attempts if ran == full and ran]
+
+    @property
+    def spread(self) -> float | None:
+        runs = self.runs
+        return max(runs) - min(runs) if len(runs) > 1 else None
+
+
+def pass_rates(results: list[TaskResult], attempts: int) -> PassRates:
+    tries: dict[str, list[bool]] = {}
+    for result in results:
+        tries.setdefault(result.id, []).append(result.passed)
+    per_attempt = Counter((result.id, result.attempt) for result in results)
+    k = max(1, attempts) * max(per_attempt.values(), default=1)
+    full = [passed for passed in tries.values() if len(passed) >= k]
+    by_attempt: dict[int, list[bool]] = {}
+    for result in results:
+        by_attempt.setdefault(result.attempt, []).append(result.passed)
+    return PassRates(
+        tries=k,
+        pass_at_1=statistics.fmean(statistics.fmean(passed) for passed in tries.values()) if tries else None,
+        pass_all=statistics.fmean(all(passed[:k]) for passed in full) if full else None,
+        attempts=[(sum(passed), len(passed)) for _, passed in sorted(by_attempt.items())],
+    )
 
 
 @dataclass
@@ -812,6 +854,10 @@ class ModelRun:
     session: bool = False  # all tasks in one conversation (--session)
     pruned: int = 0  # times old tool output was removed to make room
     compacted: int = 0  # times the conversation was summarized
+    attempts: int = 1  # each task's attempts, each in a new folder and conversation (--attempts)
+
+    def rates(self) -> PassRates:
+        return pass_rates(self.tasks, self.attempts)
 
     @property
     def passed(self) -> int:
@@ -832,12 +878,19 @@ class ModelRun:
 
     def to_json(self) -> dict:
         data = asdict(self)
+        rates = self.rates()
         data.update(
             passed=self.passed,
             total=len(self.tasks),
             seconds=round(self.seconds, 1),
             generation_tps=self.generation_tps,
             tool_errors=self.tool_errors,
+            summary={
+                "pass_at_1": rates.pass_at_1,
+                f"pass^{rates.tries}": rates.pass_all,
+                "runs": rates.runs,
+                "spread": rates.spread,
+            },
         )
         return data
 
@@ -1034,12 +1087,19 @@ def run_model(
     verbose: bool = False,
     session: bool = False,
     retry: bool = False,
+    attempts: int = 1,
 ) -> ModelRun:
-    run = ModelRun(name, settings.model, settings.context, settings.num_batch, settings.think, session=session)
+    """Run the tasks `attempts` times: every task once, then every task again, each time in a new folder and
+    conversation (with `session`, each attempt is one conversation for all the tasks)."""
+    attempts = max(1, attempts)
+    run = ModelRun(
+        name, settings.model, settings.context, settings.num_batch, settings.think, session=session, attempts=attempts
+    )
     shared: Agent | None = None  # with --session, one conversation for all tasks
     console.print(
         f"\n[bold]{escape(settings.model)}[/] · {format_tokens(settings.context)} context · "
         f"reasoning {'on' if settings.think else 'off'} · {len(tasks)} task{'' if len(tasks) == 1 else 's'}"
+        + (f" · {attempts} attempts each" if attempts > 1 else "")
     )
     options = {"num_ctx": settings.context, **({"num_batch": settings.num_batch} if settings.num_batch else {})}
     started = time.monotonic()
@@ -1065,30 +1125,40 @@ def run_model(
         console.print(f"  [dim]Loaded in {run.load_seconds:.0f}s{where}{reads}[/]")
     elif reads:  # the server loads the model itself
         console.print(f"  [dim]{reads.removeprefix(' · ').capitalize()}[/]")
-    for task in tasks:
-        log = console if verbose else Console(file=io.StringIO(), width=120, force_terminal=False)
-        if session and shared is None:
-            shared = Agent(ollama, settings, Path(tempfile.gettempdir()), console=log)
-        if shared is not None:
-            shared.console = log
-        try:
-            if verbose:
-                console.rule(f"{task.id}: {task.title}")
-                result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared, retry)
-            else:
-                with console.status(Elapsed(f"  {task.id:<13} {task.title}")):
+    pruned = compacted = 0  # in the conversations of the earlier attempts (--session)
+    for attempt in range(1, attempts + 1):
+        if attempts > 1:
+            console.print(f"  [dim]Attempt {attempt} of {attempts}[/]")
+        if shared is not None:  # with --session, each attempt is a conversation of its own
+            pruned, compacted = pruned + shared.pruned, compacted + shared.compacted
+            shared = None
+        for task in tasks:
+            log = console if verbose else Console(file=io.StringIO(), width=120, force_terminal=False)
+            if session and shared is None:
+                shared = Agent(ollama, settings, Path(tempfile.gettempdir()), console=log)
+            if shared is not None:
+                shared.console = log
+            try:
+                if verbose:
+                    console.rule(f"{task.id}: {task.title}")
                     result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared, retry)
-        except KeyboardInterrupt:
-            console.print("  [yellow]Stopped.[/]")
-            run.interrupted = True
+                else:
+                    with console.status(Elapsed(f"  {task.id:<13} {task.title}")):
+                        result = run_task(ollama, settings, task, timeout, log, keep, run.usage, shared, retry)
+            except KeyboardInterrupt:
+                console.print("  [yellow]Stopped.[/]")
+                run.interrupted = True
+                break
+            result.attempt = attempt
+            run.tasks.append(result)
+            mark = "[green]✓[/]" if result.passed else "[red]✗[/]"
+            console.print(
+                f"  {mark} {task.id:<13} {task.title:<32} {result.seconds:>5.0f}s  [dim]{escape(result.detail)}[/]"
+            )
+            if shared is not None:
+                run.pruned, run.compacted = pruned + shared.pruned, compacted + shared.compacted
+        if run.interrupted:
             break
-        run.tasks.append(result)
-        mark = "[green]✓[/]" if result.passed else "[red]✗[/]"
-        console.print(
-            f"  {mark} {task.id:<13} {task.title:<32} {result.seconds:>5.0f}s  [dim]{escape(result.detail)}[/]"
-        )
-        if shared is not None:
-            run.pruned, run.compacted = shared.pruned, shared.compacted
     if run.memory_gb is None:
         run.memory_gb, run.gpu_percent = memory_use(ollama, settings.model)
     # lcode lowers the batch size or context if the GPU runs out of memory; report what was used.
@@ -1103,21 +1173,39 @@ def duration(seconds: float) -> str:
     return f"{int(seconds // 60)}m {seconds % 60:02.0f}s" if seconds >= 60 else f"{seconds:.0f}s"
 
 
+def percent(share: float | None) -> str:
+    return "–" if share is None else f"{share * 100:.0f}%"
+
+
 def summary_rows(runs: list[ModelRun], tasks: list[Task]) -> list[tuple[str, list[str]]]:
     rows = []
-    for task in {t.id: t for t in tasks}.values():  # with --rounds a task runs several times: one row, a mark each
+    for task in {t.id: t for t in tasks}.values():  # a task that ran several times: one row, a mark each
         cells = []
         for run in runs:
             results = [t for t in run.tasks if t.id == task.id]
             marks = "".join("✓" if r.passed else "✗" for r in results)
-            cells.append(f"{marks} {duration(sum(r.seconds for r in results))}" if results else "")
+            each = sum(r.seconds for r in results) / len(results) if results else 0.0  # one try's time, on average
+            cells.append(f"{marks} {duration(each)}" if results else "")
         rows.append((f"{task.id}: {task.title}", cells))
 
     def cell(run: ModelRun, value: str) -> str:
         return "—" if run.error else value
 
+    rows.append(
+        ("Passed", [cell(r, f"{r.passed}/{len(r.tasks)}" + (" (stopped)" if r.interrupted else "")) for r in runs])
+    )
+    rates = [(run, run.rates()) for run in runs]
+    tries = max((rate.tries for _, rate in rates), default=1)
+    if tries > 1:
+        rows += [
+            ("pass@1", [cell(run, percent(rate.pass_at_1)) for run, rate in rates]),
+            (f"pass^{tries}", [cell(run, percent(rate.pass_all)) for run, rate in rates]),
+        ]
+    if any(len(rate.attempts) > 1 for _, rate in rates):
+        rows.append(
+            ("Each attempt", [cell(run, ", ".join(f"{p}/{n}" for p, n in rate.attempts)) for run, rate in rates])
+        )
     rows += [
-        ("Passed", [cell(r, f"{r.passed}/{len(r.tasks)}" + (" (stopped)" if r.interrupted else "")) for r in runs]),
         ("Time", [cell(r, duration(r.seconds)) for r in runs]),
         ("Generation", [cell(r, f"{r.generation_tps:.1f} tok/s" if r.generation_tps else "?") for r in runs]),
         ("Prompt reading", [cell(r, f"{r.prompt_tps:,.0f} tok/s" if r.prompt_tps else "?") for r in runs]),

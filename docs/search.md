@@ -66,7 +66,7 @@ whether it is.
 
 ## Measured
 
-`lcode bench qwen3.6-35b --tasks find-code,find-concept --rounds 3` on a 12 GB laptop. `find-concept`
+`lcode bench qwen3.6-35b --tasks find-code,find-concept --attempts 3` on a 12 GB laptop. `find-concept`
 asks which function computes the pause before a failed upload is sent again, in a 40-file backend
 full of look-alikes (retry policies, job requeue delays, log backoff); the right function's name and
 docstring use none of the question's words.
