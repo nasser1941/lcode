@@ -345,6 +345,35 @@ def test_wide_feature_catches_a_missed_requirement(tmp_path, file, old, new, pro
     assert not result.passed and problem in result.detail
 
 
+def test_wide_feature_takes_any_message_without_budgets_and_any_order_of_categories(tmp_path):
+    files = budgets()
+    files["expenses/cli.py"] = patched(
+        files["expenses/cli.py"],
+        "            for category, value in sorted(budgets.items()):\n",
+        '            if not budgets:\n                print("No budgets set.")\n'
+        "            for category, value in sorted(budgets.items()):\n",
+    )
+    budgeted_first = "sorted(totals.items(), key=lambda item: item[0] not in budgets)"
+    files["expenses/report.py"] = patched(
+        files["expenses/report.py"],
+        "for category, spent in totals.items()]",
+        f"for category, spent in {budgeted_first}]",
+    )
+    result = check("wide-feature", setup("wide-feature", tmp_path, **files))
+    assert result.passed, result.detail
+
+
+def test_wide_feature_wants_the_total_last(tmp_path):
+    files = budgets()
+    files["expenses/report.py"] = patched(
+        files["expenses/report.py"],
+        '    lines.append(f"total: {money(sum(totals.values(), Decimal(0)))}")\n',
+        '    lines.insert(0, f"total: {money(sum(totals.values(), Decimal(0)))}")\n',
+    )
+    result = check("wide-feature", setup("wide-feature", tmp_path, **files))
+    assert not result.passed  # its own tests catch it, and so would the session
+
+
 def test_wide_feature_runs_its_tests(tmp_path):
     files = budgets()
     files["tests/test_cli.py"] = bench_budgets.TEST_CLI  # not updated for the new JSON fields

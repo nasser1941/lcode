@@ -14,6 +14,13 @@ All notable changes to lcode are documented here. The format follows
   drop beyond the noise. Releases that change prompts, tools or context handling now go through it
   on the dev slice: see *Releases* in the contributing guide.
 
+### Fixed
+
+- **`lcode bench`'s `wide-feature` check** failed an attempt whose `budget list` printed a message
+  such as `No budgets set.` without budgets, or whose report listed the budgeted categories first.
+  The task asks for neither behavior, so both pass now. With qwen3.6-35b, this had failed two
+  attempts in three that were otherwise right.
+
 ## [0.58.0] - 2026-11-02
 
 ### Added
