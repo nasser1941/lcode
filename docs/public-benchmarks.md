@@ -97,6 +97,40 @@ Everything is saved in `~/.local/state/lcode/bench/<slice>-<time>/`:
 - Harbor's own results: each attempt's log, the task's test output, and lcode's trace and session.
   `uvx --from harbor harbor view <folder>` browses them.
 
+## Other agents on the same model
+
+`--agent` runs Claude Code, OpenCode or Codex on the same tasks, with the same model, context
+window and time limits, so you can compare them with lcode:
+
+```bash
+lcode bench --harbor dev qwen3.6-35b --context 64k                      # lcode
+lcode bench --harbor dev qwen3.6-35b --context 64k --agent claude-code
+lcode bench --harbor dev qwen3.6-35b --context 64k --agent opencode
+lcode bench --harbor dev qwen3.6-35b --context 64k --agent codex
+```
+
+Harbor installs the agent in each task's container, with approvals off. lcode sets the agent up the
+way `ollama launch` does, with the Ollama on your machine:
+
+- **Claude Code** uses Ollama's Anthropic-compatible API, with the model for every tier (subagents
+  too) and `ollama launch claude`'s settings: no telemetry, error reports or feedback prompts. Like
+  `ollama launch claude`, it doesn't tell Claude Code the context window.
+- **OpenCode** uses an Ollama provider on Ollama's OpenAI-compatible API. The model is marked as a
+  reasoning model, with the limits of its context window.
+- **Codex** uses Ollama's Responses API and `ollama launch codex`'s model catalog. That catalog gives
+  local models no base instructions, so Codex runs without its own system prompt, as it does with
+  `ollama launch codex`.
+
+These agents' APIs can't set the context window per request, and Ollama's default is small (4K on
+GPUs under 24 GB), so lcode makes a copy of the model with the context set:
+`lcode-qwen3.6-35b-64k` for 64K. It uses the model's files, so nothing is downloaded, and
+`ollama rm lcode-qwen3.6-35b-64k` removes it. Ollama recommends at least 64K for these agents.
+
+The time per task leaves out installing the agent, which Harbor does in every task's container: up to
+three minutes for Claude Code, so its runs take longer overall. The results go to
+`~/.local/state/lcode/bench/<slice>-<agent>-<time>/`, and `lcode-bench.json` adds the agent and its
+version.
+
 ## With Harbor directly
 
 `lcode.harbor:Lcode` is an ordinary Harbor agent, so every Harbor dataset and option works:

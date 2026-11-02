@@ -225,6 +225,109 @@ def test_lcode_bench_harbor_runs_harbor_then_reports_and_saves(capsys, monkeypat
     assert report["results"][0]["tokens_in"] == 2000 and report["summary"]["pass_at_1"] == 1.0
 
 
+def test_other_agents_are_set_up_like_ollama_launch_sets_them_up(tmp_path):
+    model = harbor_bench.variant_name("lcode-qwen3.6-35b", 65536)
+    assert model == "lcode-qwen3.6-35b-64k" and harbor_bench.variant_name("qwen3.6:35b-a3b:latest", 32768).endswith(
+        "-32k"
+    )
+    show = {"capabilities": ["completion", "tools", "thinking"], "thinking": {"values": [False, True], "default": True}}
+    claude, no_catalog = harbor_bench.agent_setup("claude-code", model, 65536, show, tmp_path)
+    assert no_catalog is None and claude[:2] == ["--ae", "ENABLE_CLAUDEAI_MCP_SERVERS=false"]
+    assert "DISABLE_ERROR_REPORTING=1" in claude and claude.count("--ae") == len(harbor_bench.CLAUDE_CODE_ENV)
+    opencode, _ = harbor_bench.agent_setup("opencode", model, 65536, show, tmp_path)
+    provider = json.loads(opencode[1].removeprefix("opencode_config="))["provider"]["ollama"]
+    assert provider["options"]["baseURL"] == "http://host.docker.internal:11434/v1"
+    entry = provider["models"][model]
+    assert entry["reasoning"] and entry["limit"] == {"context": 65536, "input": 65536, "output": 8192}
+    codex, catalog = harbor_bench.agent_setup("codex", model, 65536, show, tmp_path)
+    config = json.loads(codex[1].removeprefix("config="))
+    assert config["model_providers"]["ollama-launch"]["wire_api"] == "responses"
+    assert config["model_catalog_json"] == harbor_bench.CODEX_CATALOG
+    [known] = json.loads(catalog.read_text())["models"]
+    assert (known["slug"], known["context_window"], known["default_reasoning_level"]) == (model, 65536, "high")
+    assert [level["effort"] for level in known["supported_reasoning_levels"]] == ["none", "high"]
+    overlay = harbor_bench.agent_overlay(True, catalog)
+    assert "network_mode: bridge" in overlay and "host.docker.internal:host-gateway" in overlay
+    assert f"{catalog}:{harbor_bench.CODEX_CATALOG}:ro" in overlay
+    assert "volumes" not in harbor_bench.agent_overlay(False) and "network_mode" not in harbor_bench.agent_overlay(
+        False
+    )
+    argv = harbor_bench.harbor_argv(
+        "terminal-bench", ["fix-git"], model, tmp_path, "terminal-bench", context=65536, agent="codex",
+        agent_args=codex, overlay=tmp_path / "overlay.yaml",
+    )  # fmt: skip
+    line = " ".join(argv)
+    assert "-a codex -m ollama/lcode-qwen3.6-35b-64k" in line and "context=65536" not in line
+    assert argv[argv.index("--extra-docker-compose") - 2 :][:2] == codex  # the agent's options, then the overlay
+    assert "lcode" not in argv[: argv.index("run")]  # Harbor alone: lcode's agent isn't needed
+
+
+def test_lcode_bench_harbor_runs_another_agent_on_the_model_at_the_context(capsys, monkeypatch):
+    from lcode import cli, config, hardware, ollama, update
+
+    monkeypatch.setattr(shutil, "which", lambda name, *a, **k: f"/usr/bin/{name}")
+    monkeypatch.setattr(update, "docker_available", lambda: True)
+    monkeypatch.setattr(update, "lcode_install", lambda *a, **k: update.Install("uvx"))
+    monkeypatch.setattr(hardware, "detect", lambda: hardware.Hardware("linux", "test CPU", 32.0))
+    installed = [{"name": "lcode-qwen3.6-35b:latest"}]
+    created = []
+
+    def create_variant(self, name, base, parameters):
+        created.append((name, base, parameters))
+        installed.append({"name": f"{name}:latest"})
+
+    monkeypatch.setattr(ollama.Ollama, "list_models", lambda self: installed)
+    monkeypatch.setattr(ollama.Ollama, "create_variant", create_variant)
+    show = {"capabilities": ["completion", "tools", "thinking"], "thinking": {"values": [False, True], "default": True}}
+    monkeypatch.setattr(ollama.Ollama, "show", lambda self, model: show)
+    runs = []
+
+    def harbor(argv, env=None):
+        runs.append((argv, env))
+        job = Path(argv[argv.index("-o") + 1]) / argv[argv.index("--job-name") + 1]
+        write_trial(job, "prove-plus-comm__a", "terminal-bench/prove-plus-comm", 1.0, 0, (9000, 300))
+        result = job / "prove-plus-comm__a" / "result.json"
+        result.write_text(json.dumps({**json.loads(result.read_text()), "agent_info": {"version": "0.166.0"}}))
+        return 0
+
+    monkeypatch.setattr(subprocess, "call", harbor)
+    bench = ["bench", "--harbor", "dev", "qwen3.6-35b", "--tasks", "prove-plus-comm", "--attempts", "1", "--ctx", "64k"]
+    with pytest.raises(SystemExit) as done:
+        cli.main([*bench, "--agent", "codex"])
+    assert done.value.code == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert created == [("lcode-qwen3.6-35b-64k", "lcode-qwen3.6-35b", {"num_ctx": 65536})]
+    assert "Made lcode-qwen3.6-35b-64k" in out and "codex 0.166.0 on lcode-qwen3.6-35b-64k" in out
+    again = harbor_bench.context_variant(config.load(), "qwen3.6-35b", 65536, Console(file=io.StringIO()))
+    assert again == ("lcode-qwen3.6-35b-64k", show) and len(created) == 1  # made once
+    argv, env = runs[0]
+    assert "-a codex -m ollama/lcode-qwen3.6-35b-64k" in " ".join(argv)
+    assert env["OLLAMA_BASE_URL"] == "http://host.docker.internal:11434" and env["OLLAMA_API_KEY"]
+    overlay = Path(argv[argv.index("--extra-docker-compose") + 1])
+    assert "codex-models.json" in overlay.read_text() and (overlay.parent / "codex-models.json").is_file()
+    saved = sorted((config.STATE_DIR / "bench").glob("dev-codex-*/lcode-bench.json"))
+    report = json.loads(saved[-1].read_text())
+    assert (report["agent"], report["agent_version"], report["ollama_model"]) == (
+        "codex",
+        "0.166.0",
+        "lcode-qwen3.6-35b-64k",
+    )
+    assert report["results"][0]["tokens_in"] == 9000
+
+
+def test_another_agent_needs_the_model_installed(capsys, monkeypatch):
+    from lcode import cli, config, ollama, update
+
+    monkeypatch.setattr(shutil, "which", lambda name, *a, **k: f"/usr/bin/{name}")
+    monkeypatch.setattr(update, "docker_available", lambda: True)
+    monkeypatch.setattr(ollama.Ollama, "list_models", lambda self: [])
+    with pytest.raises(SystemExit) as done:
+        cli.main(["bench", "--harbor", "dev", "qwen3.6-35b", "--agent", "opencode"])
+    out = " ".join(capsys.readouterr().out.split())
+    assert done.value.code == 1 and "is not installed yet. Run: lcode setup qwen3.6-35b" in out
+    assert not list((config.STATE_DIR / "bench").glob("dev-opencode-*"))  # no empty results folder
+
+
 def test_lcode_bench_harbor_lists_its_slice_and_refuses_other_tasks(capsys, monkeypatch):
     from lcode import cli, update
 

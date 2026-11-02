@@ -6,6 +6,14 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Other agents on the same model** (#198): `lcode bench --harbor dev --agent claude-code`
+  (or `opencode`, `codex`) runs that agent on the same tasks, model and context as lcode, for a
+  comparison. Each is set up the way `ollama launch` sets it up, with approvals off. Their APIs can't
+  set the context window, so lcode makes a copy of the model with it set (`lcode-qwen3.6-35b-64k`),
+  which uses the model's files. `lcode-bench.json` records the agent and its version.
+
 ## [0.55.0] - 2026-11-02
 
 ### Added
