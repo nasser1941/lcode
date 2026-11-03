@@ -10,6 +10,10 @@ All notable changes to lcode are documented here. The format follows
 
 - The Valohai MCP server failed to describe an execution with an output that has no name; it now
   shows it as `?`. Found by the type checks that CI now runs on `src/lcode` (#200).
+- **Cancelling in an editor right after sending a request** (lcode acp) could be lost: the request then
+  ran to the end. The editor's messages are handled in threads of their own, and the request's own thread
+  reset the cancel when it started late, on a busy machine. The cancel now holds. This was also why
+  `tests/test_acp.py` failed now and then under load (#200).
 
 ## [0.59.0] - 2026-11-03
 
