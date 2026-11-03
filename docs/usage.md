@@ -305,8 +305,8 @@ lcode config set escalate_price 3/15                # dollars per million tokens
 
 **When.** lcode offers it when the [loop breaker](how-it-works.md#when-the-model-repeats-itself)
 would stop the request, when the model's replies [go nowhere](how-it-works.md#when-a-reply-goes-nowhere)
-twice, and when the project's [checks](#checks-before-done) fail twice in a row after the model's
-fixes, at most once per request. Not for a [site this machine can't reach](how-it-works.md#when-a-site-cant-be-reached):
+twice in a row (or four times in one request), and when the project's [checks](#checks-before-done)
+fail twice in a row after the model's fixes, at most once per request. Not for a [site this machine can't reach](how-it-works.md#when-a-site-cant-be-reached):
 a stronger model can't reach it either. You can also ask at any time: `/escalate`, or
 `/escalate the window still grows` to say what's wrong.
 

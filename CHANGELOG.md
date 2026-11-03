@@ -6,6 +6,16 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **After a reply that goes nowhere** (it went round in circles, filled the context before it said
+  anything, or was empty), the model's next reply runs with thinking off (with Ollama), so it acts
+  instead of starting the same deliberation over. lcode now stops the request when two replies in a row go
+  nowhere, or four in one request, instead of the second one anywhere in it. On the dev slice at 32K,
+  16 of 150 attempts were stopped this way, and all of them failed: 9 because the second chance went
+  round in circles again (all 6 `polyglot-rust-c` attempts among them), and 7 that had recovered and
+  worked on until another reply went nowhere much later (#241).
+
 ### Fixed
 
 - The Valohai MCP server failed to describe an execution with an output that has no name; it now

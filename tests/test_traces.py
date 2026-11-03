@@ -134,6 +134,7 @@ def test_a_reply_lcode_stopped_gets_an_estimate_of_its_tokens(make_agent, capsys
     assert stopped["estimated_out"] == len(stopped["reply"]["thinking"]) // 3 > 0  # what streamed until it stopped
     assert stopped["estimated_in"] > 1000  # at least the system prompt and the tools
     assert "estimated_in" not in answered and (answered["tokens_in"], answered["tokens_out"]) == (1000, 50)
+    assert "think" not in stopped and answered["think"] is False  # asked again without thinking (#241)
     end = events[-1]
     assert (end["tokens_in"], end["tokens_out"]) == (1000, 50)
     assert (end["estimated_in"], end["estimated_out"]) == (stopped["estimated_in"], stopped["estimated_out"])

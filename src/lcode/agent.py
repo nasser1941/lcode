@@ -42,7 +42,8 @@ from lcode.tool_helpers import ToolError, is_binary, tree
 if TYPE_CHECKING:
     pass
 
-MAX_STALLS = 2  # replies that go round in circles or say nothing, per request, before lcode stops it
+MAX_STALLS = 2  # replies in a row that go round in circles or say nothing, before lcode stops the request
+MAX_STALLS_PER_REQUEST = 4  # such replies in one request, even with work in between
 STALLED = {
     "circles": "the reply went round in circles, so lcode stopped it",
     "cut_off": "the reply filled the context before it said anything",
@@ -50,15 +51,16 @@ STALLED = {
 }
 
 
-def stall_note(trouble: str) -> str:
+def stall_note(trouble: str, thinking_off: bool = False) -> str:
     """What the model is told after a reply that went round in circles or ended without a word."""
     first = {
         "circles": "Your last reply went round in circles (the same thoughts over and over), so lcode stopped it.",
         "cut_off": "Your last reply filled the rest of the context before you said anything.",
         "": "Your last reply was empty.",
     }[trouble]
+    off = ": thinking is off for this reply" if thinking_off else ""
     return (
-        f"[lcode] {first} Don't deliberate at length now. Either make your next tool call, or, if you're stuck, "
+        f"[lcode] {first} Don't deliberate at length now{off}. Either make your next tool call, or, if you're stuck, "
         "tell the user in a few lines what you did, what fails, and what they could do. If you were about to check "
         "something by running it, run it now instead of reasoning about it: for a window, take a screenshot (with "
         "actions for clicks or keys)."
@@ -280,7 +282,8 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
         malformed = 0
         looping = ""  # the call the model kept repeating, when lcode stopped the request for it
         blocked = None  # the site that couldn't be reached, when lcode stopped the request for it
-        stalls = 0  # replies that went round in circles or ended without a word
+        stalls = 0  # replies in a row that went round in circles or ended without a word
+        stalled = 0  # such replies in this request
         commands: list[str] = []  # shell commands run in this request
         scripts_noted = False  # the model was told about scripts it wrote and never ran
         tools_used: set[str] = set()  # tools called in this request
@@ -294,7 +297,8 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
                 self.save()  # a crash or a closed terminal loses at most this step
             self.maybe_compact()
             try:
-                reply = self.assistant_step()
+                # After a reply that went nowhere, the next one runs without thinking, so the model acts.
+                reply = self.assistant_step(think=not (stalls and self.can_skip_thinking()))
                 calls = reply.get("tool_calls") or []
                 for i, call in enumerate(calls):
                     call.setdefault("id", f"call_{step}_{i}")  # so a tool result can name its call
@@ -336,15 +340,22 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
                 continue
             if not calls and (self.reply_trouble == "circles" or not (reply.get("content") or "").strip()):
                 stalls += 1
+                stalled += 1
                 dropped = self.messages.pop()  # no answer, and circles would only fill the context
                 kept = self.keep_dropped(dropped)
-                if stalls < MAX_STALLS:
+                if stalls < MAX_STALLS and stalled < MAX_STALLS_PER_REQUEST:
+                    # The next reply runs with thinking off: asked again with it on, the model mostly started
+                    # the same deliberation over (all 6 polyglot-rust-c attempts on the dev slice, #241).
+                    pause = self.settings.think and self.can_skip_thinking()
+                    off = ", with thinking off" if pause else ""
                     self.console.print(
-                        Text(f"  ⎿ {STALLED[self.reply_trouble]}: asking for a short answer{kept}", style="yellow")
+                        Text(f"  ⎿ {STALLED[self.reply_trouble]}: asking for a short answer{off}{kept}", style="yellow")
                     )
-                    self.messages.append({"role": "user", "content": stall_note(self.reply_trouble)})
+                    note = stall_note(self.reply_trouble, thinking_off=pause)
+                    self.messages.append({"role": "user", "content": note})
                     continue
-                why = "its replies went round in circles or ended without an answer, twice in this request"
+                times = "twice in a row" if stalls >= MAX_STALLS else f"{stalled} times in this request"
+                why = f"its replies went round in circles or ended without an answer, {times}"
                 if not escalated and self.can_escalate():
                     escalated = True
                     advice = self.ask_stronger(why)
@@ -355,12 +366,13 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
                 self.turn_status = "loop"
                 self.console.print(
                     Text(
-                        "Stopped: the model's replies went round in circles or ended without an answer, twice in "
-                        f"this request{kept}. Try again with a smaller step, or tell it what to do differently.",
+                        f"Stopped: the model's replies went round in circles or ended without an answer, {times}"
+                        f"{kept}. Try again with a smaller step, or tell it what to do differently.",
                         style="yellow",
                     )
                 )
                 return
+            stalls = 0  # it acted or answered: a later reply that goes nowhere starts the count again
             if not calls:
                 if self.reply_trouble == "cut_off":
                     self.say(
