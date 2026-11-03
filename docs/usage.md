@@ -351,11 +351,21 @@ since last time with `bash_output`, and stops it with `bash_stop`.
 ```
 
 - `/jobs` lists the background commands; `/jobs stop 1` stops one.
-- They all stop when the session ends.
+- They stop when the session ends, except **kept** ones. When you ask for a service that stays up
+  after lcode is done ("start the docs server and leave it running"), the model adds
+  `keep: true`. A kept command writes its output to a log in `~/.local/state/lcode/jobs/`, and at
+  the end lcode says what it left running and how to stop it:
+
+  ```text
+  Left job 1 running, as asked: mkdocs serve (process group 48211: `kill -- -48211` stops it; its
+  output is in ~/.local/state/lcode/jobs/20261103-141502-3fa9c1.log)
+  ```
+
 - Anything else a command starts with `&` is stopped when that command ends. Only background
   commands keep running, so no process outlives the session unnoticed.
 - Background commands ask for permission like any other command, and run in the
-  [sandbox](sandbox.md) when it's on.
+  [sandbox](sandbox.md) when it's on. A command in the sandbox can't be kept: the sandbox stops
+  with lcode.
 
 ## What's happening under the hood
 

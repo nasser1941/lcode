@@ -480,7 +480,7 @@ def jobs_command(agent: Agent, arg: str) -> None:
         style = "green" if job.running else "dim"
         c.print(f"[{style}]{escape(describe(job))}[/]")
     if agent.jobs.running():
-        c.print("[dim]/jobs stop <id> stops one; they all stop when the session ends.[/]")
+        c.print("[dim]/jobs stop <id> stops one; they stop when the session ends, except kept ones.[/]")
 
 
 def git_command(agent: Agent, cmd: str, arg: str) -> None:

@@ -18,7 +18,7 @@ from rich.console import Group
 from rich.syntax import Syntax
 from rich.text import Text
 
-from lcode import secretscan
+from lcode import config, secretscan
 from lcode.context import OutputSpool
 from lcode.jobs import JobError, describe, stop_leftovers
 from lcode.permissions import bash_key, is_read_only
@@ -32,8 +32,10 @@ class ShellTools(ToolboxBase):
     """Toolbox's shell tools."""
 
     # -- shell
-    def t_bash(self, command: str, timeout: int = 180, background: bool = False) -> str:
+    def t_bash(self, command: str, timeout: int = 180, background: bool = False, keep: bool = False) -> str:
         sandbox = self.agent.sandbox
+        keep = keep is True or str(keep).lower() == "true"  # a kept job is a background job
+        background = keep or background is True or str(background).lower() == "true"
         if self.agent.planning() and not is_read_only(command):
             raise ToolError(f"{BLOCKED} Until then, only read-only commands run (ls, cat, grep, git log, …).")
         if self.agent.no_changes and not is_read_only(command):
@@ -75,9 +77,10 @@ class ShellTools(ToolboxBase):
                 return feedback
         if not is_read_only(command):
             self.agent.checkpoint()
-        self.console.print(Text(f"  $ {command}" + ("  (in the background)" if background else ""), style="bold cyan"))
-        if background is True or str(background).lower() == "true":
-            return self._background(command)
+        where = "  (in the background, kept after lcode exits)" if keep else "  (in the background)"
+        self.console.print(Text(f"  $ {command}" + (where if background else ""), style="bold cyan"))
+        if background:
+            return self._background(command, keep)
         marker = f"__lcode_cwd_{secrets.token_hex(8)}__"
         script = f"{command}\n__lcode_ec=$?\nprintf '\\n{marker}%s\\n' \"$(pwd -P)\"\nexit $__lcode_ec\n"
         token = ""
@@ -175,7 +178,8 @@ class ShellTools(ToolboxBase):
         if (not sandbox and stop_leftovers(proc.pid)) or held_open:
             status += (
                 "\n[lcode stopped what this command left running (started with &). To keep a process running, "
-                "start it with background=true: then bash_output reads its output and bash_stop stops it]"
+                "start it with background=true: then bash_output reads its output and bash_stop stops it. Add "
+                "keep=true for a service the user wants left running after you finish]"
             )
         if last and last != "\n":  # the blank line printed before the marker isn't output
             out.add(last)
@@ -202,8 +206,8 @@ class ShellTools(ToolboxBase):
         self.console.print(Text(f"  exit code {code}", style="green" if code == 0 else "red"))
         return out.text() + status + f"\n[exit code: {code}]"
 
-    def _background(self, command: str) -> str:
-        sandbox, kill = self.agent.sandbox, None
+    def _background(self, command: str, keep: bool = False) -> str:
+        sandbox, kill, log, note = self.agent.sandbox, None, None, ""
         if sandbox:
             try:
                 with self.console.status("Starting the sandbox…"):
@@ -212,9 +216,16 @@ class ShellTools(ToolboxBase):
                 return f"Error: the sandbox can't start, so the command didn't run: {e}"
             argv, token = sandbox.exec_argv(self.agent.cwd, command)
             kill = lambda: sandbox.kill(token)  # noqa: E731
+            if keep:
+                note = (
+                    "\n[It can't be kept: it runs in the sandbox, which stops when lcode exits, and the job with it. "
+                    "If the user needs it to stay up, tell them]"
+                )
         else:
             argv = ["bash", "-c", command]
-        job = self.agent.jobs.start(argv, self.agent.cwd, command, kill)
+            if keep:  # its own log, so it doesn't depend on lcode reading its output
+                log = config.STATE_DIR / "jobs" / f"{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}.log"
+        job = self.agent.jobs.start(argv, self.agent.cwd, command, kill, log=log)
         first = job.new_output(MAX_TOOL_OUTPUT // 3).rstrip()
         for line in first.splitlines()[:10]:
             self.console.print(Text("    " + line[:300], style="dim"))
@@ -224,10 +235,15 @@ class ShellTools(ToolboxBase):
                 f"{first or '(no output)'}"
             )
         self.console.print(Text(f"  ⎿ background job {job.id}, /jobs to see it", style="dim"))
+        lasts = (
+            f"it keeps running while you work, and after lcode exits (its output also goes to {log})"
+            if log
+            else "it keeps running while you work"
+        )
         return (
-            f"Started background job {job.id}: it keeps running while you work. Read its new output with "
+            f"Started background job {job.id}: {lasts}. Read its new output with "
             f'bash_output(id="{job.id}") and stop it with bash_stop(id="{job.id}") when it\'s no longer needed.\n'
-            f"Output so far:\n{first or '(none yet)'}"
+            f"Output so far:\n{first or '(none yet)'}{note}"
         )
 
     def t_bash_output(self, id: str) -> str:

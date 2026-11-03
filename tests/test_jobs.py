@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from conftest import call, output, reply
-from lcode import api, jobs, notify, planning
+from lcode import api, config, jobs, notify, planning
 from lcode.hardware import Hardware
 from lcode.repl import handle_command
 
@@ -95,6 +95,65 @@ def test_jobs_stop_with_the_session_and_from_jobs(make_agent, repo):
     assert not agent.jobs.running() and "Stopped 1 background job(s)." in output(agent)
 
 
+def test_kept_jobs_log_their_output_and_are_left_out_of_stop_all(tmp_path):
+    pool = jobs.Jobs()
+    server = pool.start(["bash", "-c", "echo first; sleep 60"], tmp_path, "server", log=tmp_path / "logs" / "s.log")
+    watcher = pool.start(["bash", "-c", "sleep 60"], tmp_path, "watcher")
+    try:
+        assert server.kept and not watcher.kept and (tmp_path / "logs" / "s.log").read_text() == "first\n"
+        assert "first" in server.new_output(1000) and jobs.describe(server).endswith(", kept): server")
+        assert pool.stop_all() == 1 and server.running and not watcher.running
+        assert pool.kept() == [server]
+    finally:
+        assert pool.stop_all(kept=True) == 1
+    assert not server.running and pool.kept() == []
+    quick = pool.start(["bash", "-c", "echo last words"], tmp_path, "quick", log=tmp_path / "quick.log")
+    assert wait_for(lambda: quick.ended) and "last words" in quick.output  # read after it ended, too
+    split = "printf '\\xc3'; sleep 0.3; printf '\\xa9t\\xc3\\xa9\\n'"  # "été", its first "é" in two writes
+    halves = pool.start(["bash", "-c", split], tmp_path, "halves", log=tmp_path / "halves.log")
+    assert wait_for(lambda: halves.ended) and halves.output == "été\n"
+
+
+def test_a_kept_job_outlives_the_session(make_agent, repo):
+    """A service the user asked to leave running (keep=true) writes to its own log, not to lcode, and keeps running
+    when the session ends: lcode says how to stop it."""
+    (repo / "tick.sh").write_text("i=0; while true; do echo tick $i; i=$((i+1)); sleep 0.05; done\n")
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("bash", command="bash tick.sh", background=True, keep=True)]),
+            reply(tool_calls=[call("bash_output", id="1")]),
+            reply("It's running, and stays up."),
+        ]
+    )
+    agent.run_turn("start the ticker and leave it running")
+    started, read = [m["content"] for m in agent.messages if m["role"] == "tool"]
+    job = agent.jobs.get("1")
+    try:
+        assert job.kept and job.log is not None and job.log.parent == config.STATE_DIR / "jobs"
+        assert "and after lcode exits" in started and str(job.log) in started
+        assert read.startswith("[job 1 (running, ") and ", kept): bash tick.sh" in read and "tick" in read
+        assert "(in the background, kept after lcode exits)" in output(agent)
+        api.close_agent(agent)
+        text = " ".join(output(agent).split())
+        assert job.running and "Stopped" not in text
+        assert "Left job 1 running, as asked: bash tick.sh" in text and f"kill -- -{job.proc.pid}" in text
+        size = job.log.stat().st_size
+        assert wait_for(lambda: job.log.stat().st_size > size)  # still ticking
+    finally:
+        agent.jobs.stop_all(kept=True)
+    assert not job.running
+
+
+def test_keep_alone_starts_a_kept_background_job(make_agent, repo):
+    agent = make_agent()
+    result = agent.tools.run("bash", {"command": "sleep 30", "keep": "true"})
+    try:
+        assert result.startswith("Started background job 1: it keeps running while you work, and after lcode exits")
+        assert agent.jobs.get("1").kept
+    finally:
+        agent.jobs.stop_all(kept=True)
+
+
 def test_what_a_command_leaves_running_is_stopped(make_agent, repo):
     agent = make_agent(
         [
@@ -106,7 +165,7 @@ def test_what_a_command_leaves_running_is_stopped(make_agent, repo):
     agent.run_turn("start a ticker")
     first, second = [m["content"] for m in agent.messages if m["role"] == "tool"]
     assert "started" in first and "lcode stopped what this command left running" in first
-    assert "background=true" in first
+    assert "background=true" in first and "keep=true for a service the user wants left running" in first
     size = (repo / "ticks.log").stat().st_size
     time.sleep(0.3)
     assert (repo / "ticks.log").stat().st_size == size  # it really stopped
