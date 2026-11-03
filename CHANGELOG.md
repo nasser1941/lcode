@@ -6,6 +6,13 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The Valohai MCP server failed to describe an execution with an output that has no name; it now
+  shows it as `?`. Found by the type checks that CI now runs on `src/lcode` (#200).
+
+## [0.59.0] - 2026-11-03
+
 ### Added
 
 - **`lcode bench --compare BEFORE AFTER`** (#199) compares two `--harbor` results: the tasks whose
@@ -20,8 +27,6 @@ All notable changes to lcode are documented here. The format follows
   such as `No budgets set.` without budgets, or whose report listed the budgeted categories first.
   The task asks for neither behavior, so both pass now. With qwen3.6-35b, this had failed two
   attempts in three that were otherwise right.
-- The Valohai MCP server failed to describe an execution with an output that has no name; it now
-  shows it as `?`. Found by the type checks that CI now runs on `src/lcode` (#200).
 
 ## [0.58.0] - 2026-11-02
 
@@ -1259,7 +1264,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.58.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.59.0...HEAD
+[0.59.0]: https://github.com/nasser1941/lcode/compare/v0.58.0...v0.59.0
 [0.58.0]: https://github.com/nasser1941/lcode/compare/v0.57.0...v0.58.0
 [0.57.0]: https://github.com/nasser1941/lcode/compare/v0.56.0...v0.57.0
 [0.56.0]: https://github.com/nasser1941/lcode/compare/v0.55.0...v0.56.0
