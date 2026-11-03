@@ -12,7 +12,7 @@ import pytest
 
 from comfy_standin import FLUX, StandIn, tiny_png
 from conftest import output
-from lcode import media, media_cloud
+from lcode import clips, media, media_cloud, media_video
 from lcode import media_catalog as catalog
 from lcode.hardware import Hardware
 from lcode.repl import handle_command
@@ -212,7 +212,7 @@ def test_a_clip_is_made_waited_for_and_downloaded(agent, xai):
 def test_a_clip_between_two_frames_is_made_locally(agent, xai, monkeypatch):
     agent.settings.mode = "video"
     called = {}
-    monkeypatch.setattr(media, "generate_video", lambda agent, job, *a, **k: called.setdefault("job", job))
+    monkeypatch.setattr(media_video, "generate_video", lambda agent, job, *a, **k: called.setdefault("job", job))
     (agent.cwd / "end.png").write_bytes(tiny_png())
     media.request(agent, "@photo.png @end.png the sun sets", ask=Asked())
     assert len(called["job"]["sources"]) == 2 and xai.calls == []
@@ -260,4 +260,4 @@ def test_shapes_the_provider_knows():
     assert media_cloud.ratio("1344x768", media_cloud.IMAGE_RATIOS) == "16:9"
     assert media_cloud.ratio("21:9", media_cloud.VIDEO_RATIOS) == "16:9"  # the nearest a clip can have
     assert media_cloud.ratio("5:4", media_cloud.IMAGE_RATIOS) == "4:3"
-    assert media.mp4_size(media.Path(__file__)) == (0, 0)  # "tkhd" in a file that isn't an MP4
+    assert clips.mp4_size(media.Path(__file__)) == (0, 0)  # "tkhd" in a file that isn't an MP4

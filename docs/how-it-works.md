@@ -181,14 +181,14 @@ the Ollama server you configure, it only contacts the web when the model searche
 
 | Module | Responsibility |
 |---|---|
-| `cli.py` | Entry point, subcommands, model and context resolution |
-| `repl.py` | Prompt, key bindings, slash commands, status bar |
-| `agent.py` | System prompt, streaming, tool loop, compaction, sessions |
-| `tools.py` | Tool schemas and implementations |
+| `cli.py`, `cli_args.py`, `doctor.py` | Entry point, subcommands, model and context resolution; the options; `lcode doctor` |
+| `repl.py` | Prompt, key bindings, status bar, and slash commands, with the model, media, memory and checkpoint, and session commands in `repl_models.py`, `repl_media.py`, `repl_history.py` and `repl_sessions.py` |
+| `agent.py` | The tool loop. `Agent`'s state is in `agent_base.py`, and its system prompt and tools, model calls, context window, sessions and checks in `agent_prompt.py`, `agent_model.py`, `agent_context.py`, `agent_sessions.py` and `agent_checks.py` |
+| `tools.py` | The tools and running them, with the schemas in `tool_schemas.py`, what they share in `tool_helpers.py` and `tools_base.py`, and the file and shell tools in `tools_edit.py` and `tools_shell.py` |
 | `permissions.py` | Approval prompts and the read-only allowlist |
 | `servers/` | The MCP servers lcode ships for services without one: Encord, Valohai |
 | `mcp/` | MCP client: stdio and HTTP transports, OAuth sign-in, server settings, the catalog, `lcode mcp` |
-| `bench.py` | `lcode bench`: the benchmark tasks, their checks and the reports |
+| `bench.py` | `lcode bench`: running the tasks and the reports; the tasks are in `bench_quick.py` and the other `bench_*.py`, and what their checks share in `bench_checks.py` |
 | `vision.py` | Looking at images with a model that can see |
 | `subagents.py` | Subagents: agent types, running them (also in parallel), worktrees for workers |
 | `hooks.py` | Hooks on lcode's events, and allow and deny rules for permissions |
@@ -205,3 +205,6 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `hardware.py` | NVIDIA / Apple Silicon detection |
 | `ollama.py` | Ollama HTTP client |
 | `config.py` | Settings file and environment variables |
+| `traces.py`, `trace_view.py`, `trace_export.py` | Recording requests; listing and showing traces; exporting them with secrets masked |
+| `media.py`, `media_video.py`, `clips.py` | Image and video mode's jobs in ComfyUI; video jobs and long clips; video files |
+| `screenshots.py`, `screenshots_web.py`, `qt_hook.py` | The screenshot tool: programs, web pages, and the hook it puts into Qt programs |

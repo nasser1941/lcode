@@ -461,7 +461,7 @@ def request_problem(text: str, extra: AbstractSet[str] = frozenset()) -> str:
 
 def mode_problem(command: str, mode: str) -> str:
     """When a command doesn't work in the mode it would be typed in: /animate in video mode."""
-    from lcode.repl import IMAGE_COMMANDS, VIDEO_TOO
+    from lcode.repl_media import IMAGE_COMMANDS, VIDEO_TOO
 
     if mode == "video" and command in IMAGE_COMMANDS and command not in VIDEO_TOO:
         return f"{command} works in image mode, not in video mode"

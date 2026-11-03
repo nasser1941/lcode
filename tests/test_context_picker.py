@@ -3,7 +3,8 @@ import pytest
 from conftest import output, reply
 from lcode import limits
 from lcode.hardware import Hardware
-from lcode.repl import context_options, handle_command
+from lcode.repl import handle_command
+from lcode.repl_models import context_options
 
 LAPTOP = Hardware("linux", "x", 31, "RTX 4080 Laptop", 12)
 

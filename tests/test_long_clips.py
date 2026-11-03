@@ -9,7 +9,7 @@ import pytest
 
 from comfy_standin import StandIn, tiny_png
 from conftest import output
-from lcode import media
+from lcode import media, media_video
 from lcode.repl import handle_command
 from test_video import LAPTOP, WAN, node
 
@@ -49,11 +49,11 @@ def text(agent):
 
 
 def test_parts_are_as_few_and_as_even_as_can_be():
-    assert media.parts_of(25) == [6.25] * 4
-    assert media.parts_of(60) == [7.5] * 8
-    assert media.parts_of(17) == [5.75, 5.75, 5.5]
-    assert media.parts_of(9) == [4.5, 4.5] and media.parts_of(8) == [8.0]
-    odd = media.parts_of(59.9)
+    assert media_video.parts_of(25) == [6.25] * 4
+    assert media_video.parts_of(60) == [7.5] * 8
+    assert media_video.parts_of(17) == [5.75, 5.75, 5.5]
+    assert media_video.parts_of(9) == [4.5, 4.5] and media_video.parts_of(8) == [8.0]
+    odd = media_video.parts_of(59.9)
     assert max(odd) <= 8 and sum(odd) == 60.0  # in quarter seconds
 
 
@@ -109,7 +109,7 @@ def test_a_clip_through_several_pictures_in_order(agent, standin, repo):
     assert len(standin.prompts) == 2 and all(node(g, "WanFunInpaintToVideo") for g in standin.prompts)
     with pytest.raises(media.MediaError, match="3 pictures need a clip of at least 2 s"):
         media.request(agent, "@photo.png @middle.png @end.png the flower opens --seconds 1")
-    assert media.plan_parts(25, 2) == [(6.25, None), (6.25, 1), (6.25, None), (6.25, 2)]
+    assert media_video.plan_parts(25, 2) == [(6.25, None), (6.25, 1), (6.25, None), (6.25, 2)]
 
 
 def test_extending_a_clip_by_more_than_a_part(agent, standin):

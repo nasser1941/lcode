@@ -81,7 +81,7 @@ def text(path: Path) -> str:
 
 def test_files(root: Path, limit: int = 200) -> list[Path]:
     """The project's Python test files, a few levels deep, outside environments and caches."""
-    from lcode.tools import IGNORE_DIRS
+    from lcode.tool_helpers import IGNORE_DIRS
 
     found: list[Path] = []
 

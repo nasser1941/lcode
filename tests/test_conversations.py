@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from conftest import output, reply
-from lcode import cli, repoid, sessions
+from lcode import doctor, repoid, sessions
 from lcode import memory as memory_notes
 from lcode.hardware import Hardware
 from lcode.memory import Memory, make_note
@@ -382,4 +382,4 @@ def test_doctor_says_how_many_sessions_and_where(make_agent, tmp_path):
     other = tmp_path / "other"
     other.mkdir()
     talk(make_agent, other, "there")
-    assert cli.sessions_status(main) == f"2 saved, 1 for this folder · in {sessions.sessions_dir()}"
+    assert doctor.sessions_status(main) == f"2 saved, 1 for this folder · in {sessions.sessions_dir()}"
