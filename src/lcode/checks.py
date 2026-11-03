@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -289,7 +290,7 @@ def is_code(rel: str) -> bool:
     return Path(rel).suffix.lower() in CODE_SUFFIXES
 
 
-def exercised(command: str, result: str, files) -> list[str]:
+def exercised(command: str, result: str, files: Iterable[str]) -> list[str]:
     """The files among `files` that a shell command ran: it names them, or their module, or runs tests, and its
     program was there. Syntax, lint and type checks, and commands that only look, don't count."""
     if is_read_only(command) or STATIC_ONLY.search(command):

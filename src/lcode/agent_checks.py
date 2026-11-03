@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, cast
 
 from lcode import (
@@ -77,7 +78,7 @@ class Checks(AgentBase):
             return []
         return checks.unrun_scripts(project_root_or_cwd(self.cwd), list(self.tools.before), commands)
 
-    def untested_code(self, written) -> list[str]:
+    def untested_code(self, written: Iterable[str]) -> list[str]:
         """Code files the model wrote in this request and hasn't run since their last change (#242): only where the
         checks would run, and when the project has no checks of its own (lcode runs those instead). Window code has
         its own check: a screenshot shows it."""
