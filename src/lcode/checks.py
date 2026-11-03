@@ -18,6 +18,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from lcode.permissions import is_read_only
+
 MAX_ROUNDS = 2  # times the model gets failing checks back before lcode stops asking
 TIMEOUT = 600  # seconds a check may run
 OUTPUT_TAIL = 6000  # characters of a failing check's output the model gets back
@@ -258,6 +260,73 @@ def unrun_note(scripts: list[str]) -> str:
         f"deploy, delete data) or needs something you don't have, don't: tell the user plainly that {it} is untested "
         "and why."
     )
+
+
+# ----------------------------------------------------------------------------- code written, never run
+
+CODE_SUFFIXES = frozenset(
+    {".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".rs", ".go", ".c", ".cc", ".cpp", ".java", ".kt", ".rb",
+     ".php", ".pl", ".lua", ".jl", ".r", ".scala", ".swift", ".cs"}
+)  # fmt: skip
+# Checks that read the code without running it (syntax, lint, types): they don't show that it works.
+STATIC_ONLY = re.compile(
+    r"\bast\.parse\b|\bpy_compile\b|\bcompileall\b|(?:^|\s)-fsyntax-only\b|\b(?:node|deno)\s+(?:-c|--check)\b"
+    r"|\bphp\s+-l\b|\b(?:ruby|perl)\s+-c\b"
+    r"|\b(?:pyflakes|flake8|pylint|mypy|pyright|basedpyright|ruff|eslint|tsc)\b|\bcargo\s+check\b|\bgo\s+vet\b"
+)
+# A test runner runs the code it tests, whether or not the command names a file.
+TEST_RUNNER = re.compile(
+    r"\b(?:pytest|py\.test|unittest|tox|nox|jest|vitest|mocha|ctest|phpunit|rspec)\b"
+    r"|\b(?:cargo|go|npm|pnpm|yarn|bun|deno|mvn|gradle|dotnet|swift|mix|make)\s+(?:run\s+)?test\b"
+)
+# The program, or a module the code needs, isn't installed: the code didn't run.
+NOT_INSTALLED = re.compile(r"command not found|^\S+: not found$|No module named|Cannot find module", re.I | re.M)
+NOT_FOUND = re.compile(r"(?:^|:\s)([\w.+-]+): (?:command )?not found\s*$", re.M)
+
+
+def is_code(rel: str) -> bool:
+    """Whether a file is a program or module in a language that runs (shell scripts have their own check)."""
+    return Path(rel).suffix.lower() in CODE_SUFFIXES
+
+
+def exercised(command: str, result: str, files) -> list[str]:
+    """The files among `files` that a shell command ran: it names them, or their module, or runs tests, and its
+    program was there. Syntax, lint and type checks, and commands that only look, don't count."""
+    if is_read_only(command) or STATIC_ONLY.search(command):
+        return []
+    if exit_code(result) == 127 or any(NOT_INSTALLED.search(line) for line in result.splitlines()[:20]):
+        return []
+    if TEST_RUNNER.search(command):
+        return list(files)
+    return [rel for rel in files if re.search(rf"(?<![\w-]){re.escape(Path(rel).stem)}(?![\w-])", command)]
+
+
+def not_found(result: str) -> list[str]:
+    """The programs a shell command's output says aren't installed (`bash: line 1: python3: command not found`)."""
+    return list(dict.fromkeys(NOT_FOUND.findall(result)))
+
+
+def uv_available() -> bool:
+    return shutil.which("uv") is not None
+
+
+def untested_note(files: list[str], missing: list[str], uv: bool) -> str:
+    names = ", ".join(files)
+    it = "it" if len(files) == 1 else "them"
+    note = (
+        f"[lcode] You wrote {names} in this request but haven't run {it} since your last change. Run {it} now and fix "
+        f"what fails, so you know {it} works before you say so: for a module, import it and call what you wrote; "
+        "for a server or anything else that keeps running, start it in the background and try it. A syntax check "
+        "doesn't show that it works."
+    )
+    if missing:
+        note += f" {', '.join(f'`{m}`' for m in missing)} isn't installed here."
+    if uv and any(f.endswith(".py") for f in files):
+        note += (
+            " To run Python code without changing this machine's Python, `uv run --with PACKAGE python FILE` fetches "
+            "Python and the packages it needs into a throwaway environment."
+        )
+    return note + f" If you can't run {it}, say plainly in your answer that {it} is untested, and why."
 
 
 # ----------------------------------------------------------------------------- windows it never looked at

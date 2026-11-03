@@ -6,6 +6,16 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Code it never ran** (#242). When a request wrote a new code file and no command since its last
+  change ran it, lcode sends the model back once, to run it or to say plainly that it's untested. A
+  syntax check, a program that isn't installed (`python3: command not found`) or a command that only
+  reads doesn't count. With `uv` installed, the note says how to run Python code in a throwaway
+  environment. On the dev slice at 32K, 5 of 6 `torch-tensor-parallelism` attempts wrote the module,
+  found no `python3` or checked only its syntax, and said they were done: each had a runtime error
+  that one run would have shown. A project with checks of its own gets those instead.
+
 ### Fixed
 
 - The Valohai MCP server failed to describe an execution with an output that has no name; it now
