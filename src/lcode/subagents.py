@@ -143,7 +143,7 @@ def agent_dirs(cwd: Path, include_project: bool = True) -> list[Path]:
 
 
 def parse_agent(text: str, name: str, source: str) -> AgentType:
-    from lcode.tools import TOOL_NAMES
+    from lcode.tool_schemas import TOOL_NAMES
 
     split = frontmatter(text)
     if not split:
@@ -203,7 +203,7 @@ def load_types(cwd: Path, include_project: bool = True) -> tuple[dict[str, Agent
 
 
 def schema(types: dict[str, AgentType], parallel: int) -> dict:
-    from lcode.tools import _fn
+    from lcode.tool_schemas import _fn
 
     listing = "\n".join(f"- {t.name}: {t.description}" for t in types.values())
     together = (

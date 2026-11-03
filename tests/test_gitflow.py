@@ -4,7 +4,7 @@ import pytest
 
 from conftest import output, reply, run
 from lcode import gitflow
-from lcode.agent import git_info
+from lcode.agent_prompt import git_info
 from lcode.cli import build_parser
 from lcode.hardware import Hardware
 from lcode.repl import handle_command

@@ -14,6 +14,7 @@ import pytest
 
 from conftest import call, output, reply
 from lcode import screenshots as sh
+from lcode import screenshots_web as shw
 
 # --------------------------------------------------------------------------------------------- arguments
 
@@ -58,14 +59,16 @@ def test_qt_programs_are_recognized(tmp_path):
 
 def test_urls(tmp_path):
     (tmp_path / "index.html").write_text("<p>hi</p>")
-    assert sh.normalize_url("index.html", tmp_path) == (tmp_path / "index.html").resolve().as_uri()
-    assert sh.normalize_url("localhost:5173/app", tmp_path) == "http://localhost:5173/app"
-    assert sh.normalize_url("example.com", tmp_path) == "https://example.com"
+    assert shw.normalize_url("index.html", tmp_path) == (tmp_path / "index.html").resolve().as_uri()
+    assert shw.normalize_url("localhost:5173/app", tmp_path) == "http://localhost:5173/app"
+    assert shw.normalize_url("example.com", tmp_path) == "https://example.com"
     for missing in ("missing.html", "./build/app"):
         with pytest.raises(sh.ShotError, match="doesn't exist here"):
-            sh.normalize_url(missing, tmp_path)
-    assert sh.is_local("http://127.0.0.1:8000/") and sh.is_local("file:///x.html") and sh.is_local("http://a.localhost")
-    assert not sh.is_local("https://example.com/")
+            shw.normalize_url(missing, tmp_path)
+    assert (
+        shw.is_local("http://127.0.0.1:8000/") and shw.is_local("file:///x.html") and shw.is_local("http://a.localhost")
+    )
+    assert not shw.is_local("https://example.com/")
 
 
 # --------------------------------------------------------------------------------------------- reports
@@ -127,12 +130,12 @@ def test_what_the_page_measurements_say():
         },
         {"method": "Runtime.consoleAPICalled", "params": {"type": "log", "args": [{"value": "chatter"}]}},
     ]
-    report = "\n".join(sh.web_report(page, events, (1024, 700), True))
+    report = "\n".join(shw.web_report(page, events, (1024, 700), True))
     assert '- Page "Shop": 1380x700 in a 1024x700 window' in report
     assert "356 pixels wider than the window" in report and 'div.card "Table": 444x224 at (936, 66)' in report
     assert "error: ReferenceError: renderPrices is not defined (app.js:11)" in report
     assert "logo.png" in report and "favicon" not in report and "chatter" not in report
-    clean = sh.web_report({"page": [800, 600], "viewport": [800, 600]}, [], (800, 600), False)
+    clean = shw.web_report({"page": [800, 600], "viewport": [800, 600]}, [], (800, 600), False)
     assert "No errors in the browser console." in clean[-1] and any("hadn't finished loading" in x for x in clean)
 
 
@@ -324,7 +327,7 @@ def test_a_failed_screenshot_says_why(make_agent, monkeypatch):
 # --------------------------------------------------------------------------------------------- real programs
 
 
-@pytest.mark.skipif(sh.find_browser() is None or sh.find_browser()[0] != "chrome", reason="no Chrome or Chromium")
+@pytest.mark.skipif(shw.find_browser() is None or shw.find_browser()[0] != "chrome", reason="no Chrome or Chromium")
 def test_a_real_page_in_headless_chrome(tmp_path):
     (tmp_path / "index.html").write_text(
         "<title>Shop</title><body style='margin:0'><div style='width:1500px;height:50px'>wide</div>"
@@ -378,15 +381,15 @@ def fake_chrome(tmp_path):
 
 
 def fake_shot(browser, tmp_path):
-    return sh.chrome_shot(browser, "file:///shop.html", (800, 600), 0, False, tmp_path / "shot.png", tmp_path)
+    return shw.chrome_shot(browser, "file:///shop.html", (800, 600), 0, False, tmp_path / "shot.png", tmp_path)
 
 
 def test_the_browser_gets_longer_to_start_than_to_answer(fake_chrome, tmp_path, monkeypatch):
     # The first start after a reboot reads the browser from a cold disk: it took up to 12 s on GitHub's machines
     # and sometimes over the 30 s a command gets, so the test with a real Chrome failed now and then.
-    assert sh.STARTUP_TIMEOUT >= 60 and sh.COMMAND_TIMEOUT == 30
-    monkeypatch.setattr(sh, "STARTUP_TIMEOUT", 10)
-    monkeypatch.setattr(sh, "COMMAND_TIMEOUT", 0.5)
+    assert shw.STARTUP_TIMEOUT >= 60 and shw.COMMAND_TIMEOUT == 30
+    monkeypatch.setattr(shw, "STARTUP_TIMEOUT", 10)
+    monkeypatch.setattr(shw, "COMMAND_TIMEOUT", 0.5)
     monkeypatch.setenv("FAKE_CHROME_DELAY", "1.5")
     shot = fake_shot(fake_chrome, tmp_path)
     assert shot.image.read_bytes().startswith(b"\x89PNG\r\n\x1a\n") and shot.how == "headless Chrome"
@@ -394,7 +397,7 @@ def test_the_browser_gets_longer_to_start_than_to_answer(fake_chrome, tmp_path, 
 
 
 def test_a_browser_that_does_not_start_in_time(fake_chrome, tmp_path, monkeypatch):
-    monkeypatch.setattr(sh, "STARTUP_TIMEOUT", 0.5)
+    monkeypatch.setattr(shw, "STARTUP_TIMEOUT", 0.5)
     monkeypatch.setenv("FAKE_CHROME_DELAY", "30")
     started = time.monotonic()
     with pytest.raises(sh.ShotError, match=r"^the browser didn't start within 0\.5 seconds$"):
@@ -411,7 +414,7 @@ def test_a_browser_that_stops_while_starting(fake_chrome, tmp_path, monkeypatch)
 
 
 def test_a_browser_that_does_not_answer_a_command(fake_chrome, tmp_path, monkeypatch):
-    monkeypatch.setattr(sh, "COMMAND_TIMEOUT", 0.5)
+    monkeypatch.setattr(shw, "COMMAND_TIMEOUT", 0.5)
     monkeypatch.setenv("FAKE_CHROME_IGNORES", "Runtime.evaluate")
     with pytest.raises(sh.ShotError, match=r"^the browser didn't answer Runtime\.evaluate within 0\.5 seconds$"):
         fake_shot(fake_chrome, tmp_path)
@@ -448,7 +451,7 @@ def test_a_running_server_isnt_started_again(tmp_path, local_site, monkeypatch):
         path.write_bytes(b"png")
         return sh.Shot(image=path, how="headless Chrome", screen=screen, report=["- Page: fine"])
 
-    monkeypatch.setattr(sh, "web", web)
+    monkeypatch.setattr(shw, "web", web)  # take() looks it up there when it runs
     marker = tmp_path / "started"
     shot = sh.take(tmp_path, sh.shots_dir(tmp_path), command=f"touch {marker}; sleep 30", url=local_site, wait=0)
     assert not marker.exists()  # the command never ran: the port was taken by the running server anyway
@@ -463,6 +466,6 @@ def test_a_server_that_answers_counts_even_if_its_command_ended(tmp_path, local_
     log.write_text("handed off to a daemon\n")
     proc = subprocess.Popen(["true"])
     proc.wait()
-    sh.wait_for_server(local_site, proc, 5, log)  # no error
+    shw.wait_for_server(local_site, proc, 5, log)  # no error
     with pytest.raises(sh.ShotError, match="exited \\(exit code 0\\) before"):
-        sh.wait_for_server("http://127.0.0.1:9/", proc, 5, log)
+        shw.wait_for_server("http://127.0.0.1:9/", proc, 5, log)

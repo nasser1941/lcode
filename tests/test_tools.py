@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from lcode.matching import Found, locate
-from lcode.tools import truncate
+from lcode.tool_helpers import truncate
 
 
 def test_read_file_numbers_lines_and_pages(agent):

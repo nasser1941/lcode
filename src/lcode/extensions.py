@@ -132,7 +132,7 @@ def load_commands(cwd: Path, include_project: bool) -> tuple[dict[str, Command],
 
 
 def parse_command(path: Path, scope: str) -> Command:
-    from lcode.tools import TOOL_NAMES
+    from lcode.tool_schemas import TOOL_NAMES
 
     name = path.stem
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name):
@@ -236,7 +236,7 @@ def skills_prompt(skills: dict[str, Skill], context: int = 262144) -> str:
 
 
 def schema(skills: dict[str, Skill]) -> dict:
-    from lcode.tools import _fn
+    from lcode.tool_schemas import _fn
 
     return _fn(
         "skill",

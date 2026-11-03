@@ -230,7 +230,7 @@ def test_markdown_streamer_waits_for_complete_blocks():
 
 
 def test_the_project_python_is_named(make_agent, tmp_path):
-    from lcode.agent import python_line
+    from lcode.agent_prompt import python_line
 
     plain = make_agent()
     assert "Python command: `python" in plain.system_prompt()

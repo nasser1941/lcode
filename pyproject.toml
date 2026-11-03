@@ -87,6 +87,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "src/lcode/agent.py" = ["E501"] # the prompts are prose; wrapping them would change what the model sees
+"src/lcode/agent_prompt.py" = ["E501"] # the same prompts, moved here
+"src/lcode/agent_context.py" = ["E501"] # the summary prompt is prose
 "src/lcode/manual.py" = ["E501"] # the same for the help prompt
 "src/lcode/memory.py" = ["E501"]
 "src/lcode/subagents.py" = ["E501"]

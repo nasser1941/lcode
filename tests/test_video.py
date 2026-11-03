@@ -7,7 +7,7 @@ import pytest
 
 from comfy_standin import FLUX, StandIn, tiny_png
 from conftest import FakeOllama, output
-from lcode import catalog, cli, config, media
+from lcode import catalog, cli, clips, config, media
 from lcode.hardware import Hardware
 from lcode.repl import handle_command, respond
 
@@ -285,5 +285,5 @@ def test_a_clips_length_from_its_header(tmp_path):
     (tmp_path / "c.mp4").write_bytes(
         b"\x00\x00\x00\x20ftypisom" + bytes(8) + b"\x00\x00\x00\x6cmoov\x00\x00\x00\x6c" + mvhd
     )
-    info = media.clip_info(tmp_path / "c.mp4")
+    info = clips.clip_info(tmp_path / "c.mp4")
     assert info["seconds"] == 4.5 and info["fps"] == 24.0 and info["frames"] == 109

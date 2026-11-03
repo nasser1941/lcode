@@ -34,7 +34,7 @@ import requests
 from rich.panel import Panel
 from rich.text import Text
 
-from lcode import comfy, edits, imageopts, media
+from lcode import clips, comfy, edits, imageopts, media
 from lcode import media_catalog as catalog
 
 if TYPE_CHECKING:
@@ -450,7 +450,7 @@ def keep(agent: Agent, model: catalog.MediaModel, job: dict, options: imageopts.
     path.write_bytes(data)
     width = height = 0
     try:
-        width, height = media.mp4_size(path) if video else edits.image_size(path)
+        width, height = clips.mp4_size(path) if video else edits.image_size(path)
     except (OSError, edits.EditError, ValueError, struct.error):
         pass  # the gallery shows no size
     meta = {**meta, "width": width, "height": height}
