@@ -86,9 +86,14 @@ With three attempts, the last line also gives each run's pass rate and the sprea
   [trace](traces.md)). An attempt stopped at the task's time limit counts the tokens recorded
   until then, and a reply lcode stopped counts with an estimate. `–` means no attempt of the task
   has a record.
+- **The model's speed**: how many tokens per second it generated, in the median attempt, from the
+  same traces. A slower machine (short of memory, or busy with other programs) runs into the
+  tasks' time limits more often.
 
 Attempts whose container didn't start (a failed image download, say) count neither as passed nor
-as failed. The report shows how many there were.
+as failed. Attempts whose tests ran but didn't finish (a time limit, say) or gave no result count
+as failed, as in Harbor's own mean, so a change that makes the tests hang can't hide a drop. The
+report shows how many of each there were.
 
 Everything is saved in `~/.local/state/lcode/bench/<slice>-<time>/`:
 
@@ -110,6 +115,11 @@ lcode bench --compare ~/.local/state/lcode/bench/dev-20261101-161623 ~/.local/st
 It says which lcode, model and context each one ran, warns when they don't match, lists the tasks
 whose results changed (`3/3 → 1/3`), and compares pass@1 over the tasks both ran: within the noise,
 better, or a drop beyond the noise.
+
+While Harbor's results are still on the machine, `--compare` reads both runs from them again, so a
+run saved by an older lcode counts its attempts the same way as a new one. It also gives each run's
+model speed, and warns when one ran more than 10% slower: more of its attempts run into their time
+limits, so part of a difference can come from the machine rather than from lcode.
 
 The noise is how far pass@1 moves between runs of the same setup, estimated from how much each
 task's attempts disagree: a task that always passes or always fails adds nothing, one that passes
