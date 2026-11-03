@@ -204,30 +204,58 @@ def test_plans_are_approved_in_the_editor(editor, repo):
     assert mode["currentModeId"] == "auto-edit" and editor.server.sessions[sid].agent.perms.mode == "auto-edit"
 
 
+def send_prompt(editor, sid: str, text: str) -> None:
+    """A prompt, without waiting for its answer."""
+    editor.next_id += 1
+    editor.send(
+        {
+            "id": editor.next_id,
+            "method": "session/prompt",
+            "params": {"sessionId": sid, "prompt": [{"type": "text", "text": text}]},
+        }
+    )
+
+
 def test_cancelling_stops_the_request(editor, repo):
     sid = new_session(editor, repo)
+    answering = threading.Event()
 
     def slow():
+        answering.set()
         yield {"message": {"content": "Once upon"}, "done": False}
         agent = editor.server.sessions[sid].agent
-        for _ in range(100):
+        for _ in range(400):  # up to 20 s: the cancel comes long before
             if agent.cancel.is_set():
                 break
             time.sleep(0.05)
         yield {"message": {"content": " a time"}, "done": False}
 
     editor.model.scripts = [slow()]
-    editor.next_id += 1
-    editor.send(
-        {
-            "id": editor.next_id,
-            "method": "session/prompt",
-            "params": {"sessionId": sid, "prompt": [{"type": "text", "text": "story"}]},
-        }
-    )
-    time.sleep(0.3)
+    send_prompt(editor, sid, "story")
+    assert answering.wait(timeout=20)  # the model is answering: cancel now
     editor.send({"method": "session/cancel", "params": {"sessionId": sid}})
-    assert editor.messages.get(timeout=10)["result"] == {"stopReason": "cancelled"}
+    assert editor.messages.get(timeout=20)["result"] == {"stopReason": "cancelled"}
+
+
+def test_a_cancel_right_after_the_prompt_holds(editor, repo, monkeypatch):
+    """Each message is handled in a thread of its own. When the prompt's thread starts late (a busy machine), the
+    cancel sent right after it runs first; the prompt must not reset it then."""
+    sid = new_session(editor, repo)
+    render = acp.Session.render
+
+    def late(self, blocks):
+        time.sleep(0.5)
+        return render(self, blocks)
+
+    monkeypatch.setattr(acp.Session, "render", late)
+    editor.model.scripts = [reply("Once upon a time")]  # never asked: the request stops before its first step
+    send_prompt(editor, sid, "story")
+    editor.send({"method": "session/cancel", "params": {"sessionId": sid}})
+    assert editor.messages.get(timeout=20)["result"] == {"stopReason": "cancelled"}
+    assert editor.model.payloads == []
+    monkeypatch.setattr(acp.Session, "render", render)
+    editor.model.scripts = [reply("Once upon a time")]  # the next prompt isn't cancelled by the last one's cancel
+    assert prompt(editor, sid, "story")["stopReason"] == "end_turn"
 
 
 def test_prompts_with_files_images_and_commands(editor, repo):

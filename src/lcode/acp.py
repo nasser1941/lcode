@@ -19,11 +19,13 @@ the file in LCODE_ACP_LOG), and stdin is the protocol channel only.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 import os
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
 from urllib.parse import unquote, urlparse
@@ -76,6 +78,9 @@ class Connection:
         self.pending: dict[int, tuple[threading.Event, dict]] = {}
         self.next_id = 0
         self.closed = False
+        # Called with each message from the editor in the order they came, before it's handled in a thread of
+        # its own: for what has to happen in that order (Server.received).
+        self.on_message: Callable[[dict], None] | None = None
 
     def send(self, message: dict) -> None:
         data = (json.dumps({"jsonrpc": "2.0", **message}, ensure_ascii=False) + "\n").encode()
@@ -112,6 +117,9 @@ class Connection:
                 self.send({"id": None, "error": {"code": -32700, "message": "parse error"}})
                 continue
             if "method" in message:
+                if self.on_message is not None:
+                    with contextlib.suppress(Exception):  # never stop reading
+                        self.on_message(message)
                 threading.Thread(target=self._dispatch, args=(handle, message), daemon=True).start()
             elif message.get("id") in self.pending:
                 done, slot = self.pending.pop(message["id"])
@@ -373,10 +381,7 @@ class Session:
             return {"stopReason": "end_turn"}
         if command is not None:
             text = command
-        cancel = self.agent.cancel
-        assert cancel is not None  # the session gave the agent one when it started
-        cancel.clear()
-        result = api.run_request(self.agent, text)
+        result = api.run_request(self.agent, text)  # its cancel was reset when the prompt arrived (Server.received)
         self.update({"sessionUpdate": "usage_update", "used": self.agent.ctx_used, "size": self.agent.settings.context})
         self.update({"sessionUpdate": "session_info_update", "title": self.agent.session_title or None})
         if result.status == "error":
@@ -474,6 +479,19 @@ class Server:
         self.conn, self.console = conn, console
         self.client_caps: dict = {}
         self.sessions: dict[str, Session] = {}
+        conn.on_message = self.received
+
+    def received(self, message: dict) -> None:
+        """A new prompt resets its session's cancel as soon as it arrives, in the order the editor sent things.
+
+        Each message is then handled in a thread of its own, so a cancel sent right after a prompt can run before
+        the prompt's thread starts; the cancel then holds, instead of being reset by a prompt that starts late.
+        """
+        if message.get("method") == "session/prompt":
+            params = message.get("params") or {}
+            session = self.sessions.get(str(params.get("sessionId", "")))
+            if session is not None and session.agent.cancel is not None:
+                session.agent.cancel.clear()
 
     def handle(self, method: str, params: dict) -> dict | None:
         handlers = {
