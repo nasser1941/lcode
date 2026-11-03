@@ -9,11 +9,12 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover
-    import tomli as tomllib
+    import tomli as tomllib  # pyright: ignore[reportMissingImports]  (installed on Python 3.10 only)
 
 CATALOG_PATH = Path(__file__).with_name("catalog.toml")
 
@@ -70,7 +71,7 @@ def load() -> dict[str, Preset]:
     return presets
 
 
-def _replace(value, var: str, new: str):
+def _replace(value: Any, var: str, new: str) -> Any:
     if isinstance(value, str):
         return value.replace("${" + var + "}", new)
     if isinstance(value, list):
@@ -80,7 +81,7 @@ def _replace(value, var: str, new: str):
     return value
 
 
-def _drop(value, var: str):
+def _drop(value: Any, var: str) -> Any:
     """Remove settings that use an optional input the user skipped."""
     marker = "${" + var + "}"
     if isinstance(value, dict):

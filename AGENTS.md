@@ -14,6 +14,7 @@ packaged with hatchling, managed with uv. Runtime dependencies: requests, rich, 
 uv sync --group dev                 # set up .venv
 uv run pytest                       # tests (no Ollama needed)
 uv run ruff check . && uv run ruff format --check .
+uv run basedpyright                 # type check src/lcode
 uv run --group docs mkdocs build --strict   # docs
 uv run lcode doctor                 # check a local install against a running Ollama
 ```

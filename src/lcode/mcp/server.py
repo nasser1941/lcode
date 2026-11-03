@@ -126,8 +126,8 @@ class Server:
 
     def serve(self, stdin: IO[str] | None = None, stdout: IO[str] | None = None) -> None:
         """Answer newline-delimited JSON-RPC on stdin/stdout until stdin closes."""
-        stdin, stdout = stdin or sys.stdin, stdout or sys.stdout
-        for line in stdin:
+        reader, writer = stdin or sys.stdin, stdout or sys.stdout
+        for line in reader:
             line = line.strip()
             if not line:
                 continue
@@ -138,8 +138,8 @@ class Server:
             else:
                 response = self.handle(message) if isinstance(message, dict) else None
             if response is not None:
-                stdout.write(json.dumps(response) + "\n")
-                stdout.flush()
+                writer.write(json.dumps(response) + "\n")
+                writer.flush()
 
 
 class _RpcError(Exception):

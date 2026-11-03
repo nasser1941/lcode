@@ -6,6 +6,11 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The Valohai MCP server failed to describe an execution with an output that has no name; it now
+  shows it as `?`. Found by the type checks that CI now runs on `src/lcode` (#200).
+
 ## [0.59.0] - 2026-11-03
 
 ### Added

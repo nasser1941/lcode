@@ -223,7 +223,8 @@ class McpManager:
         schemas = []
         for name, (server, tool_name) in self._index().items():
             tool = next(t for t in self.servers[server].tools if t["name"] == tool_name)
-            schema = tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {}
+            given = tool.get("inputSchema")
+            schema = given if isinstance(given, dict) else {}
             schema = {"type": "object", "properties": {}, **schema}
             description = (tool.get("description") or tool.get("title") or tool_name).strip()
             if len(description) > MAX_DESCRIPTION:

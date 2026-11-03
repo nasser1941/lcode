@@ -52,7 +52,11 @@ lcode-mcp-encord = "lcode.servers.encord:main"
 lcode-mcp-xai = "lcode.servers.xai:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "basedpyright>=1.40.2",
+    "pytest>=8",
+ "ruff>=0.6",
+]
 docs = ["mkdocs-material>=9.5", "mkdocs>=1.6,<2"]  # MkDocs 2 drops plugins and themes
 
 [tool.hatch.version]
@@ -107,3 +111,9 @@ ignore = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.basedpyright]
+# CI type-checks src/lcode (`uv run basedpyright`). Python 3.10, the oldest lcode supports, so newer APIs show up.
+include = ["src/lcode"]
+pythonVersion = "3.10"
+typeCheckingMode = "standard"

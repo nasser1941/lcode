@@ -22,6 +22,7 @@ import re
 import unicodedata
 from collections import Counter
 from collections.abc import Callable
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -286,7 +287,7 @@ class Manual:
         little, as if it were part of the question."""
         query: Counter = Counter(words(question))
         if mode in ("image", "video"):
-            query[mode] += 0.5
+            query[mode] += 0.5  # pyright: ignore[reportArgumentType]  (a weight, not a count)
         k1, b = 1.2, 0.75
         scored = []
         for piece in self.pieces:
@@ -356,7 +357,7 @@ def _load(place: str) -> Manual:
     return Manual(found, known_commands, known_options)
 
 
-def load(extra_commands: set[str] = frozenset()) -> Manual:
+def load(extra_commands: AbstractSet[str] = frozenset()) -> Manual:
     """The manual, read once."""
     place = folder()
     manual = _load(str(place) if place else "")
@@ -442,7 +443,7 @@ def typed_lines(text: str) -> list[str]:
     return [line for line in found if line]
 
 
-def request_problem(text: str, extra: set[str] = frozenset()) -> str:
+def request_problem(text: str, extra: AbstractSet[str] = frozenset()) -> str:
     """What's wrong with a request's options (image or video mode), by lcode's own parser; empty when nothing."""
     from lcode import imageopts
 

@@ -21,13 +21,13 @@ from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from rich.console import Console
 from rich.markup import escape
 
 from lcode import config
-from lcode.ollama import OllamaError
+from lcode.ollama import Ollama, OllamaError
 from lcode.traces import TERMINAL, Info, Lane, Recorder, Recording, call_summary, home, load
 
 if TYPE_CHECKING:
@@ -329,7 +329,7 @@ def replay_agent(start_event: dict, folder: Path, server: ReplayServer, console:
     settings.sandbox, settings.checkpoints, settings.notify = "off", False, False
     settings.memory, settings.vision_model, settings.embed_model, settings.lsp = "off", "off", "off", "off"
     settings.permission_mode = "plan" if start_event.get("permission_mode") == "plan" else "yolo"
-    agent = Agent(server, settings, folder, console=console)
+    agent = Agent(cast(Ollama, server), settings, folder, console=console)  # it answers as the model did
     server.agent = agent
     agent.replay = server
     agent.interactive = False
@@ -374,7 +374,7 @@ def run(
         agent = replay_agent(start_event, folder, server, console)
         lane = Lane(Recorder(None, "replay"), "main", agent)
         agent.trace = lane
-        agent.ollama = Recording(server, lane)
+        agent.ollama = cast(Ollama, Recording(server, lane))
         status, error = "", ""
         try:
             agent.run_turn(str(start_event.get("text") or ""))

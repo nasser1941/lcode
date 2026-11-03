@@ -12,7 +12,7 @@ from lcode.hardware import GIB, Hardware
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover
-    import tomli as tomllib
+    import tomli as tomllib  # pyright: ignore[reportMissingImports]  (installed on Python 3.10 only)
 
 OVERHEAD_GIB = 1.0  # compute buffers and runtime; measured <1 GiB for qwen3.6-35b and qwen3.5-9b on CUDA
 HEADROOM_GIB = 0.5  # keep a little memory free so estimates at the edge don't run out

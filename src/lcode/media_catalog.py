@@ -26,7 +26,7 @@ from lcode.hardware import GIB, Hardware
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover
-    import tomli as tomllib
+    import tomli as tomllib  # pyright: ignore[reportMissingImports]  (installed on Python 3.10 only)
 
 DEFAULT_IMAGE = "flux2-klein-4b"
 DEFAULT_VIDEO = "wan22-ti2v-5b"

@@ -98,8 +98,9 @@ def read_info(path: Path) -> SessionInfo | None:
     if not isinstance(data, dict):
         return None
     messages = [m for m in data.get("messages") or [] if isinstance(m, dict)]
-    saved = data.get("context") if isinstance(data.get("context"), dict) else {}
-    tokens = saved.get("used") if isinstance(saved.get("used"), int) and saved.get("used") > 0 else 0
+    context = data.get("context")
+    used = context.get("used") if isinstance(context, dict) else None
+    tokens = used if isinstance(used, int) and used > 0 else 0
     return SessionInfo(
         id=path.stem,
         path=path,

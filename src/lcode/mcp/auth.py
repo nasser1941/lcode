@@ -22,6 +22,7 @@ import webbrowser
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
@@ -376,7 +377,7 @@ class CallbackServer:
                 outer.result = params
                 outer.done.set()
 
-            def log_message(self, *args):  # keep the terminal quiet
+            def log_message(self, format: str, *args: Any) -> None:  # keep the terminal quiet
                 pass
 
         self.server = HTTPServer(("127.0.0.1", port), Handler)

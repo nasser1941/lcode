@@ -161,7 +161,7 @@ def build(api: Valohai, allow_writes: bool = False) -> Server:
         e = api.execution(project, counter)
         commit = e.get("commit")
         commit = commit.get("identifier") if isinstance(commit, dict) else commit
-        outputs = [o.get("name") for o in e.get("outputs") or [] if isinstance(o, dict)]
+        outputs = [str(o.get("name") or "?") for o in e.get("outputs") or [] if isinstance(o, dict)]
         parts = [
             f"#{e.get('counter')} {e.get('status')}  step={e.get('step')}  commit={commit}",
             f"started {_when(e.get('ctime'))}  duration {_duration(e.get('duration'))}",

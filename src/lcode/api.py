@@ -24,14 +24,14 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
 from rich.console import Console
 
 from lcode import __version__, backends, config
 from lcode.config import ConfigError, parse_context
-from lcode.ollama import MIN_VERSION, OllamaError, version_tuple
+from lcode.ollama import MIN_VERSION, Ollama, OllamaError, version_tuple
 
 if TYPE_CHECKING:
     from lcode.agent import Agent
@@ -274,7 +274,7 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
         compact_at=cfg["compact_at"],
         trace=cfg["trace"],
     )
-    agent = Agent(ollama, settings, cwd, console=console)
+    agent = Agent(cast(Ollama, ollama), settings, cwd, console=console)  # or a server like it
     agent.hardware = hw
     agent.no_coding_model = no_coding_model
     agent.autosave = True

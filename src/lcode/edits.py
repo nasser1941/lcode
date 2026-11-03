@@ -50,7 +50,7 @@ def load_images(graph: dict, names: list[str]) -> list[list]:
     return links
 
 
-def add_references(graph: dict, images: list[list], megapixels: float, size_from_first: bool) -> list:
+def add_references(graph: dict, images: list[list], megapixels: float, size_from_first: bool) -> list | None:
     """Attach the images as reference latents to the guider's positive and negative conditionings.
 
     Each is scaled to `megapixels` first. With `size_from_first`, the picture made has the first image's size
@@ -262,7 +262,8 @@ def parse_extend(text: str, width: int, height: int) -> tuple[tuple[int, int, in
 
         pads = pads_for_ratio(width, height, SIZES.get(ratio.group(1), ratio.group(1)))
     elif sides:
-        pads = tuple((sides.get(k, 0) + 7) // 8 * 8 for k in ("left", "top", "right", "bottom"))
+        left, top, right, bottom = ((sides.get(k, 0) + 7) // 8 * 8 for k in ("left", "top", "right", "bottom"))
+        pads = (left, top, right, bottom)
         if any(p > 2048 for p in pads):
             raise EditError("a side grows by at most 2048 pixels")
     else:

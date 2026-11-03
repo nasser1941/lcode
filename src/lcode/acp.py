@@ -373,7 +373,9 @@ class Session:
             return {"stopReason": "end_turn"}
         if command is not None:
             text = command
-        self.agent.cancel.clear()
+        cancel = self.agent.cancel
+        assert cancel is not None  # the session gave the agent one when it started
+        cancel.clear()
         result = api.run_request(self.agent, text)
         self.update({"sessionUpdate": "usage_update", "used": self.agent.ctx_used, "size": self.agent.settings.context})
         self.update({"sessionUpdate": "session_info_update", "title": self.agent.session_title or None})

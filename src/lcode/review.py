@@ -95,7 +95,8 @@ def run(agent: Agent, request: str, answer: str, diff: str) -> list[str]:
     }
     reply = agent.ollama.chat(payload)
     data = parse_json((reply.get("message") or {}).get("content") or "")
-    problems = data.get("problems") if isinstance(data.get("problems"), list) else []
+    found = data.get("problems")
+    problems = found if isinstance(found, list) else []
     return [str(p).strip()[:500] for p in problems if str(p).strip()][:MAX_PROBLEMS]
 
 

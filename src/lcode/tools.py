@@ -21,7 +21,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Group
 from rich.markup import escape
@@ -1416,9 +1416,8 @@ class Toolbox:
 
     # -- planning
     def t_todo_write(self, todos: list | str, notes: list | str | None = None) -> str:
-        if isinstance(todos, str):
-            todos = json.loads(todos)
-        self.todos = list(todos)
+        items: list = json.loads(todos) if isinstance(todos, str) else todos
+        self.todos = list(items)
         # Small models often put a note inside an item instead of in `notes`: keep it either way.
         attached = [
             str(todo.get(key)).strip()
@@ -1430,12 +1429,13 @@ class Toolbox:
         if attached:
             notes = [*([] if notes is None else ([notes] if isinstance(notes, str) else list(notes))), *attached]
         if notes is not None:
-            if isinstance(notes, str):
+            given: Any = notes
+            if isinstance(given, str):
                 try:
-                    notes = json.loads(notes)
+                    given = json.loads(given)
                 except ValueError:
-                    notes = [notes]
-            self.notes = [str(n).strip()[:MAX_NOTE] for n in notes if str(n).strip()][:MAX_NOTES]
+                    given = [given]
+            self.notes = [str(n).strip()[:MAX_NOTE] for n in given if str(n).strip()][:MAX_NOTES]
         self.show_todos()
         return "Todo list updated." + (f" {len(self.notes)} note(s) kept." if notes is not None else "")
 

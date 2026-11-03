@@ -12,6 +12,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import Any, cast
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.application import run_in_terminal
@@ -292,7 +293,8 @@ def context_options(agent: Agent, hardware: Hardware) -> list[dict]:
     if max_ctx:
         sizes.add(max_ctx)
     learned = limits.get(s.model)
-    recommended = limits.cap(s.model, spec.fit(hardware)[0]) if spec and spec.fit(hardware)[0] else None
+    fits = spec.fit(hardware)[0] if spec else None
+    recommended = limits.cap(s.model, fits) if fits else None
     options = []
     for size in sorted(sizes):
         if spec:
@@ -356,7 +358,7 @@ def context_command(agent: Agent, arg: str, hardware: Hardware) -> None:
     c.print(table)
     limit = model_limit(agent)
     beyond = [size for size in CONTEXT_CHOICES if limit and size > limit]
-    if beyond:
+    if beyond and limit:
         sizes = " and ".join(format_tokens(size) for size in beyond[:2])
         c.print(
             f"[dim]Not offered: {sizes}{' and more' if len(beyond) > 2 else ''}. {s.model} was trained on up to "
@@ -971,7 +973,7 @@ def switch_model(agent: Agent, wanted: str, hardware: Hardware) -> None:
     if spec:  # size the context for the new model: largest window that fits this machine
         s.context = limits.cap(name, spec.fit(hardware)[0] or MIN_USEFUL_CONTEXT)
     elif backends.is_openai(agent.ollama):
-        s.context = backends.context_for(agent.ollama, name, None)[0]  # the server's window
+        s.context = backends.context_for(cast(backends.OpenAICompatible, agent.ollama), name, None)[0]  # its window
     agent._vision = False  # the model that looks at images goes with the model: decide again
     agent.messages[0]["content"] = agent.system_prompt()
     c.print(f"[green]Switched to {name}[/] (context {format_tokens(s.context)}).")
@@ -1566,14 +1568,14 @@ def image_command(agent: Agent, cmd: str, arg: str) -> None:
             _, job["options"] = imageopts.parse(arg, imageopts.replace_seed(job["options"]))
             make_image(agent, run=lambda cancel, ask: media.redo(agent, job, cancel, ask))
             return
-        entry = media.result(agent, f"#{NUMBER.match(number).group(1)}" if number else "")
+        entry = media.result(agent, f"#{found.group(1)}" if number and (found := NUMBER.match(number)) else "")
         source = Path(entry["path"])
         if cmd in ("/open", "/play"):
             problem = media.open_file(source)
             c.print(f"[yellow]{escape(problem)}[/]" if problem else f"[dim]Opened #{entry['n']}.[/]")
             return
         if cmd == "/vary":
-            job = dict(entry.get("job") or {"kind": "image", "sources": [], "mask": None, "pads": None})
+            job: dict[str, Any] = dict(entry.get("job") or {"kind": "image", "sources": [], "mask": None, "pads": None})
             tools = ("upscale", "remove-background", "interpolate", "sound")
             if entry.get("kind") in tools or job["kind"] not in ("image", "edit", "video"):
                 c.print(f"[yellow]#{entry['n']} is {escape(entry['prompt'])}: /vary the image it came from.[/]")
@@ -1678,7 +1680,7 @@ def use_references(agent: Agent, arg: str) -> None:
         return
     if arg:
         refs = [r.lstrip("@") for r in arg.split()]
-        paths = [media.resolve(agent, f"#{NUMBER.match(r).group(1)}" if NUMBER.match(r) else r) for r in refs]
+        paths = [media.resolve(agent, f"#{found.group(1)}" if (found := NUMBER.match(r)) else r) for r in refs]
         agent.image_refs = [str(p) for p in paths]
     if not agent.image_refs:
         c.print("[dim]No reference images. /use 3 (or /use photo.png) makes the next requests follow one.[/]")
@@ -1710,6 +1712,7 @@ def film_command(agent: Agent, arg: str) -> None:
                 c.print(f"  [bold]{escape(folder.name)}[/] {escape(board.title)} [dim]· {about}[/]")
             return
         if word in ("make", "stitch", "shot", "show"):
+            numbers_text = ""
             if word == "shot":
                 numbers_text, _, name = rest.partition(" ")
                 folder = film.find(agent, name.strip())

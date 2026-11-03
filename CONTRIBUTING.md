@@ -38,6 +38,7 @@ uv run lcode --version       # run your working copy
 uv run pytest                # tests
 uv run ruff check .          # lint
 uv run ruff format .         # format
+uv run basedpyright          # type check
 ```
 
 Optional: `uvx pre-commit install` runs the linters and a secret scanner before each commit.
@@ -86,7 +87,7 @@ otherwise the first model in catalog order that fits with a useful context windo
 
 ## Pull request checklist
 
-- [ ] `uv run pytest` and `uv run ruff check .` pass
+- [ ] `uv run pytest`, `uv run ruff check .` and `uv run basedpyright` pass
 - [ ] New behavior has tests (the agent loop can be tested with the scripted `FakeOllama` in `tests/conftest.py`)
 - [ ] User-facing changes are documented in `docs/` and noted under *Unreleased* in `CHANGELOG.md`
 - [ ] No secrets, tokens, personal paths or private data in code, tests, docs or screenshots
