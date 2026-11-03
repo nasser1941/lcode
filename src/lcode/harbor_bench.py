@@ -310,6 +310,26 @@ def usage_tokens(usage: dict) -> tuple[int, int]:
     )
 
 
+def generation_speed(home: Path) -> float | None:
+    """How fast the model generated in the requests traced in `home`, in tokens per second: None without a trace.
+    It tells how fast the machine was, since a slower one runs into the tasks' time limits more often."""
+    tokens = seconds = 0.0
+    for path in (home / "traces").glob("*.jsonl"):
+        try:
+            lines = path.read_text(errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict) and event.get("type") == "model":
+                tokens += number(event.get("tokens_out"))
+                seconds += number(event.get("gen_seconds"))
+    return tokens / seconds if tokens and seconds else None
+
+
 # ----------------------------------------------------------------------------- running Harbor, and the report
 
 
@@ -346,6 +366,17 @@ def harbor_argv(
     return argv
 
 
+# Errors of attempts whose tests ran but didn't finish or give a result. Harbor grades these attempts, as failed
+# (VERIFIER_FAILED in its error_policy.py), and lcode counts them the same way: a change that makes the tests hang
+# mustn't drop out of a comparison.
+TESTS_UNFINISHED = (
+    "VerifierTimeoutError",
+    "RewardFileNotFoundError",
+    "RewardFileEmptyError",
+    "VerifierOutputParseError",
+)
+
+
 @dataclass
 class Trial:
     """One attempt at a task, from Harbor's result.json."""
@@ -359,6 +390,8 @@ class Trial:
     tokens_out: int | None = None
     error: str = ""
     version: str = ""  # the agent's, in the task's container
+    unfinished_tests: bool = False  # its tests ran but didn't finish or give a result: counted as failed
+    tokens_per_second: float | None = None  # how fast the model generated, from lcode's trace
 
 
 def seconds_between(timing: dict | None) -> float | None:
@@ -381,9 +414,11 @@ def read_trials(job: Path, dataset: str) -> list[Trial]:
         reward = rewards.get("reward") if isinstance(rewards, dict) else None
         agent = result.get("agent_result") or {}
         problem = result.get("exception_info") or {}
-        error = str(problem.get("exception_type") or "")
+        error = kind = str(problem.get("exception_type") or "")
         if error and problem.get("exception_message"):
             error += ": " + str(problem["exception_message"]).strip().splitlines()[-1][:300]
+        reward = float(reward) if isinstance(reward, (int, float)) else None
+        unfinished = reward is None and kind in TESTS_UNFINISHED
         name = str(result.get("task_name") or path.parent.name.rsplit("__", 1)[0])
         tokens_in, tokens_out = agent.get("n_input_tokens"), agent.get("n_output_tokens")
         if tokens_in is None and tokens_out is None:  # lcode 0.54.0 gave none for an attempt stopped at its limit
@@ -394,13 +429,15 @@ def read_trials(job: Path, dataset: str) -> list[Trial]:
             Trial(
                 dataset=dataset,
                 task=name.rsplit("/", 1)[-1],
-                reward=float(reward) if isinstance(reward, (int, float)) else None,
+                reward=0.0 if unfinished else reward,
                 started=str(result.get("started_at") or ""),
                 seconds=seconds_between(result.get("agent_execution")),
                 tokens_in=None if tokens_in is None else int(number(tokens_in)),
                 tokens_out=None if tokens_out is None else int(number(tokens_out)),
                 error=error,
                 version=str((result.get("agent_info") or {}).get("version") or ""),
+                unfinished_tests=unfinished,
+                tokens_per_second=generation_speed(path.parent / "agent" / "lcode"),
             )
         )
     return trials
@@ -415,6 +452,7 @@ class TaskResult:
     seconds: float | None = None  # per attempt, on average
     tokens_in: int | None = None  # per attempt, on average, of those whose tokens are known
     tokens_out: int | None = None
+    unfinished_tests: int = 0  # attempts whose tests didn't finish or give a result, in `passed` as failed
 
 
 @dataclass
@@ -425,6 +463,8 @@ class Summary:
     pass_all: float | None  # pass^k: the share of tasks whose every attempt passed (of those with all k)
     runs: list[float]  # the pass rate of each task's first attempt, of its second...
     not_run: int
+    unfinished_tests: int = 0
+    tokens_per_second: float | None = None  # the median attempt's, of those with a trace
 
     @property
     def spread(self) -> float | None:
@@ -450,6 +490,7 @@ def summarize(trials: list[Trial], attempts: int = ATTEMPTS) -> Summary:
                 statistics.fmean(timed) if timed else None,
                 round(statistics.fmean(counted_in)) if counted_in else None,
                 round(statistics.fmean(counted_out)) if counted_out else None,
+                sum(t.unfinished_tests for t in ran),
             )
         )
     scored = [t for t in tasks if t.passed]
@@ -461,7 +502,17 @@ def summarize(trials: list[Trial], attempts: int = ATTEMPTS) -> Summary:
         nth = [t.passed[i] for t in scored if len(t.passed) > i]
         if nth:
             runs.append(statistics.fmean(nth))
-    return Summary(tasks, attempts, pass_at_1, pass_all, runs, sum(t.not_run for t in tasks))
+    speeds = [t.tokens_per_second for t in trials if t.tokens_per_second]
+    return Summary(
+        tasks,
+        attempts,
+        pass_at_1,
+        pass_all,
+        runs,
+        sum(t.not_run for t in tasks),
+        sum(t.unfinished_tests for t in tasks),
+        statistics.median(speeds) if speeds else None,
+    )
 
 
 def percent(share: float | None) -> str:
@@ -486,6 +537,13 @@ def print_summary(console, summary: Summary) -> None:
     if summary.spread is not None:
         line += f" · runs {', '.join(percent(r) for r in summary.runs)} (spread {summary.spread * 100:.0f} points)"
     console.print(f"[bold]{line}[/]")
+    if summary.tokens_per_second:
+        console.print(f"The model generated {summary.tokens_per_second:.0f} tokens/s (the median attempt).")
+    if summary.unfinished_tests:
+        console.print(
+            f"[yellow]{summary.unfinished_tests} attempt(s) count as failed: their tests didn't finish (a time limit, "
+            "say) or give a result. Harbor's own mean counts them the same way.[/]"
+        )
     if summary.not_run:
         console.print(f"[yellow]{summary.not_run} attempt(s) didn't run (their container didn't start, say).[/]")
 
@@ -493,6 +551,7 @@ def print_summary(console, summary: Summary) -> None:
 # ----------------------------------------------------------------------------- comparing two runs (the release gate)
 
 SAME = ("slice", "agent", "model", "context", "attempts")  # results compare fairly only when these match
+SPEED_GAP = 0.1  # model speeds further apart than this make time limits bite differently
 
 
 @dataclass
@@ -502,6 +561,7 @@ class Saved:
     path: Path
     data: dict
     passed: dict[str, list[bool]]  # "benchmark/task" -> each attempt that ran, passed or not
+    tokens_per_second: float | None = None  # the median attempt's model speed
 
     @classmethod
     def load(cls, path: Path) -> Saved:
@@ -511,13 +571,31 @@ class Saved:
             passed = {f"{r['dataset']}/{r['task']}": [bool(p) for p in r.get("passed") or []] for r in data["results"]}
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise ValueError(f"{file} isn't a result of lcode bench --harbor: {e}") from None
-        return cls(file, data, passed)
+        summary = data.get("summary")
+        speed = summary.get("tokens_per_second") if isinstance(summary, dict) else None
+        trials = harbor_trials(file.parent, data)
+        if trials:  # read again with this version's rules, so that both sides of a comparison count alike
+            again = summarize(trials, int(number(data.get("attempts"))) or ATTEMPTS)
+            passed = {f"{t.dataset}/{t.task}": t.passed for t in again.tasks}
+            speed = again.tokens_per_second
+        return cls(file, data, passed, number(speed) or None)
 
     def describe(self) -> str:
         d = self.data
         context = f"{d['context'] // 1024}K" if isinstance(d.get("context"), int) else "?"
         agent = "" if d.get("agent", "lcode") == "lcode" else f"{d.get('agent')} {d.get('agent_version') or ''} on "
         return f"{agent}lcode {d.get('lcode', '?')} · {d.get('model', '?')} at {context} · {d.get('date', '?')[:10]}"
+
+
+def harbor_trials(folder: Path, data: dict) -> list[Trial]:
+    """A saved run's attempts, read again from Harbor's results while they're still on this machine: in the folder
+    of its lcode-bench.json, or where the run left them."""
+    places = [folder] + ([Path(str(data["jobs"]))] if data.get("jobs") else [])
+    for jobs in places:
+        trials = [t for name in DATASETS if (jobs / name).is_dir() for t in read_trials(jobs / name, name)]
+        if trials:
+            return trials
+    return []
 
 
 def pass_at_1(passed: list[list[bool]]) -> float:
@@ -539,6 +617,18 @@ def compare(old: Saved, new: Saved) -> tuple[list[str], bool]:
             key, "lcode" if key == "agent" else None
         ):
             lines.append(f"[yellow]Not the same {key}: {old.data.get(key)} and {new.data.get(key)}.[/]")
+    if old.tokens_per_second and new.tokens_per_second:
+        lines.append(
+            f"Model speed: {old.tokens_per_second:.0f} tokens/s before, {new.tokens_per_second:.0f} after "
+            "(the median attempt's)."
+        )
+        ratio = new.tokens_per_second / old.tokens_per_second - 1
+        if abs(ratio) > SPEED_GAP:
+            lines.append(
+                f"[yellow]The model ran {abs(ratio) * 100:.0f}% {'slower' if ratio < 0 else 'faster'} after. "
+                "Attempts run into their time limits more often on a slower machine, so part of a difference can "
+                "come from the machine (free memory, other programs) rather than from lcode.[/]"
+            )
     both = sorted(task for task in old.passed if old.passed[task] and new.passed.get(task))
     for task in sorted(set(old.passed) | set(new.passed)):
         before, after = old.passed.get(task) or [], new.passed.get(task) or []
@@ -728,6 +818,8 @@ def command(args, console) -> int:
             "runs": summary.runs,
             "spread": summary.spread,
             "not_run": summary.not_run,
+            "unfinished_tests": summary.unfinished_tests,
+            "tokens_per_second": None if summary.tokens_per_second is None else round(summary.tokens_per_second, 1),
         },
         "results": [asdict(task) for task in summary.tasks],
         "jobs": str(jobs),

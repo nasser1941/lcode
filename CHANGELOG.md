@@ -14,6 +14,11 @@ All notable changes to lcode are documented here. The format follows
   ran to the end. The editor's messages are handled in threads of their own, and the request's own thread
   reset the cancel when it started late, on a busy machine. The cancel now holds. This was also why
   `tests/test_acp.py` failed now and then under load (#200).
+- **`lcode bench --compare`** left out attempts whose tests ran but didn't finish, as if they hadn't
+  run, so a change that makes the tests hang could hide a drop. They count as failed now, as in
+  Harbor's own mean, and `--compare` reads both runs again from Harbor's results so that they count
+  alike. It also gives each run's model speed, and warns when one ran more than 10% slower, which
+  makes the tasks' time limits bite more often. On 0.59.0's gate, both showed (#199).
 
 ## [0.59.0] - 2026-11-03
 

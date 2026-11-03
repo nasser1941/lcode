@@ -129,7 +129,8 @@ def test_harbor_runs_the_tasks_with_lcode_next_to_it(tmp_path):
     assert line.endswith(f"--extra-docker-compose {tmp_path / 'bridge.yaml'}")
 
 
-def write_trial(job, name, task, reward, minute, tokens=(1000, 100)):
+def write_trial(job, name, task, reward, minute, tokens=(1000, 100), error="RuntimeError", speed=None):
+    """An attempt as Harbor saves it, with lcode's trace of the model generating at `speed` tokens/s, if given."""
     folder = job / name
     folder.mkdir(parents=True)
     result = {
@@ -144,10 +145,15 @@ def write_trial(job, name, task, reward, minute, tokens=(1000, 100)):
     }
     if reward is None:
         result["exception_info"] = {
-            "exception_type": "RuntimeError",
+            "exception_type": error,
             "exception_message": "no network\nall predefined address pools have been fully subnetted",
         }
     (folder / "result.json").write_text(json.dumps(result))
+    if speed:
+        traces = folder / "agent" / "lcode" / "traces"
+        traces.mkdir(parents=True)
+        steps = [{"type": "model", "tokens_out": 2 * speed, "gen_seconds": 2.0}, {"type": "model", "tokens_out": 0}]
+        (traces / "a-1.jsonl").write_text("".join(json.dumps(e) + "\n" for e in steps))
 
 
 def test_pass_rates_spread_and_cost_from_harbors_results(tmp_path):
@@ -195,6 +201,39 @@ def test_tokens_of_attempts_stopped_at_their_time_limit(tmp_path):
     assert lost.split()[-2:] == ["–", "–"]
 
 
+def test_attempts_whose_tests_didnt_finish_count_as_failed(tmp_path):
+    """Harbor's mean counts an attempt whose tests ran out of time as failed, and so does lcode. One whose container
+    didn't start counts neither way."""
+    job = tmp_path / "terminal-bench"
+    write_trial(job, "hangs__0", "terminal-bench/hangs", None, 0, error="VerifierTimeoutError")
+    write_trial(job, "hangs__1", "terminal-bench/hangs", 1.0, 10)
+    write_trial(job, "hangs__2", "terminal-bench/hangs", None, 20, error="EnvironmentStartTimeoutError")
+    trials = harbor_bench.read_trials(job, "terminal-bench")
+    assert [(t.reward, t.unfinished_tests) for t in trials] == [(0.0, True), (1.0, False), (None, False)]
+    summary = harbor_bench.summarize(trials, attempts=3)
+    [hangs] = summary.tasks
+    assert (hangs.passed, hangs.not_run, hangs.unfinished_tests) == ([False, True], 1, 1)
+    assert (summary.unfinished_tests, summary.not_run, summary.pass_at_1) == (1, 1, 0.5)
+    console = Console(file=io.StringIO(), width=200)
+    harbor_bench.print_summary(console, summary)
+    text = console.file.getvalue()
+    assert "1 attempt(s) count as failed: their tests didn't finish" in text and "1 attempt(s) didn't run" in text
+
+
+def test_the_model_speed_comes_from_lcodes_traces(tmp_path):
+    job = tmp_path / "terminal-bench"
+    for attempt, speed in enumerate([60, 80, 70]):
+        write_trial(job, f"a__{attempt}", "terminal-bench/a", 1.0, 10 * attempt, speed=speed)
+    write_trial(job, "b__0", "terminal-bench/b", 1.0, 40)  # no trace
+    trials = harbor_bench.read_trials(job, "terminal-bench")
+    assert [t.tokens_per_second for t in trials] == [60.0, 80.0, 70.0, None]
+    summary = harbor_bench.summarize(trials, attempts=3)
+    assert summary.tokens_per_second == 70.0
+    console = Console(file=io.StringIO(), width=200)
+    harbor_bench.print_summary(console, summary)
+    assert "The model generated 70 tokens/s (the median attempt)." in console.file.getvalue()
+
+
 def test_lcode_bench_harbor_runs_harbor_then_reports_and_saves(capsys, monkeypatch):
     from lcode import cli, config, hardware, update
 
@@ -223,6 +262,7 @@ def test_lcode_bench_harbor_runs_harbor_then_reports_and_saves(capsys, monkeypat
     assert (report["model"], report["context"], report["attempts"]) == ("qwen3.6-35b", 32768, 1)
     assert report["started"] <= report["date"] and 0 <= report["seconds"] < 60
     assert report["results"][0]["tokens_in"] == 2000 and report["summary"]["pass_at_1"] == 1.0
+    assert (report["summary"]["unfinished_tests"], report["summary"]["tokens_per_second"]) == (0, None)
 
 
 def test_other_agents_are_set_up_like_ollama_launch_sets_them_up(tmp_path):
@@ -388,6 +428,32 @@ def test_compare_says_when_its_better_and_what_differs(tmp_path):
     assert "Not the same context: 32768 and 65536." in text
     assert "terminal-bench/gone: only before, left out" in text and "terminal-bench/new: only after, left out" in text
     assert "Before: lcode 0.57.0 · qwen3.6-35b at 32K" in text and "at 64K" in text
+
+
+def test_compare_reads_both_runs_again_from_harbors_results(tmp_path):
+    """Runs are read again from Harbor's results while they're there, so a run saved by an older lcode counts the
+    same way as a new one: here, attempts whose tests didn't finish. A slower model gets a warning."""
+    old, new = tmp_path / "before", tmp_path / "after"
+    for folder, speed, rewards in ((old, 80, [0.0, 0.0, 0.0]), (new, 60, [None, None, None])):
+        saved(folder, {"hangs": []})  # what lcode 0.59.0 saved when the tests ran out of time: no attempt
+        for attempt, reward in enumerate(rewards):
+            write_trial(
+                folder / "terminal-bench", f"hangs__{attempt}", "terminal-bench/hangs", reward, 10 * attempt,
+                error="VerifierTimeoutError", speed=speed,
+            )  # fmt: skip
+    console = Console(file=io.StringIO(), width=200)
+    assert harbor_bench.compare_command([str(old), str(new)], console) == 0
+    text = console.file.getvalue()
+    assert "Model speed: 80 tokens/s before, 60 after (the median attempt's)." in text
+    assert "The model ran 25% slower after." in text and "pass@1 0% → 0% over the 1 tasks in both" in text
+    copy = tmp_path / "copy" / "lcode-bench.json"  # a copy elsewhere: Harbor's results are where the run left them
+    copy.parent.mkdir()
+    copy.write_text(json.dumps({**json.loads((new / "lcode-bench.json").read_text()), "jobs": str(new)}))
+    assert harbor_bench.Saved.load(copy).passed == {"terminal-bench/hangs": [False, False, False]}
+    near = harbor_bench.compare(
+        harbor_bench.Saved(old, {}, {"t": [True]}, 80.0), harbor_bench.Saved(new, {}, {"t": [True]}, 76.0)
+    )
+    assert any("Model speed" in line for line in near[0]) and not any("slower" in line for line in near[0])
 
 
 def test_compare_needs_two_results(tmp_path):
