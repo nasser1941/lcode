@@ -83,6 +83,7 @@ def isolated_state(tmp_path_factory, monkeypatch):
     monkeypatch.setattr("lcode.comfy.cli_workspace", lambda: None)
     monkeypatch.setattr("lcode.hardware.gpu_used_gib", lambda: None)  # never this machine's GPU
     monkeypatch.setattr("lcode.hardware.gpu_users", lambda: [])
+    monkeypatch.setattr("lcode.hardware.PROC", tmp_path_factory.mktemp("proc"))  # nor its RAM
     monkeypatch.setattr("lcode.residency.RELEASE_WAIT", 0.0)  # FakeOllama keeps listing what it unloaded
 
     def no_launch(*args, **kwargs):

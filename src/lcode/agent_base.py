@@ -18,6 +18,7 @@ from lcode import (
     extensions,
     repoid,
     repomap,
+    residency,
     subagents,
     traces,
 )
@@ -34,7 +35,6 @@ from lcode.tools import Toolbox
 from lcode.unreachable import NOTE_AT, Sites
 
 if TYPE_CHECKING:
-    from lcode import residency
     from lcode.agent import Agent
     from lcode.agent_model import Progress
     from lcode.hardware import Hardware
@@ -196,6 +196,7 @@ class AgentBase:
         self.ctx_used = 0
         self._repo: tuple[Path, repoid.Repo | None] | None = None  # the workspace's repository, for saved sessions
         self.last_speed = 0.0
+        self.reply_speeds = residency.SpeedWatch()  # to say why, when replies get far slower (lcode.residency)
         self.usage = {"requests": 0, "prompt_tokens": 0, "prompt_ns": 0, "output_tokens": 0, "output_ns": 0}
         self.trace: traces.Lane | None = None  # the request's trace while it's recorded (lcode.traces)
         self.replay: ReplayServer | None = None  # in a replay: the recorded results of tools and checks (lcode.replay)

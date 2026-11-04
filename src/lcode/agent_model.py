@@ -315,4 +315,20 @@ class ModelCalls(AgentBase):
             self.sent_chars = self.counted_chars = conversation_chars(self.messages)
             seconds = final.get("eval_duration", 0) / 1e9
             self.last_speed = final.get("eval_count", 0) / seconds if seconds else 0.0
+            self.explain_slowdown(final.get("eval_count", 0), seconds)
         return message
+
+    def explain_slowdown(self, tokens: int, seconds: float) -> None:
+        """When replies fall far below this session's earlier speed and RAM is short, say that's likely why, once."""
+        context, spec = self.settings.context, catalog.find(self.settings.model)
+        if spec is None or self.hardware is None or self.reply_speeds.explained:
+            return
+        slowed = self.reply_speeds.add(self.settings.model, context, tokens, seconds)
+        fit = residency.ram_fit(self.ollama, spec, context, self.hardware) if slowed else None
+        if slowed and fit and fit.short:
+            self.reply_speeds.explained = True
+            self.say(
+                f"Replies slowed from {slowed[0]:.0f} to {slowed[1]:.0f} tokens a second, most likely because RAM is "
+                f"short: {fit.describe()}. {fit.advice(residency.SESSION_COMMANDS)}",
+                warning=True,
+            )

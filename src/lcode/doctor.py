@@ -9,7 +9,7 @@ from pathlib import Path
 
 from rich.markup import escape
 
-from lcode import __version__, backends, config, limits, sessions, web
+from lcode import __version__, backends, config, limits, residency, sessions, web
 from lcode.cloud import is_cloud, signin_command
 from lcode.config import ConfigError, format_tokens
 from lcode.ollama import MIN_VERSION, OllamaError, redact, version_tuple
@@ -81,6 +81,11 @@ def cmd_doctor(args) -> None:
         if spec:
             detail += f" · ~{spec.memory_gib(ctx):.0f} GB needed, ~{hw.budget_gib:.0f} GB available"
         line("Context", detail + (f" ({note})" if note else ""), None if note else True)
+        fit = residency.ram_fit(ollama, spec, ctx, hw) if spec else None
+        if fit:
+            line("RAM", fit.describe(), None if fit.short else True)
+            if fit.short:
+                line("", f"{fit.why()} {fit.advice()}", None)
         from lcode import vision
 
         seer = vision.pick_model(ollama, model, cfg["vision_model"])
