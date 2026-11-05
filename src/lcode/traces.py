@@ -265,6 +265,8 @@ class Lane:
             system = messages[0].get("content", "") if messages and messages[0].get("role") == "system" else ""
             tools = payload.get("tools") or []
             event["prompt_sha"], event["tools_sha"] = digest(str(system)), digest(tools)
+            if payload.get("think") is False:
+                event["think"] = False  # asked without thinking: the setting is off, or the reply before went nowhere
             if self.name == "main" and not self.recorder.first:
                 names = [(t.get("function") or {}).get("name", "") for t in tools if isinstance(t, dict)]
                 self.recorder.first = {

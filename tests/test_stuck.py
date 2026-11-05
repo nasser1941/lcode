@@ -163,8 +163,11 @@ def test_a_reply_going_round_in_circles_is_stopped_and_the_model_asked_again(mak
     assert closed == [True] and agent.turn_status == "success"
     assert not any(m.get("thinking") for m in agent.messages)  # the circles don't stay in the context
     assert "went round in circles" in agent.messages[-2]["content"]
+    assert "thinking is off for this reply" in agent.messages[-2]["content"]
+    assert [p["think"] for p in agent.ollama.payloads] == [True, False]  # asked again, it can't deliberate
     assert agent.messages[-1]["content"].startswith("The NDK downloads fail")
-    assert "the reply went round in circles, so lcode stopped it" in output(agent)
+    text = " ".join(output(agent).split())
+    assert "the reply went round in circles, so lcode stopped it: asking for a short answer, with thinking off" in text
 
 
 def test_an_empty_or_cut_off_reply_gets_one_more_chance_then_the_request_stops(make_agent):
@@ -175,8 +178,53 @@ def test_an_empty_or_cut_off_reply_gets_one_more_chance_then_the_request_stops(m
     assert "filled the rest of the context" in agent.messages[-2]["content"] and agent.turn_status == "success"
     agent = make_agent([reply(""), reply("  ")])
     agent.run_turn("Build it")
-    assert agent.turn_status == "loop"
-    assert "ended without an answer, twice" in " ".join(output(agent).split())
+    assert agent.turn_status == "loop" and [p["think"] for p in agent.ollama.payloads] == [True, False]
+    assert "ended without an answer, twice in a row" in " ".join(output(agent).split())
+
+
+def test_thinking_comes_back_once_the_model_acts_and_so_does_its_second_chance(make_agent):
+    """After a reply that goes nowhere, the next one runs without thinking. Once the model acts, thinking is back
+    on, and a later reply that goes nowhere gets its own second chance: on the dev slice, 7 attempts that had
+    recovered and worked on were stopped by a second stall much later (#241)."""
+    looping = [{"message": {"thinking": LOOP}, "done": False} for _ in range(200)]
+    agent = make_agent(
+        [
+            None,  # goes round in circles
+            reply(tool_calls=[call("bash", command="echo built")]),  # asked without thinking: it acts
+            reply(""),  # later, an empty reply
+            reply(tool_calls=[call("bash", command="echo tested")]),
+            reply("Built and tested."),
+        ]
+    )
+    agent.ollama.scripts[0] = streamed(looping, [])
+    agent.run_turn("Build and test it")
+    assert agent.turn_status == "success" and agent.messages[-1]["content"] == "Built and tested."
+    assert [p["think"] for p in agent.ollama.payloads] == [True, False, True, False, True]
+
+
+def test_four_replies_that_go_nowhere_stop_the_request_even_with_work_in_between(make_agent):
+    work = [reply(tool_calls=[call("bash", command=f"echo step {n}")]) for n in range(3)]
+    agent = make_agent([reply(""), work[0], reply(""), work[1], reply(""), work[2], reply(""), reply("never asked")])
+    agent.run_turn("Build it")
+    assert agent.turn_status == "loop" and agent.ollama.scripts == [reply("never asked")]
+    assert "ended without an answer, 4 times in this request" in " ".join(output(agent).split())
+
+
+def test_other_servers_keep_thinking_on_for_the_second_chance(make_agent):
+    """Only Ollama's API has a switch for one reply without thinking. Other servers take a chat template argument
+    instead, which hosted APIs refuse, so lcode doesn't send one there."""
+    agent = make_agent([reply(""), reply("Done.")])
+    agent.ollama.kind = "openai"
+    agent.run_turn("Build it")
+    assert agent.turn_status == "success" and [p["think"] for p in agent.ollama.payloads] == [True, True]
+    assert "thinking is off" not in agent.messages[-2]["content"] and "with thinking off" not in output(agent)
+
+
+def test_with_thinking_off_the_second_chance_says_nothing_about_it(make_agent):
+    agent = make_agent([reply(""), reply("Done.")], think=False)
+    agent.run_turn("Build it")
+    assert agent.turn_status == "success" and [p["think"] for p in agent.ollama.payloads] == [False, False]
+    assert "thinking is off" not in agent.messages[-2]["content"] and "with thinking off" not in output(agent)
 
 
 def test_an_answer_cut_off_by_the_context_says_so(make_agent):
