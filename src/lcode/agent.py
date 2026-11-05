@@ -286,6 +286,9 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
         stalled = 0  # such replies in this request
         commands: list[str] = []  # shell commands run in this request
         scripts_noted = False  # the model was told about scripts it wrote and never ran
+        untested: dict[str, None] = {}  # code files the model wrote in this request and hasn't run since (#242)
+        untested_noted = False  # the model was told about them
+        missing: dict[str, None] = {}  # programs a command in this request found missing
         tools_used: set[str] = set()  # tools called in this request
         windows_noted = False  # the model was told about windows it changed and never looked at
         for step in range(self.max_steps):
@@ -395,6 +398,19 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
                     )
                     self.messages.append({"role": "user", "content": checks.unseen_note(unseen)})
                     continue
+                untried = [] if untested_noted else self.untested_code(untested)
+                if untried:
+                    untested_noted = True
+                    it = "it" if len(untried) == 1 else "them"
+                    self.console.print(
+                        Text(
+                            f"  ⎿ never ran {', '.join(untried)} after writing {it}: asking the model to",
+                            style="yellow",
+                        )
+                    )
+                    note = checks.untested_note(untried, list(missing), checks.uv_available())
+                    self.messages.append({"role": "user", "content": note})
+                    continue
                 check = self.project_check() if changed and not verified else None
                 if check is not None and check_rounds < checks.MAX_ROUNDS:
                     check_rounds += 1
@@ -448,6 +464,7 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
                 began = time.monotonic()
                 if self.trace is not None:
                     self.trace.tool_begin()
+                self.tools.wrote = []
                 try:
                     result = done[i] if i in done else self.run_tool(name, args)
                 except KeyboardInterrupt:
@@ -491,8 +508,16 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
                     if out_of_reach.stop:
                         blocked = out_of_reach
                 tools_used.add(name)
+                for rel in self.tools.wrote:
+                    if self.tools.before.get(rel, "") is None and checks.is_code(rel):
+                        untested[rel] = None  # new in this request: it should run before the model says it works
                 if name == "bash":
-                    commands.append(str(args.get("command", "")))
+                    command = str(args.get("command", ""))
+                    commands.append(command)
+                    if not result.startswith(REFUSED):  # a command that wasn't allowed, or failed to start, ran nothing
+                        for rel in checks.exercised(command, result, untested):
+                            del untested[rel]
+                        missing.update(dict.fromkeys(checks.not_found(result)))
                 if name in ("edit_file", "write_file", "apply_patch") and not result.startswith(REFUSED):
                     changed, verified = True, False
                 elif name == "bash" and changed and self.model_ran_checks(str(args.get("command", "")), result):

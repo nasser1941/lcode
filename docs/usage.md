@@ -261,6 +261,17 @@ lcode sends it back once before the answer counts: run it and fix what fails, or
 it's untested and why, when running it would install, deploy or delete things. Making it executable
 or reading it doesn't count as running it. `checks = "off"` turns this off too.
 
+**Code it never ran.** A model that writes a new module and finds no Python, or checks only its
+syntax, tends to call it done, and the first run shows the error. When a request wrote a new code
+file (Python, JavaScript, TypeScript, Rust, Go, C, Java and other languages that run) and no command
+since its last change ran it, lcode sends it back once: run it (import a module and call what it
+wrote; start a server in the background and try it) and fix what fails, or say plainly that it's
+untested and why. A command counts when it names the file or its module, or runs tests, and its
+program was there: a syntax, lint or type check, `python3: command not found` or a command that
+only reads doesn't count. When `uv` is installed, the note adds that `uv run --with PACKAGE python FILE` runs
+Python code in a throwaway environment. A project with checks of its own gets those instead, and a
+window gets the screenshot check above. `checks = "off"` turns this off too.
+
 ## A review before the answer
 
 Models claim more than they did: half of a two-part request done, "it works now" without having
@@ -351,11 +362,24 @@ since last time with `bash_output`, and stops it with `bash_stop`.
 ```
 
 - `/jobs` lists the background commands; `/jobs stop 1` stops one.
-- They all stop when the session ends.
+- They stop when the session ends, except **kept** ones. When you ask for a service that stays up
+  after lcode is done ("start the docs server and leave it running"), the model adds
+  `keep: true`. A kept command writes its output to a log in `~/.local/state/lcode/jobs/`, and at
+  the end lcode says what it left running and how to stop it:
+
+  ```text
+  Left job 1 running, as asked: mkdocs serve (process group 48211: `kill -- -48211` stops it; its
+  output is in ~/.local/state/lcode/jobs/20261103-141502-3fa9c1.log)
+  ```
+
 - Anything else a command starts with `&` is stopped when that command ends. Only background
   commands keep running, so no process outlives the session unnoticed.
 - Background commands ask for permission like any other command, and run in the
-  [sandbox](sandbox.md) when it's on.
+  [sandbox](sandbox.md) when it's on. A command in the sandbox can't be kept: the sandbox stops
+  with lcode.
+- A kept command always asks first, and the question says that it stays running: even a command
+  that only reads, or a program you allowed for the session. Only `yolo` mode and an allow rule
+  in your settings let it through without asking. Plan mode doesn't run it.
 
 ## What's happening under the hood
 

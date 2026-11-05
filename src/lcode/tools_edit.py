@@ -79,6 +79,7 @@ class FileChanges(ToolboxBase):
             p.write_bytes(data)  # the file on disk must match, for checkpoints and the tools
         self.read_mtimes[str(p)] = p.stat().st_mtime
         self.changed[self.rel(p)] = None
+        self.wrote.append(self.rel(p))
 
     def t_write_file(self, path: str, content: str) -> str:
         p = self.path(path)
