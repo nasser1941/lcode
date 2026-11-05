@@ -261,6 +261,17 @@ lcode sends it back once before the answer counts: run it and fix what fails, or
 it's untested and why, when running it would install, deploy or delete things. Making it executable
 or reading it doesn't count as running it. `checks = "off"` turns this off too.
 
+**Code it never ran.** A model that writes a new module and finds no Python, or checks only its
+syntax, tends to call it done, and the first run shows the error. When a request wrote a new code
+file (Python, JavaScript, TypeScript, Rust, Go, C, Java and other languages that run) and no command
+since its last change ran it, lcode sends it back once: run it (import a module and call what it
+wrote; start a server in the background and try it) and fix what fails, or say plainly that it's
+untested and why. A command counts when it names the file or its module, or runs tests, and its
+program was there: a syntax, lint or type check, `python3: command not found` or a command that
+only reads doesn't count. When `uv` is installed, the note adds that `uv run --with PACKAGE python FILE` runs
+Python code in a throwaway environment. A project with checks of its own gets those instead, and a
+window gets the screenshot check above. `checks = "off"` turns this off too.
+
 ## A review before the answer
 
 Models claim more than they did: half of a two-part request done, "it works now" without having

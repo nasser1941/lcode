@@ -27,6 +27,7 @@ class ToolboxBase:
         self.notes: list[str] = []  # the model's notes on the task (todo_write): decisions, findings, questions
         self.changed: dict[str, None] = {}  # files lcode wrote in this session, in order
         self.before: dict[str, str | None] = {}  # files changed in this request: their text before (None: new)
+        self.wrote: list[str] = []  # files the current tool call wrote (the agent loop resets it before each call)
         self.todos: list[dict] = []
         # An editor's buffers (lcode acp): read unsaved changes and write through the editor.
         self.reader: Callable[[Path], str | None] | None = None
