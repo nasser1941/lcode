@@ -22,7 +22,9 @@ lcode trace path            # the folder the traces are in
   the total time, and the tokens in and out. With Ollama, also how long loading the model and
   reading the prompt took. The server counts a reply's tokens only when the reply ends, so for one
   lcode stopped (it went round in circles, or you interrupted it) the trace has an estimate:
-  `estimated_in` and `estimated_out`, shown as "about".
+  `estimated_in` and `estimated_out`, shown as "about". A reply asked for without thinking has
+  `think: false`: thinking is turned off, or the reply before it
+  [went nowhere](how-it-works.md#when-a-reply-goes-nowhere).
 - **Each tool call:** its arguments, the result the model got, and how long it took. A result
   longer than 200,000 characters keeps its start and end. When lcode cut a long output for the
   model, the result says where the full output was saved.

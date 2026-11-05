@@ -214,13 +214,22 @@ class ModelCalls(AgentBase):
                 ) from e
             raise
 
+    def can_skip_thinking(self) -> bool:
+        """Whether one reply can be asked for without thinking while thinking is on: Ollama's API has a switch for
+        it. Other servers take a chat template argument instead (vLLM, llama.cpp), which hosted APIs refuse, so
+        lcode doesn't send it unless thinking is off in the settings."""
+        return getattr(self.ollama, "kind", "ollama") == "ollama"
+
     def _opened(self, response) -> None:
         self.response = response
         if self.cancel is not None and self.cancel.is_set():
             subagents.abort(response)
 
-    def assistant_step(self) -> dict:
-        """Stream one model response, rendering thinking/content live. Returns the assistant message."""
+    def assistant_step(self, think: bool = True) -> dict:
+        """Stream one model response, rendering thinking/content live. Returns the assistant message.
+
+        `think=False` asks for this reply without thinking, even when thinking is on: after a reply that went
+        round in circles, so the model acts instead of starting the same deliberation over."""
         content, thinking, tool_calls, final = "", "", [], {}
         md = MarkdownStreamer(self.console)
         progress = Progress(steering=self.steering)
@@ -243,7 +252,7 @@ class ModelCalls(AgentBase):
         start_spinner()
         circles = Circles()
         self.reply_trouble = ""
-        stream = self.chat(self.messages, self.tool_schemas(), self.settings.think)
+        stream = self.chat(self.messages, self.tool_schemas(), self.settings.think and think)
         try:
             for chunk in stream:
                 if self.cancel is not None and self.cancel.is_set():

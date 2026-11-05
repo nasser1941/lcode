@@ -163,8 +163,11 @@ def test_a_reply_going_round_in_circles_is_stopped_and_the_model_asked_again(mak
     assert closed == [True] and agent.turn_status == "success"
     assert not any(m.get("thinking") for m in agent.messages)  # the circles don't stay in the context
     assert "went round in circles" in agent.messages[-2]["content"]
+    assert "thinking is off for this reply" in agent.messages[-2]["content"]
+    assert [p["think"] for p in agent.ollama.payloads] == [True, False]  # asked again, it can't deliberate
     assert agent.messages[-1]["content"].startswith("The NDK downloads fail")
-    assert "the reply went round in circles, so lcode stopped it" in output(agent)
+    text = " ".join(output(agent).split())
+    assert "the reply went round in circles, so lcode stopped it: asking for a short answer, with thinking off" in text
 
 
 def test_an_empty_or_cut_off_reply_gets_one_more_chance_then_the_request_stops(make_agent):
@@ -175,8 +178,53 @@ def test_an_empty_or_cut_off_reply_gets_one_more_chance_then_the_request_stops(m
     assert "filled the rest of the context" in agent.messages[-2]["content"] and agent.turn_status == "success"
     agent = make_agent([reply(""), reply("  ")])
     agent.run_turn("Build it")
-    assert agent.turn_status == "loop"
-    assert "ended without an answer, twice" in " ".join(output(agent).split())
+    assert agent.turn_status == "loop" and [p["think"] for p in agent.ollama.payloads] == [True, False]
+    assert "ended without an answer, twice in a row" in " ".join(output(agent).split())
+
+
+def test_thinking_comes_back_once_the_model_acts_and_so_does_its_second_chance(make_agent):
+    """After a reply that goes nowhere, the next one runs without thinking. Once the model acts, thinking is back
+    on, and a later reply that goes nowhere gets its own second chance: on the dev slice, 7 attempts that had
+    recovered and worked on were stopped by a second stall much later (#241)."""
+    looping = [{"message": {"thinking": LOOP}, "done": False} for _ in range(200)]
+    agent = make_agent(
+        [
+            None,  # goes round in circles
+            reply(tool_calls=[call("bash", command="echo built")]),  # asked without thinking: it acts
+            reply(""),  # later, an empty reply
+            reply(tool_calls=[call("bash", command="echo tested")]),
+            reply("Built and tested."),
+        ]
+    )
+    agent.ollama.scripts[0] = streamed(looping, [])
+    agent.run_turn("Build and test it")
+    assert agent.turn_status == "success" and agent.messages[-1]["content"] == "Built and tested."
+    assert [p["think"] for p in agent.ollama.payloads] == [True, False, True, False, True]
+
+
+def test_four_replies_that_go_nowhere_stop_the_request_even_with_work_in_between(make_agent):
+    work = [reply(tool_calls=[call("bash", command=f"echo step {n}")]) for n in range(3)]
+    agent = make_agent([reply(""), work[0], reply(""), work[1], reply(""), work[2], reply(""), reply("never asked")])
+    agent.run_turn("Build it")
+    assert agent.turn_status == "loop" and agent.ollama.scripts == [reply("never asked")]
+    assert "ended without an answer, 4 times in this request" in " ".join(output(agent).split())
+
+
+def test_other_servers_keep_thinking_on_for_the_second_chance(make_agent):
+    """Only Ollama's API has a switch for one reply without thinking. Other servers take a chat template argument
+    instead, which hosted APIs refuse, so lcode doesn't send one there."""
+    agent = make_agent([reply(""), reply("Done.")])
+    agent.ollama.kind = "openai"
+    agent.run_turn("Build it")
+    assert agent.turn_status == "success" and [p["think"] for p in agent.ollama.payloads] == [True, True]
+    assert "thinking is off" not in agent.messages[-2]["content"] and "with thinking off" not in output(agent)
+
+
+def test_with_thinking_off_the_second_chance_says_nothing_about_it(make_agent):
+    agent = make_agent([reply(""), reply("Done.")], think=False)
+    agent.run_turn("Build it")
+    assert agent.turn_status == "success" and [p["think"] for p in agent.ollama.payloads] == [False, False]
+    assert "thinking is off" not in agent.messages[-2]["content"] and "with thinking off" not in output(agent)
 
 
 def test_an_answer_cut_off_by_the_context_says_so(make_agent):
@@ -248,6 +296,115 @@ def test_a_script_written_and_never_run_is_sent_back_once(make_agent, repo):
     agent = make_agent([reply(tool_calls=[write]), reply("Done.")], checks="off")
     agent.run_turn("Write a build script")
     assert agent.messages[-1]["content"] == "Done."
+
+
+# ----------------------------------------------------------------------------- code written, never run (#242)
+
+GEOMETRY = "def area(w, h):\n    return w * h\n"
+SYNTAX = "python3 -c \"import ast; ast.parse(open('geometry.py').read()); print('Syntax OK')\""
+
+
+def untested_notes(agent) -> list[str]:
+    return [m["content"] for m in agent.messages if m["role"] == "user" and "haven't run " in m["content"]]
+
+
+def test_what_counts_as_running_new_code():
+    files = ["geometry.py", "pkg/shapes.py"]
+    ran = "6\n\n[exit code: 0]"
+    assert checks.exercised("python3 -c 'import geometry; print(geometry.area(2, 3))'", ran, files) == ["geometry.py"]
+    assert checks.exercised("cd /app && python3 -m pkg.shapes", ran, files) == ["pkg/shapes.py"]
+    assert checks.exercised("cd /app && python3 -m pytest -q", ran, files) == files  # tests run what they test
+    assert checks.exercised(SYNTAX, "Syntax OK\n\n[exit code: 0]", files) == []  # the syntax alone
+    assert checks.exercised("ruff check geometry.py && mypy geometry.py", ran, files) == []  # lint and types
+    assert checks.exercised("cat geometry.py", ran, files) == []  # it only looks
+    assert checks.exercised("python3 other.py", ran, files) == []
+    missing = "bash: line 1: python3: command not found\n\n[exit code: 127]"
+    assert checks.exercised("python3 geometry.py", missing, files) == []
+    hidden = "bash: line 1: python3: command not found\nno python\n\n[exit code: 0]"
+    assert checks.exercised("python3 geometry.py || echo no python", hidden, files) == []
+    no_torch = "ModuleNotFoundError: No module named 'torch'\n\n[exit code: 1]"
+    assert checks.exercised("python3 -c 'import geometry'", no_torch, files) == []
+    assert checks.not_found(missing + "\n/bin/sh: 1: node: not found\n") == ["python3", "node"]
+    assert checks.is_code("geometry.py") and checks.is_code("src/Main.JAVA")
+    assert not any(checks.is_code(f) for f in ("build.sh", "notes.md", "meeting.ics", "query.sparql"))
+
+
+def test_code_written_and_never_run_is_sent_back_once(make_agent, repo, monkeypatch):
+    """On the dev slice, 5 of 6 torch-tensor-parallelism attempts wrote the module, found no python3 or checked only
+    its syntax, and said they were done: each had a runtime error that one run would have shown (#242)."""
+    monkeypatch.setattr(checks, "uv_available", lambda: True)
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("write_file", path="geometry.py", content=GEOMETRY)]),
+            reply(tool_calls=[call("bash", command=SYNTAX)]),
+            reply("Done: geometry.py has area()."),
+            reply(tool_calls=[call("bash", command="python3 -c 'import geometry; print(geometry.area(2, 3))'")]),
+            reply("It works: area(2, 3) is 6."),
+        ],
+        checks="auto",
+    )
+    agent.run_turn("Write a geometry module")
+    [note] = untested_notes(agent)
+    assert note.startswith("[lcode] You wrote geometry.py in this request but haven't run it since your last change")
+    assert "A syntax check doesn't show that it works" in note and "uv run --with PACKAGE python FILE" in note
+    assert agent.messages[-1]["content"] == "It works: area(2, 3) is 6." and not agent.ollama.scripts
+    assert "never ran geometry.py after writing it: asking the model to" in " ".join(output(agent).split())
+
+
+def test_a_program_that_isnt_installed_doesnt_count_as_a_run(make_agent, repo, monkeypatch):
+    monkeypatch.setattr(checks, "uv_available", lambda: False)
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("write_file", path="geometry.py", content=GEOMETRY)]),
+            reply(tool_calls=[call("bash", command="no-such-python -c 'import geometry'")]),
+            reply("Done."),
+            reply("It's untested: there's no Python here."),
+        ],
+        checks="auto",
+    )
+    agent.run_turn("Write a geometry module")
+    [note] = untested_notes(agent)
+    assert "`no-such-python` isn't installed here" in note and "uv run" not in note
+    assert agent.messages[-1]["content"] == "It's untested: there's no Python here." and not agent.ollama.scripts
+
+
+def test_a_command_that_was_denied_didnt_run_the_code(make_agent, repo):
+    from lcode.hooks import Rules
+
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("write_file", path="geometry.py", content=GEOMETRY)]),
+            reply(tool_calls=[call("bash", command="python3 geometry.py")]),
+            reply("Done."),
+            reply("It's untested: running Python isn't allowed here."),
+        ],
+        checks="auto",
+    )
+    agent.perms.rules = Rules(deny=[("bash:python3*", "a test")])
+    agent.run_turn("Write a geometry module")
+    results = [m["content"] for m in agent.messages if m["role"] == "tool"]
+    assert results[1].startswith("A deny rule blocks this") and len(untested_notes(agent)) == 1
+    assert agent.messages[-1]["content"] == "It's untested: running Python isn't allowed here."
+
+
+def test_edits_files_that_dont_run_windows_and_project_checks_get_no_such_note(make_agent, repo):
+    read = call("read_file", path="src/pkg/math.py")
+    edit = call("edit_file", path="src/pkg/math.py", old_string="return a - b", new_string="return a - b  # sub")
+    notes = call("write_file", path="NOTES.md", content="# Notes\n")
+    agent = make_agent([reply(tool_calls=[read, edit, notes]), reply("Done.")], checks="auto")
+    agent.run_turn("Comment sub")
+    assert (repo / "src/pkg/math.py").read_text().count("# sub") == 1  # the edit happened
+    assert agent.messages[-1]["content"] == "Done." and not untested_notes(agent)
+    window = call("write_file", path="viewer.py", content="import tkinter\n\ntkinter.Tk().mainloop()\n")
+    agent = make_agent([reply(tool_calls=[window]), reply("Done."), reply("Done, really.")], checks="auto")
+    agent.run_turn("Write a viewer")
+    assert not untested_notes(agent) and agent.messages[-1]["content"] == "Done, really."  # the window check asked
+    new = call("write_file", path="geometry.py", content=GEOMETRY)
+    for setting in ("true", "off"):  # the project's checks run instead, or the checks are off
+        (repo / "geometry.py").unlink(missing_ok=True)
+        agent = make_agent([reply(tool_calls=[new]), reply("Done.")], checks=setting)
+        agent.run_turn("Write a geometry module")
+        assert agent.messages[-1]["content"] == "Done." and not untested_notes(agent)
 
 
 def test_a_dropped_reply_is_kept_where_the_user_can_read_it(make_agent):

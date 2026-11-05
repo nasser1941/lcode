@@ -72,6 +72,18 @@ def test_network_errors_get_a_hint(make_agent, monkeypatch):
     assert "[exit code: 6]" in result and "/sandbox network on" in result
 
 
+def test_a_job_in_the_sandbox_cant_be_kept(make_agent, monkeypatch):
+    """The sandbox stops with lcode, and what runs in it too: the job runs, and the model hears it can't stay up."""
+    fake_container(monkeypatch)
+    agent = make_agent(sandbox="docker")
+    result = agent.tools.run("bash", {"command": "sleep 30", "background": True, "keep": True})
+    try:
+        assert result.startswith("Started background job 1: it keeps running while you work.")
+        assert "It can't be kept: it runs in the sandbox" in result and not agent.jobs.get("1").kept
+    finally:
+        agent.jobs.stop_all()
+
+
 def test_a_sandbox_that_cant_start_runs_nothing(make_agent, monkeypatch):
     def broken(self, cwd):
         raise SandboxError("docker isn't running")

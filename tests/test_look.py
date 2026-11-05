@@ -187,9 +187,11 @@ def test_no_check_when_checks_are_off_or_nothing_draws(make_agent, repo):
     agent.run_turn("Change the window")  # checks off (the test default)
     assert agent.messages[-1]["content"] == "Done."
     logic = call("write_file", path="logic.py", content="X = 1\n")
-    agent = make_agent([reply(tool_calls=[logic]), reply("Done.")], checks="auto")
+    agent = make_agent([reply(tool_calls=[logic]), reply("Done."), reply("Done: it only sets X.")], checks="auto")
     agent.run_turn("Change the logic")
-    assert agent.messages[-1]["content"] == "Done."
+    notes = [m["content"] for m in agent.messages if m["role"] == "user" and m["content"].startswith("[lcode]")]
+    assert len(notes) == 1 and "haven't run it" in notes[0] and "screenshot" not in notes[0]  # nothing to look at
+    assert agent.messages[-1]["content"] == "Done: it only sets X."
 
 
 # ----------------------------------------------------------------------------- repeats that differ only in timing

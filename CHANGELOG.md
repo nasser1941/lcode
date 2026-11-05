@@ -8,6 +8,13 @@ All notable changes to lcode are documented here. The format follows
 
 ### Added
 
+- **Code it never ran** (#242). When a request wrote a new code file and no command since its last
+  change ran it, lcode sends the model back once, to run it or to say plainly that it's untested. A
+  syntax check, a program that isn't installed (`python3: command not found`) or a command that only
+  reads doesn't count. With `uv` installed, the note says how to run Python code in a throwaway
+  environment. On the dev slice at 32K, 5 of 6 `torch-tensor-parallelism` attempts wrote the module,
+  found no `python3` or checked only its syntax, and said they were done: each had a runtime error
+  that one run would have shown. A project with checks of its own gets those instead.
 - **lcode says when the machine is short of RAM for the model** (#246). A model that ran well at first
   could fall to about a third of its speed, and nothing said why: the part of the model outside GPU
   memory and Ollama's prompt cache, which grows to 8 GB in a long session, both have to fit in RAM, and
@@ -16,6 +23,29 @@ All notable changes to lcode are documented here. The format follows
   fit, says what to do: close programs, use a smaller context, or pick a smaller model. `lcode setup`
   gives the same warning on its recommendation, and a session says it once when replies fall below half
   of their earlier speed and RAM is short.
+
+### Changed
+
+- **After a reply that goes nowhere** (it went round in circles, filled the context before it said
+  anything, or was empty), the model's next reply runs with thinking off (with Ollama), so it acts
+  instead of starting the same deliberation over. lcode now stops the request when two replies in a row go
+  nowhere, or four in one request, instead of the second one anywhere in it. On the dev slice at 32K,
+  16 of 150 attempts were stopped this way, and all of them failed: 9 because the second chance went
+  round in circles again (all 6 `polyglot-rust-c` attempts among them), and 7 that had recovered and
+  worked on until another reply went nowhere much later (#241).
+
+### Fixed
+
+- **A service you ask lcode to leave running stays up after lcode exits** (#240). lcode stopped every
+  background job when the session ended, and there was no way to keep one: on the dev slice, 5 of 6
+  `pypi-server` attempts failed because the server the task asked for was gone when its tests ran. The
+  model now starts such a service with `keep=true`. It writes its output to a log in
+  `~/.local/state/lcode/jobs/` instead of to lcode, so it keeps running, and lcode says how to stop it.
+  It always asks first, and the question says that the command stays running.
+- **A background command written with `&`** (`server &`) looked as if it had ended right away, while the
+  program kept running where lcode couldn't see or stop it, and held its port. The `&` is now ignored, and
+  the program is a background job like any other. What a background command otherwise leaves behind
+  when it ends at once (`server & echo started`) is stopped, and the model hears why (#240).
 
 ## [0.60.0] - 2026-11-04
 
