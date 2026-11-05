@@ -6,6 +6,14 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A service you ask lcode to leave running stays up after lcode exits** (#240). lcode stopped every
+  background job when the session ended, and there was no way to keep one: on the dev slice, 5 of 6
+  `pypi-server` attempts failed because the server the task asked for was gone when its tests ran. The
+  model now starts such a service with `keep=true`. It writes its output to a log in
+  `~/.local/state/lcode/jobs/` instead of to lcode, so it keeps running, and lcode says how to stop it.
+
 ## [0.60.0] - 2026-11-04
 
 ### Changed
@@ -16,11 +24,6 @@ All notable changes to lcode are documented here. The format follows
 
 ### Fixed
 
-- **A service you ask lcode to leave running stays up after lcode exits** (#240). lcode stopped every
-  background job when the session ended, and there was no way to keep one: on the dev slice, 5 of 6
-  `pypi-server` attempts failed because the server the task asked for was gone when its tests ran. The
-  model now starts such a service with `keep=true`. It writes its output to a log in
-  `~/.local/state/lcode/jobs/` instead of to lcode, so it keeps running, and lcode says how to stop it.
 - The Valohai MCP server failed to describe an execution with an output that has no name; it now
   shows it as `?`. Found by the type checks that CI now runs on `src/lcode` (#200).
 - **Cancelling in an editor right after sending a request** (lcode acp) could be lost: the request then
