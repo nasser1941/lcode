@@ -366,6 +366,9 @@ since last time with `bash_output`, and stops it with `bash_stop`.
 - Background commands ask for permission like any other command, and run in the
   [sandbox](sandbox.md) when it's on. A command in the sandbox can't be kept: the sandbox stops
   with lcode.
+- A kept command always asks first, and the question says that it stays running: even a command
+  that only reads, or a program you allowed for the session. Only `yolo` mode and an allow rule
+  in your settings let it through without asking. Plan mode doesn't run it.
 
 ## What's happening under the hood
 

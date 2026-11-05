@@ -8,7 +8,9 @@ import pytest
 from conftest import call, output, reply
 from lcode import api, config, jobs, notify, planning
 from lcode.hardware import Hardware
+from lcode.permissions import bash_key
 from lcode.repl import handle_command
+from lcode.tools_shell import TRAILING_AMPERSAND
 
 HW = Hardware("linux", "x", 31, "GPU", 12)
 TICKER = f"{shlex.quote(sys.executable)} -u -c " + shlex.quote(
@@ -152,6 +154,88 @@ def test_keep_alone_starts_a_kept_background_job(make_agent, repo):
         assert agent.jobs.get("1").kept
     finally:
         agent.jobs.stop_all(kept=True)
+
+
+@pytest.mark.parametrize(
+    ("command", "runs"),
+    [
+        ("serve &", "serve"),
+        ("serve  &  \n", "serve"),
+        ("cd web && serve &", "cd web && serve"),
+        ("a && b", "a && b"),
+        ('echo "a &"', 'echo "a &"'),
+        ("echo a \\&", "echo a \\&"),
+        ("serve", "serve"),
+    ],
+)
+def test_only_a_last_ampersand_comes_off_a_background_command(command, runs):
+    assert TRAILING_AMPERSAND.sub("", command) == runs
+
+
+@pytest.mark.parametrize("keep", [False, True])
+def test_a_background_command_with_an_ampersand_is_a_job_all_the_same(make_agent, repo, keep):
+    """`cmd &` would end the shell at once, and leave cmd running where lcode can't see or stop it."""
+    agent = make_agent()
+    result = agent.tools.run("bash", {"command": f"{TICKER} &", "background": True, "keep": keep})
+    job = agent.jobs.get("1")
+    try:
+        assert result.startswith("Started background job 1") and job.running
+        assert "&" not in job.command and job.kept == keep
+    finally:
+        agent.jobs.stop_all(kept=True)
+    assert not job.running and gone(job.proc.pid)
+
+
+@pytest.mark.parametrize("keep", [False, True])
+def test_what_a_background_command_leaves_behind_is_stopped(make_agent, repo, keep):
+    """The shell ended, so there's no job to see or stop: it doesn't stay behind unnoticed, and the model hears why."""
+    agent = make_agent()
+    command = f"{TICKER} > ticks.log 2>&1 & echo started"
+    result = agent.tools.run("bash", {"command": command, "background": True, "keep": keep})
+    assert "ended right away" in result and "started" in result
+    assert "lcode stopped what this command left running" in result and not agent.jobs.running()
+    size = (repo / "ticks.log").stat().st_size
+    time.sleep(0.3)
+    assert (repo / "ticks.log").stat().st_size == size  # it really stopped
+
+
+def test_a_background_command_that_just_ends_says_only_that(make_agent, repo):
+    result = make_agent().tools.run("bash", {"command": "echo done", "background": True})
+    assert "ended right away (exited with code 0)" in result and "done" in result
+    assert "lcode stopped" not in result
+
+
+def test_a_kept_job_says_so_when_it_asks(make_agent, repo):
+    """The question says the command outlives lcode, and "always" for the program doesn't cover a kept job."""
+    agent = make_agent(mode="ask")
+    asked = []
+    agent.perms.approve = lambda request: asked.append(request) or True
+    agent.perms.always.add(bash_key("sleep 30"))
+    try:
+        agent.tools.run("bash", {"command": "sleep 30", "background": True})  # allowed for the session: no question
+        assert not asked and not agent.jobs.get("1").kept
+        result = agent.tools.run("bash", {"command": "sleep 30", "background": True, "keep": True})
+        assert result.startswith("Started background job 2") and agent.jobs.get("2").kept
+        assert [r["title"] for r in asked] == [f"Run command and leave it running after lcode exits (in {repo})"]
+    finally:
+        agent.jobs.stop_all(kept=True)
+
+
+def test_a_command_that_only_reads_asks_before_it_is_kept(make_agent, repo):
+    agent = make_agent(mode="ask")
+    asked = []
+    agent.perms.approve = lambda request: asked.append(request) or False  # refuses
+    assert "exit code: 0" in agent.tools.run("bash", {"command": "ls"})  # read-only: no question
+    assert not asked
+    agent.tools.run("bash", {"command": "ls", "keep": True})
+    assert len(asked) == 1 and not agent.jobs.items
+
+
+def test_plan_mode_does_not_keep_a_command(make_agent, repo):
+    agent = make_agent(mode="plan")
+    assert "exit code: 0" in agent.tools.run("bash", {"command": "ls"})
+    assert agent.tools.run("bash", {"command": "ls", "keep": True}).startswith("Error:")
+    assert not agent.jobs.items
 
 
 def test_what_a_command_leaves_running_is_stopped(make_agent, repo):
