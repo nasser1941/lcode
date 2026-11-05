@@ -13,15 +13,25 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
+from statistics import median
+from urllib.parse import urlsplit
 
 from lcode import catalog
 from lcode.cloud import is_cloud
+from lcode.config import format_tokens
+from lcode.hardware import Hardware
 from lcode.ollama import OllamaError
 
 GB = 1e9
 RELEASE_WAIT = 15.0  # seconds to wait for Ollama to give an unloaded model's GPU memory back
 SPLIT_WARNING = 0.95  # a dense model with less than this on the GPU runs much slower
 SHORTFALL = 0.25  # this much less on the GPU than expected: something else is using GPU memory
+SYSTEM_RAM_GIB = 2.0  # what the system itself keeps, with every other program closed
+SLOW_REPLIES = 3  # this many replies in a row...
+SLOW_SHARE = 0.5  # ...below this share of the session's earlier speed: something changed
+SPEED_MIN_TOKENS = 50  # a shorter reply says little about speed
+CONFIG_COMMANDS = ("lcode config set context {}", "lcode setup {}", "lcode models")  # a size, a model, the list
+SESSION_COMMANDS = ("/ctx {}", "/model {}", "/models")
 
 
 @dataclass
@@ -171,6 +181,131 @@ def load_report(
     elif dense and where.gpu_share < SPLIT_WARNING:
         line += " It's a dense model split between GPU and CPU, so expect it to be slow."
     return line
+
+
+def on_this_machine(ollama) -> bool:
+    """Whether Ollama runs here (in Docker too), so that this machine's RAM is the one it uses."""
+    from lcode.update import LOCAL_HOSTS
+
+    host = getattr(ollama, "host", None)  # a replay has none
+    return getattr(ollama, "kind", "ollama") == "ollama" and bool(host) and urlsplit(host).hostname in LOCAL_HOSTS
+
+
+@dataclass
+class RamFit:
+    """Whether system RAM can hold a model in a long session, as things stand now."""
+
+    spec: catalog.ModelSpec
+    context: int
+    hw: Hardware
+    available: float  # GiB for the model and Ollama: what's available now, and what Ollama already holds
+
+    @property
+    def in_ram(self) -> float:
+        return self.spec.in_ram_gib(self.context, self.hw)
+
+    @property
+    def needed(self) -> float:
+        return self.spec.ram_needed_gib(self.context, self.hw)
+
+    @property
+    def short(self) -> bool:
+        return round(self.available) < round(self.needed)  # as the numbers on the screen say
+
+    def describe(self) -> str:
+        """'~15 GB available now, ~21 GB needed in a long session: ~11 GB of the model that doesn't fit on the GPU,
+        up to 10 GB for Ollama's server and prompt cache'"""
+        parts = [f"up to {catalog.OLLAMA_RAM_GIB:.0f} GB for Ollama's server and prompt cache"]
+        if round(self.in_ram):
+            model = "of the model that doesn't fit on the GPU" if self.hw.gpu else "for the model"
+            parts.insert(0, f"~{self.in_ram:.0f} GB {model}")
+        needed = f"~{self.needed:.0f} GB needed in a long session"
+        return f"~{self.available:.0f} GB available now, {needed}: {', '.join(parts)}"
+
+    def why(self) -> str:
+        """What happens when RAM runs short."""
+        if round(self.in_ram):
+            return (
+                "When RAM runs short, Linux drops the model from memory and keeps reading it back from disk: replies "
+                "fall to about a third of their speed, often within an hour, as the prompt cache fills."
+            )
+        return (
+            "When RAM runs short as the prompt cache fills, programs get pushed out to swap and everything slows down."
+        )
+
+    def smaller_context(self) -> tuple[int, float] | None:
+        """The context to suggest, and the GiB it saves: the largest that makes everything fit, or else the smallest."""
+        steps = [size for size in catalog.CONTEXT_STEPS if size < self.context]
+        if not steps:
+            return None
+        fits = (size for size in steps if self.spec.ram_needed_gib(size, self.hw) <= self.available)
+        size = next(fits, steps[-1])
+        saved = self.needed - self.spec.ram_needed_gib(size, self.hw)
+        return (size, saved) if round(saved) else None
+
+    def smaller_model(self) -> catalog.ModelSpec | None:
+        """The first smaller model in the catalog that fits what's available, with the context it would get. Dense
+        models that would be split across GPU and CPU are left out: those are very slow."""
+        for other in catalog.load():
+            ctx, speed = other.fit(self.hw)
+            if not ctx or other.size_gb >= self.spec.size_gb or "split" in speed:
+                continue
+            if other.ram_needed_gib(ctx, self.hw) <= self.available:
+                return other
+        return None
+
+    def advice(self, commands: tuple[str, str, str] = CONFIG_COMMANDS) -> str:
+        """What can be done about it, and only what would help. Closing programs can't make up for too little RAM, and
+        with the whole model on the GPU a smaller model or context saves nothing: RAM only holds Ollama's cache then."""
+        set_context, use_model, list_models = commands
+        options = []
+        if self.needed <= self.hw.ram_gib - SYSTEM_RAM_GIB:
+            options.append(f"close other programs to free ~{max(1, round(self.needed - self.available))} GB")
+        if round(self.in_ram):
+            if smaller := self.smaller_context():
+                size, saved = smaller
+                command = set_context.format(format_tokens(size).lower())
+                options.append(f"use a smaller context (saves ~{saved:.0f} GB: {command})")
+            if model := self.smaller_model():
+                options.append(f"pick a smaller model such as {model.key} ({use_model.format(model.key)})")
+            elif any(other.size_gb < self.spec.size_gb for other in catalog.load()):
+                options.append(f"pick a smaller model ({list_models})")
+        if not options:
+            return "This machine has too little RAM for that, so expect long sessions to slow down."
+        text = options[0] if len(options) == 1 else f"{', '.join(options[:-1])}, or {options[-1]}"
+        return f"{text[0].upper()}{text[1:]}."
+
+
+def ram_fit(ollama, spec: catalog.ModelSpec, context: int, hw: Hardware) -> RamFit | None:
+    """How RAM stands for this model; None when that can't be told: Ollama runs on another machine, or it isn't Linux
+    (nothing was measured elsewhere; on a Mac the weights stay in wired memory)."""
+    from lcode import hardware
+
+    if not on_this_machine(ollama) or (available := hardware.available_ram_gib()) is None:
+        return None
+    # What Ollama holds already counts as available: part of what it needs is that memory.
+    return RamFit(spec, context, hw, available + hardware.ollama_private_gib())
+
+
+class SpeedWatch:
+    """How fast a session's replies came, to notice when they fall far below what the model did earlier."""
+
+    def __init__(self) -> None:
+        self.speeds: list[float] = []
+        self.setup: tuple[str, int] | None = None  # the model and context they were measured with
+        self.explained = False  # a slowdown is explained once
+
+    def add(self, model: str, context: int, tokens: int, seconds: float) -> tuple[float, float] | None:
+        """Note a reply. When the last ones were all far slower than before: (the earlier speed, the speed now)."""
+        if (model, context) != self.setup:
+            self.setup, self.speeds = (model, context), []
+        if tokens < SPEED_MIN_TOKENS or seconds <= 0:
+            return None
+        self.speeds.append(tokens / seconds)
+        earlier, recent = self.speeds[:-SLOW_REPLIES], self.speeds[-SLOW_REPLIES:]
+        if len(earlier) < SLOW_REPLIES or max(recent) >= SLOW_SHARE * median(earlier):
+            return None
+        return median(earlier), median(recent)
 
 
 class LoadWatch:

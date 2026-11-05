@@ -16,6 +16,7 @@ else:  # pragma: no cover
 
 OVERHEAD_GIB = 1.0  # compute buffers and runtime; measured <1 GiB for qwen3.6-35b and qwen3.5-9b on CUDA
 HEADROOM_GIB = 0.5  # keep a little memory free so estimates at the edge don't run out
+OLLAMA_RAM_GIB = 10.0  # Ollama's server in a long session: its prompt cache (8 GiB by default) and 1-2 GiB of its own
 CONTEXT_STEPS = [1048576, 524288, 262144, 131072, 65536, 32768]
 MIN_USEFUL_CONTEXT = 32768
 
@@ -44,6 +45,15 @@ class ModelSpec:
 
     def memory_gib(self, context: int) -> float:
         return self.size_gb * 1e9 / GIB + self.kv_kib_per_token * 1024 * context / GIB + OVERHEAD_GIB
+
+    def in_ram_gib(self, context: int, hw: Hardware) -> float:
+        """The part of the model that doesn't fit in GPU memory and stays in system RAM. Ollama's /api/ps leaves out
+        an MoE model's: its experts stay mapped from the model's file, so they have to stay in the page cache."""
+        return max(0.0, self.memory_gib(context) - hw.vram_gib)
+
+    def ram_needed_gib(self, context: int, hw: Hardware) -> float:
+        """System RAM a long session needs: the part of the model outside GPU memory, and Ollama's prompt cache."""
+        return self.in_ram_gib(context, hw) + OLLAMA_RAM_GIB
 
     def best_context(self, budget_gib: float) -> int | None:
         """Largest standard context window whose estimated memory fits the budget."""

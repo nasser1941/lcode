@@ -158,6 +158,12 @@ Nemotron (Mamba layers) keep a cache in only a few layers, which is why they can
 tokens on consumer hardware. The budget is GPU memory plus spare RAM on Linux, and the GPU share
 of unified memory on Apple Silicon. See [Models & context windows](models.md#how-memory-is-estimated).
 
+That budget says whether a model loads, not whether it keeps its speed. An MoE model's experts stay mapped
+from its file, and Ollama's server keeps a prompt cache of up to 8 GB in RAM. When they don't fit in the RAM
+that's available, Linux keeps dropping the experts and reading them back from disk, at a third of the speed.
+`lcode doctor` and `lcode setup` compare the two with what's available now, and a session says so when replies
+slow down that far. See [RAM in a long session](models.md#ram-in-a-long-session).
+
 Two lessons from tuning the default model on a 12 GB GPU shaped the defaults:
 
 - **Vision projectors cost ~1 GB of VRAM** that Ollama under-counts on small GPUs, causing
@@ -203,7 +209,7 @@ the Ollama server you configure, it only contacts the web when the model searche
 | `sandbox.py` | The optional container for shell commands |
 | `checkpoints.py` | Snapshots before the model changes files, for `/undo` and `/rewind` |
 | `catalog.py`, `models.toml` | Model catalog and memory estimates |
-| `hardware.py` | NVIDIA / Apple Silicon detection |
+| `hardware.py` | NVIDIA / Apple Silicon detection, and the RAM available now |
 | `ollama.py` | Ollama HTTP client |
 | `config.py` | Settings file and environment variables |
 | `traces.py`, `trace_view.py`, `trace_export.py` | Recording requests; listing and showing traces; exporting them with secrets masked |

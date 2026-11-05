@@ -121,6 +121,7 @@ lcode doctor
 ✓ Ollama     http://localhost:11434 · version 0.32.15
 ✓ Model      qwen3.6-35b → lcode-qwen3.6-35b
 ✓ Context    256K tokens · ~28 GB needed, ~35 GB available
+✓ RAM        ~27 GB available now, ~26 GB needed in a long session: ~16 GB of the model that doesn't fit on the GPU, up to 10 GB for Ollama's server and prompt cache
 ✓ ripgrep    found
 ✓ git        found
 ```

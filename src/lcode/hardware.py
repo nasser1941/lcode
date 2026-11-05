@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import platform
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 GIB = 1024**3
+PROC = Path("/proc")  # Linux's view of the machine
 
 
 @dataclass(frozen=True)
@@ -95,15 +97,36 @@ def name_from(argv: list[str], process: str = "") -> str:
     return program or process
 
 
-def _linux_ram_gib() -> float:
+def _meminfo_gib(field: str) -> float | None:
+    """A field of /proc/meminfo in GiB; None where there's no such thing (off Linux)."""
     try:
-        with open("/proc/meminfo") as f:
-            for line in f:
-                if line.startswith("MemTotal:"):
-                    return int(line.split()[1]) * 1024 / GIB
-    except OSError:
+        for line in (PROC / "meminfo").read_text().splitlines():
+            if line.startswith(f"{field}:"):
+                return int(line.split()[1]) * 1024 / GIB
+    except (OSError, ValueError, IndexError):
         pass
-    return 0.0
+    return None
+
+
+def available_ram_gib() -> float | None:
+    """RAM programs can get right now without pushing others out to swap, in GiB: Linux's own estimate. It counts
+    file caches as available, among them the pages a loaded model maps from its file. None off Linux."""
+    return _meminfo_gib("MemAvailable")
+
+
+def ollama_private_gib() -> float:
+    """RAM Ollama's processes hold for themselves, in GiB: mostly a loaded model's prompt cache, which
+    available_ram_gib leaves out. 0 off Linux."""
+    kib = 0
+    for proc in PROC.glob("[0-9]*"):
+        try:
+            argv = [a.decode(errors="replace") for a in (proc / "cmdline").read_bytes().split(b"\0") if a]
+            if argv and name_from(argv) == "Ollama":
+                private = re.search(r"^RssAnon:\s+(\d+)", (proc / "status").read_text(), re.M)
+                kib += int(private.group(1)) if private else 0
+        except OSError:  # it ended meanwhile
+            continue
+    return kib * 1024 / GIB
 
 
 def detect() -> Hardware:
@@ -130,4 +153,4 @@ def detect() -> Hardware:
     gpu = None
     if names:
         gpu = names[0] if len(names) == 1 else f"{len(names)}x {names[0]}"
-    return Hardware(os=system.lower(), cpu=cpu, ram_gib=_linux_ram_gib(), gpu=gpu, vram_gib=vram)
+    return Hardware(os=system.lower(), cpu=cpu, ram_gib=_meminfo_gib("MemTotal") or 0.0, gpu=gpu, vram_gib=vram)

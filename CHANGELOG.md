@@ -15,6 +15,14 @@ All notable changes to lcode are documented here. The format follows
   environment. On the dev slice at 32K, 5 of 6 `torch-tensor-parallelism` attempts wrote the module,
   found no `python3` or checked only its syntax, and said they were done: each had a runtime error
   that one run would have shown. A project with checks of its own gets those instead.
+- **lcode says when the machine is short of RAM for the model** (#246). A model that ran well at first
+  could fall to about a third of its speed, and nothing said why: the part of the model outside GPU
+  memory and Ollama's prompt cache, which grows to 8 GB in a long session, both have to fit in RAM, and
+  lcode only compared the model with the machine's total. On Linux, with Ollama on the same machine,
+  `lcode doctor` has a `RAM` line that compares them with what's available now and, when they don't
+  fit, says what to do: close programs, use a smaller context, or pick a smaller model. `lcode setup`
+  gives the same warning on its recommendation, and a session says it once when replies fall below half
+  of their earlier speed and RAM is short.
 
 ### Changed
 
