@@ -16,6 +16,14 @@ All notable changes to lcode are documented here. The format follows
   round in circles again (all 6 `polyglot-rust-c` attempts among them), and 7 that had recovered and
   worked on until another reply went nowhere much later (#241).
 
+## [0.60.0] - 2026-11-04
+
+### Changed
+
+- **For contributors:** CI type-checks `src/lcode` with basedpyright, and the eight modules that were
+  over 1,000 lines are split into smaller ones, with no change in behavior. The code map in
+  `docs/how-it-works.md` lists them (#200).
+
 ### Fixed
 
 - The Valohai MCP server failed to describe an execution with an output that has no name; it now
@@ -1283,7 +1291,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.59.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.60.0...HEAD
+[0.60.0]: https://github.com/nasser1941/lcode/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/nasser1941/lcode/compare/v0.58.0...v0.59.0
 [0.58.0]: https://github.com/nasser1941/lcode/compare/v0.57.0...v0.58.0
 [0.57.0]: https://github.com/nasser1941/lcode/compare/v0.56.0...v0.57.0
