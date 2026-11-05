@@ -403,6 +403,7 @@ stays loaded:
 | The model that looks at images needs the memory | `Loading the vision model … to look at bug.png; qwen3.6-35b makes room and reloads afterwards`, then `◆ qwen3.6-35b was unloaded to make room…`, and the next step says `Reloading qwen3.6-35b into memory (it made room for the vision model …)` |
 | A tool needs the GPU to itself (an MCP server with `free_gpu`) | `◆ Unloaded qwen3.6-35b so the server can use the GPU; it reloads afterwards.` |
 | Ollama ran out of memory | `⚠` what ran out (the prompt batch, or the context next to the model), what lcode retries with, and what it remembers for next time |
+| Replies fell below half of their earlier speed and RAM is short (once a session, on Linux) | `⚠ Replies slowed from 65 to 20 tokens a second, most likely because RAM is short: ~15 GB available now, ~21 GB needed in a long session…`, with what to do. See [Troubleshooting](troubleshooting.md#it-starts-fast-then-gets-about-three-times-slower) |
 
 While the model loads in the background at startup, the status bar says
 `loading the model into memory…`. Mixture-of-Experts models, such as qwen3.6-35b, run well with

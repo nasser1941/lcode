@@ -28,6 +28,17 @@ def test_memory_estimate_matches_measurement():
     assert 9.1 < catalog.find("qwen3.5-9b").memory_gib(131072) < 11.5
 
 
+def test_ram_estimate_matches_measurement():
+    # Measured on an RTX 4080 Laptop GPU (12 GB) at 32K: 9264 MiB of the 21.7 GB GGUF on the GPU, so ~12 GB (11.2 GiB)
+    # of expert tensors outside it, and a prompt cache of up to 8 GiB with ~1 GiB of llama-server's own next to it.
+    laptop = Hardware("linux", "i9", 31, "RTX 4080 Laptop", 12)
+    spec = catalog.find("qwen3.6-35b")
+    assert 10.5 < spec.in_ram_gib(32768, laptop) < 12
+    assert spec.ram_needed_gib(32768, laptop) == spec.in_ram_gib(32768, laptop) + catalog.OLLAMA_RAM_GIB
+    assert catalog.OLLAMA_RAM_GIB >= 8 + 1
+    assert catalog.find("qwen3.5-9b").in_ram_gib(32768, laptop) == 0  # all of it on the GPU
+
+
 MACHINES = {
     "rtx4080-laptop-12gb": (Hardware("linux", "i9", 31, "RTX 4080 Laptop", 12), "qwen3.6-35b", 262144),
     "mac-m4-16gb": (Hardware("macos", "Apple M4", 16, "Apple M4 GPU", unified=True), "qwen3.5-9b", 65536),

@@ -26,7 +26,7 @@ from rich.progress import (
 from rich.prompt import Confirm
 from rich.table import Table
 
-from lcode import backends, catalog, config, limits
+from lcode import backends, catalog, config, limits, residency
 from lcode.agent import Settings
 from lcode.catalog import ModelSpec
 from lcode.cli_args import build_parser, build_subparsers
@@ -313,6 +313,9 @@ def cmd_setup(args) -> None:
         )
         if spec.memory_gib(ctx) > hw.budget_gib:
             console.print("[yellow]warning:[/] this probably doesn't fit in memory; pick a smaller --context or model.")
+        elif (fit := residency.ram_fit(ollama, spec, ctx, hw)) and fit.short:
+            commands = (f"lcode setup {spec.key} --context {{}}", "lcode setup {}", "lcode models")
+            console.print(f"[yellow]warning:[/] RAM is short: {fit.describe()}. {fit.why()} {fit.advice(commands)}")
         if not spec.tested:
             console.print(
                 "[yellow]note:[/] this model hasn't been verified with lcode yet — please report how it goes."

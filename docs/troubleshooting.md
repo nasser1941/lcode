@@ -88,6 +88,39 @@ need `lcode mcp login <name>`. More in [MCP servers: Troubleshooting](mcp.md#tro
   prefer the MoE models in `lcode models` on smaller GPUs.
 - `--no-think` skips reasoning for simple requests.
 
+### It starts fast, then gets about three times slower
+
+The machine is short of RAM. A model that doesn't fit on the GPU keeps the rest in RAM, and Ollama's
+server keeps a prompt cache there that grows to 8 GB in a long session. When those don't fit next to
+your other programs, Linux drops the model from memory and keeps reading it back from disk.
+
+Measured with `qwen3.6-35b` at 32K on an RTX 4080 Laptop GPU (12 GB) with 31 GB of RAM: generation fell
+from about 65 to about 20 tokens/s and prompt reading from about 200 to about 55, with the GPU at 2–14%
+and the disk reading about 1.9 GB/s. A short test right after loading doesn't show it: the slowdown
+starts as the prompt cache fills, within about an hour.
+
+`lcode doctor` checks this on Linux, when Ollama runs on the same machine (in Docker too):
+
+```text
+! RAM        ~15 GB available now, ~21 GB needed in a long session: ~11 GB of the model that doesn't
+             fit on the GPU, up to 10 GB for Ollama's server and prompt cache
+```
+
+`lcode setup` gives the same warning, and a session says it once when replies fall below half of their
+earlier speed and RAM is short. `ollama ps` doesn't show any of this: for a Mixture-of-Experts model it
+leaves out the experts mapped from the model's file, ~12 GB for `qwen3.6-35b`.
+
+What helps:
+
+1. Close other programs before a long session: browsers, IDEs, containers.
+2. Use a smaller context: `/ctx 64k` in a session or `lcode config set context 64k`. This helps most when
+   the window is large: going from 256K to 32K saves ~5 GB with `qwen3.6-35b`.
+3. Pick a smaller model that fits on the GPU: `lcode models`.
+4. To empty the prompt cache right away, unload the model: `ollama stop <model>`. The next request
+   reloads it, and the cache fills up again over time.
+
+On a Mac, `lcode doctor` doesn't check this yet: see [below](#on-a-mac-a-model-that-should-fit-gets-very-slow).
+
 ### The model prints tool calls as text instead of running them
 
 The model doesn't support Ollama's tool calling well. lcode recovers common formats, but results
