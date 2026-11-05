@@ -387,7 +387,7 @@ def run(
         finally:
             lane.recorder.end(lane, status or "error", error)
             with contextlib.suppress(Exception):
-                agent.jobs.stop_all()  # background commands it started (with commands)
+                agent.jobs.stop_all(kept=True)  # background commands it started (with commands), kept ones too
     end = next((e for e in reversed(events) if e.get("type") == "end"), {})
     cwd = Path(str(start_event.get("cwd") or ""))
     report = compare(events, lane.recorder.events, cwd, folder, recorded.served)

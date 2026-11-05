@@ -93,7 +93,8 @@ SCHEMAS = [
         "working directory persists between calls (cd works). Use it to run scripts and tests, use git, install "
         "packages, etc. Avoid interactive commands. For a process that keeps running (a dev server, a watcher), "
         "set background=true and give the plain command, without & or redirecting its output: lcode keeps it "
-        "running and keeps its output, you get a job id back and can carry on.",
+        "running and keeps its output, you get a job id back and can carry on. Background jobs stop when lcode "
+        "exits, unless you also set keep=true.",
         {
             "command": {"type": "string"},
             "timeout": {"type": "integer", "description": "Seconds before the command is killed (default 180)"},
@@ -101,6 +102,12 @@ SCHEMAS = [
                 "type": "boolean",
                 "description": "Keep it running in the background; read its output with bash_output and stop it "
                 "with bash_stop (not with kill)",
+            },
+            "keep": {
+                "type": "boolean",
+                "description": "With background=true: leave it running after lcode exits. Only for a service the "
+                "user wants left running when you're done (a server they asked you to set up), not for one you "
+                "need only while you work",
             },
         },
         ["command"],
