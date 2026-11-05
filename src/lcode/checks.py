@@ -3,7 +3,8 @@
 Small models call work done after a syntax check, and telling them to verify isn't enough. So after a request
 that changed files, lcode runs the project's check command itself (its tests, or a linter) before the answer
 counts as final. When it fails, the output goes back to the model, which keeps working, at most `MAX_ROUNDS`
-times; then the answer says plainly that the checks still fail.
+times; then the answer says plainly that the checks still fail. A run in which no test ran says nothing about the
+change, so it only goes back to the model when its error names a file the request changed.
 
 The command is, in order: the repository's `.lcode/settings.toml` (`[checks] command = "…"`, used once the
 repository is trusted, like its hooks), the user's `checks` setting, or what the project looks like: pytest,
@@ -25,6 +26,7 @@ MAX_ROUNDS = 2  # times the model gets failing checks back before lcode stops as
 TIMEOUT = 600  # seconds a check may run
 OUTPUT_TAIL = 6000  # characters of a failing check's output the model gets back
 EXIT = re.compile(r"\[exit code: (-?\d+)\]\s*$")
+YOUR_SETTING = "your configuration (checks)"  # the source of a command from the user's own `checks` setting
 
 
 @dataclass
@@ -49,7 +51,7 @@ def find(root: Path, setting: str, trusted: bool) -> Check | None:
         if command:
             return Check(command, ".lcode/settings.toml")
     if setting != "auto":
-        return Check(setting, "your configuration (checks)")
+        return Check(setting, YOUR_SETTING)
     return detect(root)
 
 
@@ -154,6 +156,48 @@ def no_tests(check: Check, result: str) -> bool:
     return exit_code(result) == NO_TESTS and bool(re.search(r"pytest|unittest", check.command))
 
 
+PYTEST_STOPPED = (2, 3, 4)  # pytest's exit codes for: interrupted (errors while collecting), internal error, bad usage
+PYTEST_COUNTS = re.compile(r"\b\d+ (?:passed|failed)\b")
+UNITTEST_COUNT = re.compile(r"^Ran \d+ tests? in ", re.M)
+NOT_IMPORTED = re.compile(r"No module named '([\w.]+)'")
+
+
+def no_test_ran(check: Check, result: str) -> bool:
+    """Whether the test runner stopped before its first test, so the run says nothing about the code.
+
+    pytest stops at an error while collecting. unittest ends in a traceback instead of `Ran N tests` when its discovery
+    fails; a test module that doesn't import is a failed test there (`Ran 1 test`), so that's not this.
+    """
+    code = exit_code(result)
+    if re.search(r"\bpytest\b", check.command):
+        return code in PYTEST_STOPPED and not PYTEST_COUNTS.search(result)
+    if re.search(r"\bunittest\b", check.command):
+        return code == 1 and "Traceback (most recent call last)" in result and not UNITTEST_COUNT.search(result)
+    return False
+
+
+def names_any(result: str, files: Iterable[str]) -> bool:
+    """Whether a check's output points at one of these files: by its path, or as a module it can't find."""
+
+    def mentions(text: str, name: str) -> bool:
+        return re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", text) is not None
+
+    modules = [module.replace(".", "/") for module in NOT_IMPORTED.findall(result)]
+    return any(mentions(result, rel) or any(mentions(rel, module) for module in modules) for rel in files)
+
+
+def stop_reason(result: str) -> str:
+    """The line that says why a test run stopped before its first test: pytest's first error, or a traceback's end."""
+    lines = [line.strip() for line in result.splitlines() if line.strip() and not line.startswith("[")]
+    reason = next((line[1:].strip() for line in lines if line.startswith("E ")), lines[-1] if lines else "no output")
+    return reason if len(reason) <= 160 else reason[:159] + "…"
+
+
+def timed_out(result: str) -> bool:
+    """Whether lcode stopped the check at its time limit: it didn't fail, it didn't finish."""
+    return exit_code(result) == -9 and "\n[Command timed out after " in result
+
+
 def exit_code(result: str) -> int | None:
     """The exit code at the end of a bash tool result (None: it didn't run, e.g. not allowed)."""
     found = EXIT.search(result)
@@ -166,6 +210,12 @@ def covers(check: Check, command: str) -> bool:
 
 
 def failure_note(check: Check, result: str, round_: int) -> str:
+    if timed_out(result):
+        return (
+            f"[lcode] The project's checks (`{check.command}`) didn't finish in {TIMEOUT} seconds and were stopped, so "
+            "they don't say whether your changes work. If your change could make something hang, look at that. "
+            "Otherwise run the tests that cover your change, and say in your answer that the full checks didn't finish."
+        )
     output = result if len(result) <= OUTPUT_TAIL else "…" + result[-OUTPUT_TAIL:]
     last = round_ >= MAX_ROUNDS
     return (
