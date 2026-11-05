@@ -16,6 +16,19 @@ All notable changes to lcode are documented here. The format follows
   found no `python3` or checked only its syntax, and said they were done: each had a runtime error
   that one run would have shown. A project with checks of its own gets those instead.
 
+### Fixed
+
+- **A service you ask lcode to leave running stays up after lcode exits** (#240). lcode stopped every
+  background job when the session ended, and there was no way to keep one: on the dev slice, 5 of 6
+  `pypi-server` attempts failed because the server the task asked for was gone when its tests ran. The
+  model now starts such a service with `keep=true`. It writes its output to a log in
+  `~/.local/state/lcode/jobs/` instead of to lcode, so it keeps running, and lcode says how to stop it.
+  It always asks first, and the question says that the command stays running.
+- **A background command written with `&`** (`server &`) looked as if it had ended right away, while the
+  program kept running where lcode couldn't see or stop it, and held its port. The `&` is now ignored, and
+  the program is a background job like any other. What a background command otherwise leaves behind
+  when it ends at once (`server & echo started`) is stopped, and the model hears why (#240).
+
 ## [0.60.0] - 2026-11-04
 
 ### Changed

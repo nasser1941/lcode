@@ -317,13 +317,18 @@ def open_agent(cwd: Path, options: Options, console: Console, hw: Hardware | Non
 
 def close_agent(agent: Agent) -> None:
     """Stop what lcode started (background jobs, servers, the sandbox, ComfyUI), then say so: the terminal may be
-    gone already (closed), and saying it then fails."""
+    gone already (closed), and saying it then fails. Kept jobs, services the user asked for, keep running."""
     from lcode import media
 
     said = []
     stopped = agent.jobs.stop_all()
     if stopped:
         said.append(f"Stopped {stopped} background job(s).")
+    for job in agent.jobs.kept():
+        said.append(
+            f"Left job {job.id} running, as asked: {job.command} (process group {job.proc.pid}: "
+            f"`kill -- -{job.proc.pid}` stops it; its output is in {job.log})"
+        )
     if media.stop_engine(agent):
         said.append("Stopped ComfyUI.")
     if agent.lsp is not None:
