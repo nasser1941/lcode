@@ -16,6 +16,16 @@ All notable changes to lcode are documented here. The format follows
   found no `python3` or checked only its syntax, and said they were done: each had a runtime error
   that one run would have shown. A project with checks of its own gets those instead.
 
+### Changed
+
+- **After a reply that goes nowhere** (it went round in circles, filled the context before it said
+  anything, or was empty), the model's next reply runs with thinking off (with Ollama), so it acts
+  instead of starting the same deliberation over. lcode now stops the request when two replies in a row go
+  nowhere, or four in one request, instead of the second one anywhere in it. On the dev slice at 32K,
+  16 of 150 attempts were stopped this way, and all of them failed: 9 because the second chance went
+  round in circles again (all 6 `polyglot-rust-c` attempts among them), and 7 that had recovered and
+  worked on until another reply went nowhere much later (#241).
+
 ### Fixed
 
 - **A service you ask lcode to leave running stays up after lcode exits** (#240). lcode stopped every
