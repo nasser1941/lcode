@@ -28,6 +28,10 @@ All notable changes to lcode are documented here. The format follows
   program kept running where lcode couldn't see or stop it, and held its port. The `&` is now ignored, and
   the program is a background job like any other. What a background command otherwise leaves behind
   when it ends at once (`server & echo started`) is stopped, and the model hears why (#240).
+- **The automatic checks failed on any project whose `tests/` folder has no `__init__.py`**, with
+  `Start directory is not importable`, even when every test passed. The model was then asked to fix
+  that: in two real runs, one added a `tests/__init__.py` nobody asked for, and the other blamed the project.
+  lcode now leaves out `-t .` unless `tests/` is a package.
 
 ## [0.60.0] - 2026-11-04
 
