@@ -124,7 +124,9 @@ def detect(root: Path) -> Check | None:
         if list(root.glob("test_*.py")) or list(root.glob("*_test.py")):
             return Check(f"{py} -m unittest", "test files")
         if (root / "tests").is_dir():
-            return Check(f"{py} -m unittest discover -s tests -t .", "tests/")
+            # `-t .` lets a package of tests use relative imports. Without __init__.py, it doesn't start at all.
+            top = " -t ." if (root / "tests" / "__init__.py").is_file() else ""
+            return Check(f"{py} -m unittest discover -s tests{top}", "tests/")
     package = text(root / "package.json")
     if package:
         try:

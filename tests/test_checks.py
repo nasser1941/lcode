@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 
 import pytest
 
@@ -19,7 +21,8 @@ def text(agent):
         ({"pyproject.toml": "[tool.pytest.ini_options]\n", "uv.lock": "", "tests/test_x.py": ""}, "uv run pytest -q"),
         ({"pyproject.toml": "[project]\ndependencies = ['pytest']\n", "src/pkg/test_x.py": ""}, "-m pytest -q"),
         ({"test_calc.py": "import unittest\n"}, "-m unittest"),
-        ({"tests/test_calc.py": "import unittest\n"}, "-m unittest discover -s tests -t ."),
+        ({"tests/test_calc.py": "import unittest\n"}, "-m unittest discover -s tests"),
+        ({"tests/__init__.py": "", "tests/test_calc.py": "import unittest\n"}, "-m unittest discover -s tests -t ."),
         ({"package.json": json.dumps({"scripts": {"test": "vitest run"}})}, "npm test"),
         ({"package.json": json.dumps({"scripts": {"test": "jest"}}), "pnpm-lock.yaml": ""}, "pnpm test"),
         ({"Cargo.toml": "[package]\n"}, "cargo test"),
@@ -32,6 +35,24 @@ def test_the_check_is_found_from_the_project(tmp_path, files, expected):
         (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / name).write_text(content)
     assert checks.detect(tmp_path).command.endswith(expected)
+
+
+@pytest.mark.parametrize("package", [False, True])
+def test_the_unittest_check_runs_with_or_without_init(tmp_path, package):
+    """`discover -s tests -t .` stops with "Start directory is not importable" when tests/ isn't a package: a fine
+    project's checks "failed", and the model was asked to fix that."""
+    (tmp_path / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_calc.py").write_text(
+        "import unittest\n\nfrom calc import add\n\n\nclass CalcTest(unittest.TestCase):\n"
+        "    def test_add(self):\n        self.assertEqual(add(1, 2), 3)\n"
+    )
+    if package:
+        (tmp_path / "tests" / "__init__.py").write_text("")
+    arguments = checks.detect(tmp_path).command.split()[1:]  # after the Python to use, which is this one here
+    done = subprocess.run([sys.executable, *arguments], cwd=tmp_path, capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    assert "Ran 1 test" in done.stderr
 
 
 def test_no_check_when_theres_nothing_to_run(tmp_path):
@@ -198,7 +219,7 @@ def test_a_failure_the_model_doesnt_touch_isnt_checked_again(make_agent):
         ({"tests/test_wall.py": "import pytest\n\n@pytest.mark.parametrize('x', [1])\ndef test_x(x): ...\n"},
          "-m pytest -q"),
         ({"requirements.txt": "PyQt6\npytest>=8\n", "tests/test_wall.py": "def test_x(): ...\n"}, "-m pytest -q"),
-        ({"tests/test_wall.py": "import unittest\n"}, "-m unittest discover -s tests -t ."),
+        ({"tests/test_wall.py": "import unittest\n"}, "-m unittest discover -s tests"),
     ],
 )  # fmt: skip
 def test_tests_written_for_pytest_get_pytest_without_a_config(tmp_path, files, expected):
