@@ -6,6 +6,14 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A failing test run piped into `tail` counted as passing.** When the model ran the project's checks
+  itself as `pytest -q | tail`, lcode read `tail`'s exit code of 0, took the checks as passed and didn't
+  run them, and `lcode -p --output json` reported them as passed. A run whose exit code isn't the check's
+  now counts only if its output shows a test summary with nothing failing. Otherwise lcode runs the
+  checks itself.
+
 ## [0.61.0] - 2026-11-05
 
 ### Added

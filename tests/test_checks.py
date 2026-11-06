@@ -100,18 +100,79 @@ def test_failing_checks_go_back_to_the_model_twice_at_most(make_agent):
     assert "Checks still fail" in text(agent) and [r["exit_code"] for r in agent.check_results] == [1, 1]
 
 
-def test_checks_the_model_ran_after_its_change_arent_repeated(make_agent):
+@pytest.mark.parametrize(
+    ("run", "command"),
+    [
+        (PASS, "cd . && {check} 2>&1"),  # the exit code is the check's
+        ("python3 -c \"print('3 passed in 0.01s')\"", "cd . && {check} 2>&1 | tail -5"),  # the output says so
+    ],
+)
+def test_checks_the_model_ran_after_its_change_arent_repeated(make_agent, run, command):
     agent = make_agent(
         [
             reply(tool_calls=[call("write_file", path="calc.py", content="x = 1\n")]),
-            reply(tool_calls=[call("bash", command=f"cd . && {PASS} 2>&1 | tail -5")]),
+            reply(tool_calls=[call("bash", command=command.format(check=run))]),
             reply("Done, the tests pass."),
         ],
-        checks=PASS,
+        checks=run,
     )
     agent.run_turn("fix calc")
     assert "Checking the work" not in output(agent)
-    assert agent.check_results == [{"command": PASS, "exit_code": 0, "by": "model"}]
+    assert agent.check_results == [{"command": run, "exit_code": 0, "by": "model"}]
+
+
+def test_a_failing_run_piped_into_tail_doesnt_count_as_passed(make_agent):
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("write_file", path="calc.py", content="x = 1\n")]),
+            reply(tool_calls=[call("bash", command=f"{FAIL} 2>&1 | tail -5")]),  # exits with tail's 0
+            reply("Done, the tests pass."),
+            reply("The test still fails: it expects 4."),
+        ],
+        checks=FAIL,
+    )
+    agent.run_turn("fix calc")
+    assert "◆ Checking the work" in text(agent)
+    assert agent.check_results == [{"command": FAIL, "exit_code": 1, "by": "lcode"}]
+    notes = [m["content"] for m in agent.messages if m["role"] == "user" and m["content"].startswith("[lcode]")]
+    assert len(notes) == 1 and "FAIL: test_average" in notes[0]
+
+
+@pytest.mark.parametrize(
+    ("command", "shown", "passed"),
+    [
+        ("python -m pytest -q", "18 passed in 3.2s", True),
+        ("cd x && python -m pytest -q 2>&1", "no summary in this output", True),
+        ("python  -m pytest   -q > log.txt 2>&1", "", True),
+        ("python -m pytest -q &> log.txt", "", True),
+        ("python -m pytest -q && echo done", "done", True),
+        ("python -m pytest -q 2>&1 | tail -5", "18 passed in 3.2s", True),
+        ("python -m pytest -q | tail -3", "12 passed, 0 failed", True),
+        ("python -m pytest -q | tee log.txt", "Ran 3 tests in 0.1s\n\nOK", True),
+        ("python -m pytest -q 2>&1 | tail -5", "1 failed, 17 passed in 3.6s", False),
+        ("python -m pytest -q 2>&1 | tail -5", "2 errors in 0.5s", False),
+        ("python -m pytest -q 2>&1 | tail -5", "5 passed, 1 error in 0.5s", False),
+        ("python -m pytest -q | tail -3", "FAILED tests/test_a.py::test_b\n3 passed", False),
+        ("python -m pytest -q | tail -3", "ERROR tests/test_a.py\n3 passed", False),
+        ("python -m pytest -q | tail -3", "Ran 3 tests in 0.1s\n\nFAILED (failures=1)", False),
+        ("python -m pytest -q | head -5", "collecting ...", False),  # the summary was cut off
+        ("python -m pytest -q 2>&1 | tail -5", "no tests ran in 0.1s", False),
+        ("python -m pytest -q || true", "1 failed in 0.1s", False),
+        ("python -m pytest -q; echo done", "1 failed in 0.1s\ndone", False),
+        ("python -m pytest -q\necho done", "1 failed in 0.1s\ndone", False),
+        ("python -m pytest -q & wait", "", False),
+    ],
+)
+def test_a_run_passed_when_its_exit_code_or_output_says_so(command, shown, passed):
+    check = checks.Check("python -m pytest -q", "tests/")
+    assert checks.covers(check, command)
+    assert checks.run_passed(check, command, f"{shown}\n[exit code: 0]") is passed
+
+
+def test_a_run_that_exits_with_an_error_never_passed():
+    check = checks.Check("python -m pytest -q", "tests/")
+    assert not checks.run_passed(check, "set -o pipefail; python -m pytest -q | tail", "3 passed\n[exit code: 1]")
+    assert not checks.run_passed(check, "python -m pytest -q", "the command didn't run")
 
 
 def test_no_checks_without_changes_or_in_plan_mode(make_agent):

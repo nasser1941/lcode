@@ -115,7 +115,7 @@ class Checks(AgentBase):
     def model_ran_checks(self, command: str, result: str) -> bool:
         """Whether a command the model ran was the project's checks, and they passed."""
         check = self.project_check()
-        if check is None or not checks.covers(check, command) or checks.exit_code(result) != 0:
+        if check is None or not checks.covers(check, command) or not checks.run_passed(check, command, result):
             return False
         self.check_results.append({"command": check.command, "exit_code": 0, "by": "model"})
         return True
