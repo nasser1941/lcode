@@ -17,9 +17,13 @@ whether it passed.
 ## What you need
 
 - **Docker**, running.
-- **uv**: lcode runs Harbor with `uvx`, so there's nothing else to install.
+- **uv**: lcode runs Harbor with `uvx`, so there's nothing else to install. Harbor runs from uv's
+  cache, so don't clear it during a run (`uv cache clean`): the attempts still to come can't start.
 - **Disk space** for the tasks' images: about 20 GB for the dev slice. Each SWE-bench task has an
-  image of its own, 1–3 GB.
+  image of its own, 1–3 GB. Keep about 25 GB free beyond that while it runs: an attempt at
+  `torch-tensor-parallelism` takes about 21 GB until it ends, because the model and then the task's
+  tests each install torch with its GPU libraries. On a smaller disk, run the other tasks with
+  `--tasks` (`lcode bench --harbor dev --list` shows them).
 - **A model server the containers can reach.** lcode in a container finds your machine by itself:
   as `host.docker.internal` with Docker Desktop (macOS, Windows), or as the container's gateway on
   Linux. Ollama has to listen on more than `127.0.0.1` for that:
