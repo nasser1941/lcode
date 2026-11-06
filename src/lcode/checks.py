@@ -209,6 +209,24 @@ def covers(check: Check, command: str) -> bool:
     return " ".join(check.command.split()) in " ".join(command.split())
 
 
+KEEPS_EXIT_CODE = re.compile(r"\d*>&\d+|&>>?|&&")  # redirections and `&&`, after the check
+HIDES_EXIT_CODE = re.compile(r"[|;&\n]")  # a pipe, `||`, `;`, `&` or another line: the exit code isn't the check's
+RUN_FAILED = re.compile(r"\b[1-9]\d* (?:failed|errors?)\b|^(?:FAILED|ERROR)\b", re.M)
+RUN_PASSED = re.compile(r"\b[1-9]\d* passed\b|^OK\b", re.M)
+
+
+def run_passed(check: Check, command: str, result: str) -> bool:
+    """Whether the model's own run of the check passed. `pytest -q | tail` exits with tail's 0 when tests fail, so when
+    the exit code isn't the check's, only the output can say: a test runner's summary, with nothing failing."""
+    if exit_code(result) != 0:
+        return False
+    found = re.search(r"\s+".join(map(re.escape, check.command.split())), command)
+    after = KEEPS_EXIT_CODE.sub(" ", command[found.end() :]).rstrip() if found else ""
+    if not HIDES_EXIT_CODE.search(after):
+        return True
+    return RUN_PASSED.search(result) is not None and RUN_FAILED.search(result) is None
+
+
 def failure_note(check: Check, result: str, round_: int) -> str:
     if timed_out(result):
         return (

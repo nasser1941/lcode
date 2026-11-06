@@ -233,6 +233,8 @@ runs the project's checks itself before the answer is final:
 - **When they don't finish** in 10 minutes, lcode stops them and tells the model that they don't say
   whether its change works. A suite that's simply this slow needs a faster command (below).
 - **When the model already ran them** after its last change and they passed, they aren't run again.
+  A run piped into another program (`pytest -q | tail`) exits with that program's code, so it counts
+  only if its output shows a test summary with nothing failing.
 - **Where they run:** in the project's root, wherever the model's shell went last. A command from your
   own `checks` setting runs in the folder you started lcode in.
 - **Permission:** they run like any other command, so in `ask` mode the first run asks (++a++ allows
