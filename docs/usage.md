@@ -224,11 +224,19 @@ runs the project's checks itself before the answer is final:
 - **When they fail,** the model gets the output and keeps working, twice at most. After that its answer
   says what still fails instead of claiming success. A failure that the change didn't cause is
   reported, not chased, and the checks run again only if the model changes something more.
-- **When nothing could run** (no tests collected, or the test runner isn't installed), lcode says so
-  and doesn't send it to the model.
+- **When no test ran,** lcode says so and doesn't send it to the model: no tests were collected, the
+  test runner isn't installed, or the run stopped before its first test (pytest on an error while
+  collecting, unittest with a traceback instead of `Ran N tests`). A project can be like that before
+  anything changes, and then the run says nothing about the change. If the error names a file the
+  request changed, shell commands included, it's the model's to fix, and it gets the output like any
+  other failure.
+- **When they don't finish** in 10 minutes, lcode stops them and tells the model that they don't say
+  whether its change works. A suite that's simply this slow needs a faster command (below).
 - **When the model already ran them** after its last change and they passed, they aren't run again.
   A run piped into another program (`pytest -q | tail`) exits with that program's code, so it counts
   only if its output shows a test summary with nothing failing.
+- **Where they run:** in the project's root, wherever the model's shell went last. A command from your
+  own `checks` setting runs in the folder you started lcode in.
 - **Permission:** they run like any other command, so in `ask` mode the first run asks (++a++ allows
   them for the session).
 - **Programs** using `lcode -p --output json` see the runs in the result's `checks`.
