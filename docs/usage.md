@@ -227,6 +227,8 @@ runs the project's checks itself before the answer is final:
 - **When nothing could run** (no tests collected, or the test runner isn't installed), lcode says so
   and doesn't send it to the model.
 - **When the model already ran them** after its last change and they passed, they aren't run again.
+  A run piped into another program (`pytest -q | tail`) exits with that program's code, so it counts
+  only if its output shows a test summary with nothing failing.
 - **Permission:** they run like any other command, so in `ask` mode the first run asks (++a++ allows
   them for the session).
 - **Programs** using `lcode -p --output json` see the runs in the result's `checks`.
