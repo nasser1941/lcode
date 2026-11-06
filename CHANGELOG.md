@@ -6,6 +6,13 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A SPARQL query it never ran** now counts like code it never ran (#242): on the dev slice, 2 of 3
+  `sparql-university` attempts on 0.61.0 wrote `solution.sparql` and said they were done without running it.
+  lcode sends the model back once, and the note names `rdflib`. SQL files stay out, because one can be a
+  migration, and asking to run that could change a real database.
+
 ## [0.61.0] - 2026-11-05
 
 ### Added

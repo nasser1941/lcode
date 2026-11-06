@@ -267,10 +267,12 @@ def unrun_note(scripts: list[str]) -> str:
 
 # ----------------------------------------------------------------------------- code written, never run
 
+# Not .sql: one can be a migration, and asking the model to run that could change a real database.
 CODE_SUFFIXES = frozenset(
     {".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".rs", ".go", ".c", ".cc", ".cpp", ".java", ".kt", ".rb",
-     ".php", ".pl", ".lua", ".jl", ".r", ".scala", ".swift", ".cs"}
+     ".php", ".pl", ".lua", ".jl", ".r", ".scala", ".swift", ".cs", ".sparql", ".rq"}
 )  # fmt: skip
+SPARQL_SUFFIXES = (".sparql", ".rq")
 # Checks that read the code without running it (syntax, lint, types): they don't show that it works.
 STATIC_ONLY = re.compile(
     r"\bast\.parse\b|\bpy_compile\b|\bcompileall\b|(?:^|\s)-fsyntax-only\b|\b(?:node|deno)\s+(?:-c|--check)\b"
@@ -288,7 +290,7 @@ NOT_FOUND = re.compile(r"(?:^|:\s)([\w.+-]+): (?:command )?not found\s*$", re.M)
 
 
 def is_code(rel: str) -> bool:
-    """Whether a file is a program or module in a language that runs (shell scripts have their own check)."""
+    """Whether a file is a program, module or query in a language that runs (shell scripts have their own check)."""
     return Path(rel).suffix.lower() in CODE_SUFFIXES
 
 
@@ -319,16 +321,19 @@ def untested_note(files: list[str], missing: list[str], uv: bool) -> str:
     note = (
         f"[lcode] You wrote {names} in this request but haven't run {it} since your last change. Run {it} now and fix "
         f"what fails, so you know {it} works before you say so: for a module, import it and call what you wrote; "
-        "for a server or anything else that keeps running, start it in the background and try it. A syntax check "
-        "doesn't show that it works."
+        "for a query, run it on its data; for a server or anything else that keeps running, start it in the "
+        "background and try it. A syntax check doesn't show that it works."
     )
     if missing:
         note += f" {', '.join(f'`{m}`' for m in missing)} isn't installed here."
-    if uv and any(f.endswith(".py") for f in files):
+    sparql = any(f.lower().endswith(SPARQL_SUFFIXES) for f in files)
+    if uv and (sparql or any(f.endswith(".py") for f in files)):
         note += (
             " To run Python code without changing this machine's Python, `uv run --with PACKAGE python FILE` fetches "
             "Python and the packages it needs into a throwaway environment."
         )
+        if sparql:
+            note += " For a SPARQL query, the package is `rdflib`."
     return note + f" If you can't run {it}, say plainly in your answer that {it} is untested, and why."
 
 

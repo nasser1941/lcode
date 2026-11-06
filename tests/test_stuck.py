@@ -325,8 +325,27 @@ def test_what_counts_as_running_new_code():
     no_torch = "ModuleNotFoundError: No module named 'torch'\n\n[exit code: 1]"
     assert checks.exercised("python3 -c 'import geometry'", no_torch, files) == []
     assert checks.not_found(missing + "\n/bin/sh: 1: node: not found\n") == ["python3", "node"]
-    assert checks.is_code("geometry.py") and checks.is_code("src/Main.JAVA")
-    assert not any(checks.is_code(f) for f in ("build.sh", "notes.md", "meeting.ics", "query.sparql"))
+    assert all(checks.is_code(f) for f in ("geometry.py", "src/Main.JAVA", "query.sparql", "ask.rq"))
+    assert not any(checks.is_code(f) for f in ("build.sh", "notes.md", "meeting.ics", "schema.sql"))
+
+
+def test_a_query_written_and_never_run_is_sent_back_once(make_agent, repo, monkeypatch):
+    """2 of 3 sparql-university attempts on 0.61.0 wrote solution.sparql and said they were done without running it."""
+    monkeypatch.setattr(checks, "uv_available", lambda: True)
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("write_file", path="solution.sparql", content="SELECT ?s WHERE { ?s ?p ?o }\n")]),
+            reply("Done: solution.sparql has the query."),
+            reply(tool_calls=[call("bash", command="uv run --with rdflib python -c 'open(\"solution.sparql\")'")]),
+            reply("It runs, and returns 3 rows."),
+        ],
+        checks="auto",
+    )
+    agent.run_turn("write the query")
+    notes = untested_notes(agent)
+    assert len(notes) == 1 and "You wrote solution.sparql" in notes[0] and "for a query, run it on its data" in notes[0]
+    assert "the package is `rdflib`" in notes[0]
+    assert agent.messages[-1]["content"] == "It runs, and returns 3 rows."
 
 
 def test_code_written_and_never_run_is_sent_back_once(make_agent, repo, monkeypatch):
