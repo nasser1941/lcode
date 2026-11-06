@@ -224,3 +224,21 @@ def test_old_checkpoints_are_deleted(make_agent, repo):
 )
 def test_exclude_patterns_match_one_path(path, pattern):
     assert checkpoints._exclude_pattern(path) == pattern
+
+
+def test_the_files_changed_so_far_include_shell_commands(make_agent, repo):
+    agent = make_agent()
+    assert agent.checkpoints.changed_so_far() == []  # no request is running
+    agent.checkpoints.begin_turn("20260101-000000-abcdef", "tidy up", 0)
+    agent.checkpoints.before_change(repo)
+    assert agent.checkpoints.changed_so_far() == []
+    (repo / "README.md").unlink()
+    (repo / "src" / "pkg" / "new.py").write_text("x = 1\n")
+    clone = repo / "cloned"  # the model cloned a repository: its files aren't this project's changes
+    clone.mkdir()
+    (clone / "inside.py").write_text("y = 2\n")
+    identity = ("-c", "user.name=x", "-c", "user.email=x@example.com")
+    subprocess.run(["git", "init", "-q"], cwd=clone, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=clone, check=True)
+    subprocess.run(["git", *identity, "commit", "-qm", "first"], cwd=clone, check=True)
+    assert sorted(agent.checkpoints.changed_so_far()) == ["README.md", "src/pkg/new.py"]

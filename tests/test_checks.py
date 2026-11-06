@@ -302,3 +302,197 @@ def test_the_projects_own_python_runs_the_checks(tmp_path):
     (tmp_path / ".venv" / "lib" / "test_inside_the_venv.py").write_text("import pytest\n")
     assert checks.detect(tmp_path).command == ".venv/bin/python -m pytest -q"
     assert checks.test_files(tmp_path) == [tmp_path / "tests" / "test_wall.py"]  # not the environment's own
+
+
+# ----------------------------------------------------------------------------- runs that say nothing about the change
+
+PYTEST = f"{sys.executable} -m pytest -q -p no:cacheprovider"
+NOTE = "[lcode] Your changes are done, but the project's checks fail"
+WRITE_NOTES = [reply(tool_calls=[call("write_file", path="notes.md", content="hi\n")]), reply("Done.")]
+
+
+def notes_to_the_model(agent):
+    return [m["content"] for m in agent.messages if m["role"] == "user" and m["content"].startswith("[lcode]")]
+
+
+def test_a_run_that_stops_before_its_first_test_isnt_sent_to_the_model(make_agent, repo):
+    """Django's `tests/` can't be discovered by unittest, before or after any change: on the dev slice the model was
+    told to fix what its changes broke, and it ran `git stash` or kept editing to find out that they broke nothing."""
+    command = f"{sys.executable} -m unittest discover -s no_such_folder"
+    agent = make_agent(list(WRITE_NOTES), checks=command)
+    agent.run_turn("write notes")
+    assert "stopped before running a test" in text(agent) and "not importable" in text(agent)
+    assert "lcode config set checks" in text(agent)
+    assert notes_to_the_model(agent) == [] and agent.messages[-1]["content"] == "Done."
+    assert agent.check_results == [{"command": command, "exit_code": None, "by": "lcode"}]
+
+
+def test_pytest_stopped_by_a_missing_dependency_isnt_sent_to_the_model(make_agent, repo):
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_old.py").write_text("import no_such_dependency\n\n\ndef test_it(): ...\n")
+    agent = make_agent(list(WRITE_NOTES), checks=PYTEST)
+    agent.run_turn("write notes")
+    assert "stopped before running a test" in text(agent) and "no_such_dependency" in text(agent)
+    assert notes_to_the_model(agent) == [] and agent.check_results[0]["exit_code"] is None
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        call("write_file", path="calc.py", content="def add(:\n"),  # a syntax error
+        call("write_file", path="calc.py", content="import no_such_dependency\n"),  # an import that isn't there
+        call("write_file", path="calc.py", content="def plus(a, b):\n    return a + b\n"),  # a name the test needs
+        call("write_file", path="tests/test_new.py", content="def test_it(:\n"),  # its own new test
+        call("write_file", path="conftest.py", content="import no_such_dependency\n"),
+        call("bash", command="printf 'def add(:\\n' > calc.py"),  # the same, with a shell command
+        call("bash", command="rm calc.py"),  # the test can't find the module any more
+    ],
+)
+def test_a_run_stopped_by_the_change_still_goes_to_the_model(make_agent, repo, change):
+    """This is what the checks are for: the same early stop, but its error names what this request changed."""
+    (repo / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_calc.py").write_text(
+        "from calc import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n"
+    )
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("read_file", path="calc.py")]),
+            reply(tool_calls=[change]),
+            reply(tool_calls=[call("write_file", path="notes.md", content="hi\n")]),  # a shell command alone: no checks
+            reply("Done."),
+            reply("I broke it, sorry."),
+        ],
+        checks=PYTEST,
+    )
+    agent.run_turn("change calc")
+    notes = notes_to_the_model(agent)
+    assert len(notes) == 1 and notes[0].startswith(NOTE) and "Fix what your changes broke" in notes[0]
+    assert agent.check_results[0]["exit_code"] != 0 and agent.check_results[0]["exit_code"] is not None
+
+
+def test_tests_that_ran_and_failed_still_go_to_the_model(make_agent, repo):
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_old.py").write_text("def test_old():\n    assert False\n")
+    agent = make_agent([*WRITE_NOTES, reply("That test has nothing to do with my change.")], checks=PYTEST)
+    agent.run_turn("write notes")
+    assert notes_to_the_model(agent)[0].startswith(NOTE) and agent.check_results[0]["exit_code"] == 1
+
+
+TRACEBACK = "Traceback (most recent call last):\n"
+DJANGO_STOP = (
+    "django.core.exceptions.ImproperlyConfigured: Requested settings, but settings are not configured. You must "
+    "either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing "
+    "settings."
+)
+
+
+@pytest.mark.parametrize(
+    ("command", "output", "stopped"),
+    [
+        ("python -m unittest discover -s tests", f"{TRACEBACK}ImportError: x\n[exit code: 1]", True),
+        ("python -m unittest", f"ERROR: x\n{TRACEBACK}Ran 1 test in 0.0s\nFAILED\n[exit code: 1]", False),
+        ("python -m unittest", "Ran 12 tests in 0.1s\n\nFAILED (failures=1)\n[exit code: 1]", False),
+        ("python -m unittest", "Fatal Python error: Segmentation fault\n[exit code: -11]", False),
+        ("python -m pytest -q", "Interrupted: 1 error during collection\n[exit code: 2]", True),
+        ("uv run pytest -q", "ERROR: usage: pytest [options]\n[exit code: 4]", True),
+        ("python -m pytest -q", "INTERNALERROR> Traceback\n[exit code: 3]", True),
+        ("python -m pytest -q", "36 failed, 7993 passed, 898 skipped in 330.00s\n[exit code: 1]", False),
+        ("python -m pytest -q", "3 errors in 0.5s\n[exit code: 1]", False),  # errors in a test's fixtures: tests ran
+        ("python -m pytest -q", "1 failed, 3 passed in 1.0s (interrupted)\n[exit code: 2]", False),
+        ("uv run pytest -q && uv run ruff check .", "3 passed in 0.1s\nerror: bad rule\n[exit code: 2]", False),
+        ("make test", "make: *** [Makefile:2: test] Error 1\n[exit code: 2]", False),
+        ("npm test", f"{TRACEBACK}[exit code: 1]", False),
+    ],
+)
+def test_which_runs_stopped_before_their_first_test(command, output, stopped):
+    assert checks.no_test_ran(checks.Check(command, "test"), output) == stopped
+
+
+@pytest.mark.parametrize(
+    ("output", "files", "named"),
+    [
+        ('E     File "/work/pkg/calc.py", line 3', ["pkg/calc.py"], True),
+        ("pkg/calc.py:1: in <module>", ["calc.py"], True),  # as the model's shell saw it, from inside pkg/
+        ("tests/test_calc.py:1: in <module>", ["calc.py"], False),
+        ("E   ModuleNotFoundError: No module named 'pkg.calc'", ["src/pkg/calc.py"], True),
+        ("E   ModuleNotFoundError: No module named 'pkg'", ["src/pkg/calc.py"], True),
+        ("E   ModuleNotFoundError: No module named 'hypothesis'", ["src/pkg/calc.py"], False),
+        ("E   ModuleNotFoundError: No module named 'pkg.make.walks'", ["pkg/make/torus.py"], False),
+        ("anything", [], False),
+    ],
+)
+def test_whether_an_error_names_a_changed_file(output, files, named):
+    assert checks.names_any(output, files) == named
+
+
+@pytest.mark.parametrize(
+    ("output", "reason"),
+    [
+        (f"{TRACEBACK}  File x\nImportError: not importable\n\n[exit code: 1]", "ImportError: not importable."),
+        ("ERROR x\nE   OSError: no data\nE   more\n2 errors in 0.60s\n\n[exit code: 2]", "OSError: no data."),
+        ("[exit code: 2]", "no output."),
+        (f"{TRACEBACK}{DJANGO_STOP}\n\n[exit code: 1]", DJANGO_STOP),  # one full stop, and it says what to set
+        (f"{TRACEBACK}{'x' * 500}\n[exit code: 1]", "x" * 239 + "…"),
+    ],
+)
+def test_the_user_is_told_why_the_run_stopped(output, reason):
+    assert checks.stop_reason(output) == reason
+
+
+def test_the_checks_run_in_the_projects_root_wherever_the_model_went(make_agent, repo):
+    """`discover -s tests` from inside tests/ doesn't find tests/: a fine project's checks would stop there."""
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_calc.py").write_text(
+        "import unittest\n\nfrom calc import add\n\n\nclass CalcTest(unittest.TestCase):\n"
+        "    def test_add(self):\n        self.assertEqual(add(1, 2), 3)\n"
+    )
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("bash", command="cd tests && ls")]),
+            reply(tool_calls=[call("write_file", path="notes.md", content="hi\n")]),
+            reply("Done."),
+        ],
+        checks="auto",
+    )
+    agent.run_turn("write notes")
+    assert "Checks pass" in text(agent) and agent.check_results[0]["exit_code"] == 0
+    assert agent.cwd == repo / "tests"  # the model's shell stays where it went
+
+
+def test_the_users_own_command_runs_where_they_started_lcode(make_agent, repo):
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / "service").mkdir()
+    (repo / "service" / "only_here").write_text("")
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("bash", command="cd .. && ls")]),
+            reply(tool_calls=[call("write_file", path="notes.md", content="hi\n")]),
+            reply("Done."),
+        ],
+        checks="test -f only_here",
+    )
+    agent.cwd = agent.workspace = repo / "service"
+    agent.run_turn("write notes")
+    assert "Checks pass" in text(agent) and agent.cwd == repo
+
+
+def test_checks_that_dont_finish_arent_called_a_failure(make_agent, monkeypatch):
+    """On the dev slice, sympy's whole suite ran into the time limit, and the model was told to fix what it broke."""
+    monkeypatch.setattr(checks, "TIMEOUT", 1)
+    agent = make_agent([*WRITE_NOTES, reply("The full checks didn't finish.")], checks="echo 1 passed; sleep 30")
+    agent.run_turn("write notes")
+    notes = notes_to_the_model(agent)
+    assert len(notes) == 1 and "didn't finish in 1 seconds" in notes[0] and "hang" in notes[0]
+    assert "Fix what your changes broke" not in notes[0] and "checks fail" not in notes[0]
+    assert "The checks didn't finish" in text(agent) and agent.check_results[0]["exit_code"] is None
+
+
+def test_what_lcode_remembers_about_a_run_without_tests_isnt_a_failure(make_agent, repo):
+    from lcode import context
+
+    agent = make_agent(list(WRITE_NOTES), checks=f"{sys.executable} -m unittest discover -s no_such_folder")
+    agent.run_turn("write notes")
+    assert "didn't run" in context.task_sheet(agent) and "failed" not in context.task_sheet(agent)

@@ -56,7 +56,7 @@ went: `0` success, `1` an error, `3` stopped at `--max-steps`, `4` stopped becau
 | `files_changed` | Files the request added (`A`), modified (`M`) or deleted (`D`), shell commands included |
 | `usage` | Model requests and tokens; `prompt_tokens` includes tokens served from the prompt cache |
 | `review` | What the [review](usage.md#a-review-before-the-answer) sent back to the model (`[]` when it found nothing; `null` when no review ran) |
-| `checks` | The [checks](usage.md#checks-before-done) that ran after the change: `command`, `exit_code` (`null` when they weren't allowed to run) and `by` (`lcode`, or `model` when the model ran them itself) |
+| `checks` | The [checks](usage.md#checks-before-done) that ran after the change: `command`, `exit_code` (`null` when they say nothing about the change: they weren't allowed to run, no test ran, or they didn't finish) and `by` (`lcode`, or `model` when the model ran them itself) |
 | `error` | What went wrong, when `status` is `error` |
 | `session_id` | Continue the conversation later with `lcode --resume <id>` |
 

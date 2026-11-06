@@ -386,6 +386,18 @@ class Checkpoints:
                 f"[dim]↶ Checkpoint {cp.n}: {count} file{'' if count == 1 else 's'} changed · /undo reverts them[/]"
             )
 
+    def changed_so_far(self) -> list[str]:
+        """The files changed so far in the running request, by shell commands too, without a nested repository's."""
+        cp = self._current
+        if cp is None:
+            return []
+        store = Store(Path(cp.worktree))
+        try:
+            changes = store.changes(cp.before, store.tree())
+        except CheckpointError:
+            return []
+        return [c["path"] for c in changes if not (store.worktree / c["path"]).is_dir()]
+
     def ref(self, n: int) -> str:
         return f"refs/lcode/{self.session_id}/{n}"
 

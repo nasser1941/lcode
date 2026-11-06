@@ -8,6 +8,20 @@ All notable changes to lcode are documented here. The format follows
 
 ### Changed
 
+- **A test run that stops before its first test no longer counts as a failure of the model's change.**
+  pytest stopping on an error while collecting, or unittest ending in a traceback instead of `Ran N
+  tests`, says nothing about the change, yet the model was told that the project's checks fail and to fix
+  what its changes broke. On the dev slice at 32K that was 19 of the 34 automatic checks (Django's
+  `tests/` can't be discovered by unittest; two other projects stop on modules and data that aren't there).
+  The model spent 26 minutes after those notes, ran `git stash` in 5 attempts to see for itself, and in 2
+  attempts kept editing: one downloaded a 244 MB database and changed a test file the request had excluded.
+  Now lcode tells you what stopped the run, and the model's answer stands. An error that names a file the
+  request changed still goes to the model, shell commands included, and so do tests that ran and failed.
+  `checks` in `lcode -p --output json`, the task sheet and `/status` now say these checks didn't run, also
+  for a project with no tests or no test runner. The notes weren't all loss: in that same attempt, 1 of 47
+  like it over four nights, the extra work also fixed a test the model had called pre-existing.
+- **Checks that don't finish in 10 minutes are no longer called a failure.** The model is told that they
+  don't say whether its change works, instead of to fix what it broke.
 - **A SPARQL query it never ran** now counts like code it never ran (#242): on the dev slice, 2 of 3
   `sparql-university` attempts on 0.61.0 wrote `solution.sparql` and said they were done without running it.
   lcode sends the model back once, and the note names `rdflib`. SQL files stay out, because one can be a
@@ -15,11 +29,19 @@ All notable changes to lcode are documented here. The format follows
 
 ### Fixed
 
+- **The automatic checks run in the project's root.** They ran wherever the model's last `cd` left its
+  shell, though their command is written for the root: from `tests/`, `python -m unittest discover -s tests`
+  doesn't start and `.venv/bin/python` isn't there. 3 of the 34 checks on the dev slice ran from `tests/`. A
+  command from your own `checks` setting runs in the folder you started lcode in.
 - **A failing test run piped into `tail` counted as passing.** When the model ran the project's checks
   itself as `pytest -q | tail`, lcode read `tail`'s exit code of 0, took the checks as passed and didn't
   run them, and `lcode -p --output json` reported them as passed. A run whose exit code isn't the check's
   now counts only if its output shows a test summary with nothing failing. Otherwise lcode runs the
   checks itself.
+- **`lcode bench --compare`** took a task with one attempt as certain, so its noise came out too small,
+  and it said nothing when a run had far fewer attempts: a real run lost 18 of its 72 attempts and
+  compared as usual. A single attempt's pass rate now comes from both runs, and `--compare` warns when
+  the two runs didn't have the same number of attempts.
 
 ## [0.61.0] - 2026-11-05
 
