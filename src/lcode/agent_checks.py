@@ -160,7 +160,7 @@ class Checks(AgentBase):
             )
         elif checks.no_test_ran(check, result) and not checks.names_any(result, self.files_changed()):
             self.say(
-                f"The checks stopped before running a test ({check.command}): {checks.stop_reason(result)}. It doesn't "
+                f"The checks stopped before running a test ({check.command}): {checks.stop_reason(result)} It doesn't "
                 "name a file this request changed, so the model isn't asked to fix it. To get checks that run, fix "
                 'that or set the command: lcode config set checks "…" (or checks off).',
                 warning=True,

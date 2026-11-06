@@ -186,11 +186,14 @@ def names_any(result: str, files: Iterable[str]) -> bool:
     return any(mentions(result, rel) or any(mentions(rel, module) for module in modules) for rel in files)
 
 
+REASON_LIMIT = 240  # Django's ImproperlyConfigured says what to set, in 224
+
+
 def stop_reason(result: str) -> str:
-    """The line that says why a test run stopped before its first test: pytest's first error, or a traceback's end."""
+    """A sentence on why a test run stopped before its first test: pytest's first error, or a traceback's end."""
     lines = [line.strip() for line in result.splitlines() if line.strip() and not line.startswith("[")]
     reason = next((line[1:].strip() for line in lines if line.startswith("E ")), lines[-1] if lines else "no output")
-    return reason if len(reason) <= 160 else reason[:159] + "…"
+    return reason.rstrip(".") + "." if len(reason) <= REASON_LIMIT else reason[: REASON_LIMIT - 1] + "…"
 
 
 def timed_out(result: str) -> bool:

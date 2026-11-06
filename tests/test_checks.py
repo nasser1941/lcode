@@ -380,6 +380,11 @@ def test_tests_that_ran_and_failed_still_go_to_the_model(make_agent, repo):
 
 
 TRACEBACK = "Traceback (most recent call last):\n"
+DJANGO_STOP = (
+    "django.core.exceptions.ImproperlyConfigured: Requested settings, but settings are not configured. You must "
+    "either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing "
+    "settings."
+)
 
 
 @pytest.mark.parametrize(
@@ -424,10 +429,11 @@ def test_whether_an_error_names_a_changed_file(output, files, named):
 @pytest.mark.parametrize(
     ("output", "reason"),
     [
-        (f"{TRACEBACK}  File x\nImportError: not importable\n\n[exit code: 1]", "ImportError: not importable"),
-        ("ERROR x\nE   OSError: no data\nE   more\n2 errors in 0.60s\n\n[exit code: 2]", "OSError: no data"),
-        ("[exit code: 2]", "no output"),
-        (f"{TRACEBACK}{'x' * 500}\n[exit code: 1]", "x" * 159 + "…"),
+        (f"{TRACEBACK}  File x\nImportError: not importable\n\n[exit code: 1]", "ImportError: not importable."),
+        ("ERROR x\nE   OSError: no data\nE   more\n2 errors in 0.60s\n\n[exit code: 2]", "OSError: no data."),
+        ("[exit code: 2]", "no output."),
+        (f"{TRACEBACK}{DJANGO_STOP}\n\n[exit code: 1]", DJANGO_STOP),  # one full stop, and it says what to set
+        (f"{TRACEBACK}{'x' * 500}\n[exit code: 1]", "x" * 239 + "…"),
     ],
 )
 def test_the_user_is_told_why_the_run_stopped(output, reason):
