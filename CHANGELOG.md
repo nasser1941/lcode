@@ -6,6 +6,30 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A test run that stops before its first test no longer counts as a failure of the model's change.**
+  pytest stopping on an error while collecting, or unittest ending in a traceback instead of `Ran N
+  tests`, says nothing about the change, yet the model was told that the project's checks fail and to fix
+  what its changes broke. On the dev slice at 32K that was 19 of the 34 automatic checks (Django's
+  `tests/` can't be discovered by unittest; two other projects stop on modules and data that aren't there).
+  The model spent 26 minutes after those notes, ran `git stash` in 5 attempts to see for itself, and in 2
+  attempts kept editing: one downloaded a 244 MB database and changed a test file the request had excluded.
+  Now lcode tells you what stopped the run, and the model's answer stands. An error that names a file the
+  request changed still goes to the model, shell commands included, and so do tests that ran and failed.
+  `checks` in `lcode -p --output json`, the task sheet and `/status` now say these checks didn't run, also
+  for a project with no tests or no test runner. The notes weren't all loss: in that same attempt, 1 of 47
+  like it over four nights, the extra work also fixed a test the model had called pre-existing.
+- **Checks that don't finish in 10 minutes are no longer called a failure.** The model is told that they
+  don't say whether its change works, instead of to fix what it broke.
+
+### Fixed
+
+- **The automatic checks run in the project's root.** They ran wherever the model's last `cd` left its
+  shell, though their command is written for the root: from `tests/`, `python -m unittest discover -s tests`
+  doesn't start and `.venv/bin/python` isn't there. 3 of the 34 checks on the dev slice ran from `tests/`. A
+  command from your own `checks` setting runs in the folder you started lcode in.
+
 ## [0.61.0] - 2026-11-05
 
 ### Added
@@ -28,20 +52,6 @@ All notable changes to lcode are documented here. The format follows
 
 ### Changed
 
-- **A test run that stops before its first test no longer counts as a failure of the model's change.**
-  pytest stopping on an error while collecting, or unittest ending in a traceback instead of `Ran N
-  tests`, says nothing about the change, yet the model was told that the project's checks fail and to fix
-  what its changes broke. On the dev slice at 32K that was 19 of the 34 automatic checks (Django's
-  `tests/` can't be discovered by unittest; two other projects stop on modules and data that aren't there).
-  The model spent 26 minutes after those notes, ran `git stash` in 5 attempts to see for itself, and in 2
-  attempts kept editing: one downloaded a 244 MB database and changed a test file the request had excluded.
-  Now lcode tells you what stopped the run, and the model's answer stands. An error that names a file the
-  request changed still goes to the model, shell commands included, and so do tests that ran and failed.
-  `checks` in `lcode -p --output json`, the task sheet and `/status` now say these checks didn't run, also
-  for a project with no tests or no test runner. The notes weren't all loss: in that same attempt, 1 of 47
-  like it over four nights, the extra work also fixed a test the model had called pre-existing.
-- **Checks that don't finish in 10 minutes are no longer called a failure.** The model is told that they
-  don't say whether its change works, instead of to fix what it broke.
 - **After a reply that goes nowhere** (it went round in circles, filled the context before it said
   anything, or was empty), the model's next reply runs with thinking off (with Ollama), so it acts
   instead of starting the same deliberation over. lcode now stops the request when two replies in a row go
@@ -52,10 +62,6 @@ All notable changes to lcode are documented here. The format follows
 
 ### Fixed
 
-- **The automatic checks run in the project's root.** They ran wherever the model's last `cd` left its
-  shell, though their command is written for the root: from `tests/`, `python -m unittest discover -s tests`
-  doesn't start and `.venv/bin/python` isn't there. 3 of the 34 checks on the dev slice ran from `tests/`. A
-  command from your own `checks` setting runs in the folder you started lcode in.
 - **A service you ask lcode to leave running stays up after lcode exits** (#240). lcode stopped every
   background job when the session ended, and there was no way to keep one: on the dev slice, 5 of 6
   `pypi-server` attempts failed because the server the task asked for was gone when its tests ran. The
