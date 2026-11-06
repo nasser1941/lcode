@@ -6,6 +6,13 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`lcode bench --compare`** took a task with one attempt as certain, so its noise came out too small,
+  and it said nothing when a run had far fewer attempts: a real run lost 18 of its 72 attempts and
+  compared as usual. A single attempt's pass rate now comes from both runs, and `--compare` warns when
+  the two runs didn't have the same number of attempts.
+
 ## [0.61.0] - 2026-11-05
 
 ### Added

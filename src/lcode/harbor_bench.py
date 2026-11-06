@@ -602,10 +602,14 @@ def pass_at_1(passed: list[list[bool]]) -> float:
     return statistics.fmean(statistics.fmean(p) for p in passed)
 
 
-def standard_error(passed: list[list[bool]]) -> float:
+def standard_error(passed: list[list[bool]], other: list[list[bool]]) -> float:
     """How much pass@1 would move between runs, from how much each task's attempts disagree: a task that always
-    passes or always fails adds nothing, one that passes half the time the most."""
-    variance = sum(statistics.fmean(p) * (1 - statistics.fmean(p)) / max(len(p) - 1, 1) for p in passed)
+    passes or always fails adds nothing, one that passes half the time the most. One attempt can't disagree with
+    itself, so that task's pass rate comes from both runs (`other` is the other run's attempts, task by task)."""
+    variance = 0.0
+    for attempts, others in zip(passed, other, strict=True):
+        rate = statistics.fmean(attempts if len(attempts) > 1 else attempts + others)
+        variance += rate * (1 - rate) / max(len(attempts) - 1, 1)
     return math.sqrt(variance) / len(passed)
 
 
@@ -638,8 +642,15 @@ def compare(old: Saved, new: Saved) -> tuple[list[str], bool]:
             lines.append(f"  {task}: {sum(before)}/{len(before)} → {sum(after)}/{len(after)}")
     if not both:
         return [*lines, "[red]No task ran in both, so there's nothing to compare.[/]"], False
-    a, b = pass_at_1([old.passed[t] for t in both]), pass_at_1([new.passed[t] for t in both])
-    noise = 2 * math.hypot(standard_error([old.passed[t] for t in both]), standard_error([new.passed[t] for t in both]))
+    runs_before, runs_after = [old.passed[t] for t in both], [new.passed[t] for t in both]
+    ran_before, ran_after = sum(map(len, runs_before)), sum(map(len, runs_after))
+    if ran_before != ran_after:
+        lines.append(
+            f"[yellow]Not the same number of attempts ran: {ran_before} before and {ran_after} after, over the tasks "
+            "in both. With fewer attempts, a result says less.[/]"
+        )
+    a, b = pass_at_1(runs_before), pass_at_1(runs_after)
+    noise = 2 * math.hypot(standard_error(runs_before, runs_after), standard_error(runs_after, runs_before))
     change = f"{(b - a) * 100:+.0f} points; the noise is ±{noise * 100:.0f}"
     if a - b > noise + 1e-9:
         verdict = f"[red]a drop beyond the noise ({change})[/]"
