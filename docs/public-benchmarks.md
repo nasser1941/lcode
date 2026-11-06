@@ -127,9 +127,11 @@ limits, so part of a difference can come from the machine rather than from lcode
 
 The noise is how far pass@1 moves between runs of the same setup, estimated from how much each
 task's attempts disagree: a task that always passes or always fails adds nothing, one that passes
-half the time the most. A change counts when it's more than twice the standard error of the
-difference. On the dev slice, with three attempts per task, that's about 9 points. `--compare` exits
-with 1 when the second result dropped beyond the noise, so a script can stop on it.
+half the time the most. One attempt can't disagree with itself, so that task's pass rate comes from
+both runs. A change counts when it's more than twice the standard error of the difference. On the dev
+slice, with three attempts per task, that's about 9 points. `--compare` warns when the two runs didn't
+have the same number of attempts (a container that didn't start, say), and exits with 1 when the second
+result dropped beyond the noise, so a script can stop on it.
 
 **The release rule:** a release that changes lcode's prompts, tools or context handling ships only
 if the dev slice doesn't drop beyond the noise against the last baseline, and the comparison goes on

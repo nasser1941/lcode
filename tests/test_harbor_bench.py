@@ -456,6 +456,19 @@ def test_compare_reads_both_runs_again_from_harbors_results(tmp_path):
     assert any("Model speed" in line for line in near[0]) and not any("slower" in line for line in near[0])
 
 
+def test_compare_doesnt_take_one_attempt_as_certain(tmp_path):
+    before = {f"t{n}": SOMETIMES for n in range(6)}
+    code, text = compared(tmp_path, before, {f"t{n}": [True] for n in range(6)})
+    assert code == 0 and "Not the same number of attempts ran: 18 before and 6 after" in text
+    assert "pass@1 67% → 100% over the 6 tasks in both: within the noise (+33 points; the noise is ±45)" in text
+
+
+def test_compare_of_single_attempts_that_disagree_isnt_a_drop(tmp_path):
+    code, text = compared(tmp_path, {"t0": [True]}, {"t0": [False]})
+    assert code == 0 and "within the noise (-100 points; the noise is ±141)" in text
+    assert "Not the same number of attempts" not in text
+
+
 def test_compare_needs_two_results(tmp_path):
     console = Console(file=io.StringIO(), width=200)
     (tmp_path / "other.json").write_text('{"schema": 1, "runs": []}')
