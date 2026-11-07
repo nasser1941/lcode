@@ -12,17 +12,18 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from statistics import median
 from urllib.parse import urlsplit
 
 from lcode import catalog
 from lcode.cloud import is_cloud
 from lcode.config import format_tokens
-from lcode.hardware import Hardware
+from lcode.hardware import GIB, Hardware
 from lcode.ollama import OllamaError
 
 GB = 1e9
+ALL = 0.995  # this share of a model on the GPU counts as all of it, and 1 - ALL as none of it
 RELEASE_WAIT = 15.0  # seconds to wait for Ollama to give an unloaded model's GPU memory back
 SPLIT_WARNING = 0.95  # a dense model with less than this on the GPU runs much slower
 SHORTFALL = 0.25  # this much less on the GPU than expected: something else is using GPU memory
@@ -36,24 +37,30 @@ SESSION_COMMANDS = ("/ctx {}", "/model {}", "/models")
 
 @dataclass
 class Placement:
-    """A loaded model, from Ollama's /api/ps."""
+    """A loaded model, from Ollama's /api/ps (see `with_estimate` for what that leaves out)."""
 
     name: str
-    size: float  # bytes in memory
+    size: float  # bytes in memory, as Ollama counts them
     vram: float  # bytes of it on the GPU
     context: int = 0  # the context window it was loaded with
+    estimate: float = 0.0  # bytes the model takes by the catalog's estimate, when Ollama's count leaves part out
+
+    @property
+    def total(self) -> float:
+        return max(self.size, self.estimate)
 
     @property
     def gpu_share(self) -> float:
-        return self.vram / self.size if self.size else 0.0
+        return self.vram / self.total if self.total else 0.0
 
     def describe(self) -> str:
-        """'22.3 GB, 44% on the GPU and the rest in system RAM'"""
-        size = f"{self.size / GB:.1f} GB"
+        """'6.6 GB, all on the GPU', or with the catalog's estimate: '~23 GB, 42% on the GPU and the rest in system
+        RAM'. The estimate is shown as `lcode setup` and `lcode doctor` show it."""
+        size = f"~{self.estimate / GIB:.0f} GB" if self.estimate > self.size else f"{self.size / GB:.1f} GB"
         share = self.gpu_share
-        if share >= 0.995:
+        if share >= ALL:
             return f"{size}, all on the GPU"
-        if share <= 0.005:
+        if share <= 1 - ALL:
             return f"{size}, all in system RAM (on the CPU)"
         return f"{size}, {share:.0%} on the GPU and the rest in system RAM"
 
@@ -117,6 +124,20 @@ def placement(ollama, model: str) -> Placement | None:
     return found[0] if found else None
 
 
+def with_estimate(where: Placement, model: str, context: int) -> Placement:
+    """`where`, counting the whole model when part of it is off the GPU: by the catalog's estimate (models outside
+    the catalog stay as Ollama counts them).
+
+    /api/ps counts the memory Ollama's runner allocates. The weights it keeps in system RAM aren't allocated: they
+    stay mapped from the model's file. So with Ollama 0.40, qwen3.6-35b at 32K on a 12 GB GPU shows as 10.5 GB, 98%
+    of it on the GPU, while ~12 GB of its experts are in RAM. A model all on the GPU is counted in full.
+    """
+    spec = catalog.find(model)
+    if spec is None or where.vram >= ALL * where.size:
+        return where
+    return replace(where, estimate=spec.memory_gib(where.context or context) * GIB)
+
+
 def is_moe(ollama, model: str) -> bool | None:
     """Whether the model is a Mixture-of-Experts (None: unknown)."""
     spec = catalog.find(model)
@@ -169,14 +190,17 @@ def load_report(
 ) -> str:
     """The line after a load: how long it took, how it fits, and a warning if it fits worse than it should."""
     took = f" in {seconds:.0f}s" if seconds >= 1 else ""
-    line = f"{'Reloaded' if reload else 'Loaded'} {model}{took}" + (f": {where.describe()}." if where else ".")
+    line = f"{'Reloaded' if reload else 'Loaded'} {model}{took}"
     if where is None:
-        return line
+        return f"{line}."
+    where = with_estimate(where, model, context)
+    line += f": {where.describe()}."
     expected = expected_share(model, context, hardware)
     if expected is not None and where.gpu_share < expected - SHORTFALL:
+        fits = "all of it fits" if expected >= ALL else f"up to {expected:.0%} fits"
         line += (
-            f" Less of it is on the GPU than usual ({expected:.0%}): another program or model is using GPU "
-            "memory, so it runs slower until that's closed."
+            f" Less of it is on the GPU than usual ({fits}): another program or model is using GPU memory, so it "
+            "runs slower until that's closed."
         )
     elif dense and where.gpu_share < SPLIT_WARNING:
         line += " It's a dense model split between GPU and CPU, so expect it to be slow."

@@ -409,7 +409,7 @@ stays loaded:
 
 | When | What it says |
 |---|---|
-| The model was loaded | `◆ Loaded qwen3.6-35b in 15s: 22.3 GB, 45% on the GPU and the rest in system RAM.`, and a warning when less of it is on the GPU than usual, because another program or model is using GPU memory |
+| The model was loaded | `◆ Loaded qwen3.6-35b in 15s: ~23 GB, 42% on the GPU and the rest in system RAM.`, and a warning when less of it is on the GPU than usual, because another program or model is using GPU memory |
 | A dense model doesn't fit on the GPU (at startup and on `/model`) | `⚠ qwen3.8-27b is a dense model: all 27B parameters work on every token. It's capable, but slow here. Only about 61% of it fits in the 12 GB of GPU memory…`, with what to do instead |
 | The model that looks at images needs the memory | `Loading the vision model … to look at bug.png; qwen3.6-35b makes room and reloads afterwards`, then `◆ qwen3.6-35b was unloaded to make room…`, and the next step says `Reloading qwen3.6-35b into memory (it made room for the vision model …)` |
 | A tool needs the GPU to itself (an MCP server with `free_gpu`) | `◆ Unloaded qwen3.6-35b so the server can use the GPU; it reloads afterwards.` |
@@ -420,6 +420,12 @@ While the model loads in the background at startup, the status bar says
 `loading the model into memory…`. Mixture-of-Experts models, such as qwen3.6-35b, run well with
 part of them in system RAM. Dense ones slow down a lot, to a few tokens a second, which is why they
 get the warning.
+
+The `~` marks lcode's estimate of the model's memory, the same one `lcode setup` and `lcode doctor`
+show. Ollama leaves out what stays mapped from the model's file in system RAM: `ollama ps` shows
+qwen3.6-35b at 32K on a 12 GB GPU as 10.5 GB, 98% of it on the GPU, while ~12 GB of its experts are
+in RAM. So when part of a model in `lcode models` is off the GPU, lcode counts all of it. For other
+models it repeats what Ollama says. `lcode doctor` shows the same line for the model in memory.
 
 ## Steer while it works
 
