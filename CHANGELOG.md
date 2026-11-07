@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-11-06
+
 ### Changed
 
 - **A test run that stops before its first test no longer counts as a failure of the model's change.**
@@ -1365,7 +1367,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.61.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.62.0...HEAD
+[0.62.0]: https://github.com/nasser1941/lcode/compare/v0.61.0...v0.62.0
 [0.61.0]: https://github.com/nasser1941/lcode/compare/v0.60.0...v0.61.0
 [0.60.0]: https://github.com/nasser1941/lcode/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/nasser1941/lcode/compare/v0.58.0...v0.59.0
