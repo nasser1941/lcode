@@ -110,15 +110,9 @@ def cmd_doctor(args) -> None:
                 f"here (delete {limits.path()} to try again)",
                 None,
             )
-        loaded = [m for m in ollama.running() if m.get("name") == model or m.get("model") == model]
-        if loaded:
-            m = loaded[0]
-            line(
-                "Loaded",
-                f"{m.get('size_vram', 0) / 1e9:.1f} GB on GPU of {m.get('size', 0) / 1e9:.1f} GB, "
-                f"context {m.get('context_length', '?')}",
-                True,
-            )
+        if where := residency.placement(ollama, model):  # Ollama lists lcode-qwen3.6-35b as lcode-qwen3.6-35b:latest
+            where = residency.with_estimate(where, model, ctx)
+            line("Loaded", where.describe() + (f" · {format_tokens(where.context)} context" if where.context else ""))
     except cli.NotInstalled as e:
         line("Model", str(e), False)
         ok = False
