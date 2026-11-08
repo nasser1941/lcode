@@ -259,7 +259,7 @@ RAM needed ≈ memory − GPU memory + ~10 GB for Ollama's server and prompt cac
 - **The part of the model that doesn't fit on the GPU.** A Mixture-of-Experts model's experts stay
   mapped from the model's file, so they have to stay in Linux's page cache. `ollama ps` leaves them out:
   it shows `qwen3.6-35b` at 32K as 10.5 GB, with ~12 GB more in RAM. lcode counts them: after a load,
-  and in `lcode doctor`, it says `~23 GB, 42% on the GPU and the rest in system RAM`.
+  in `lcode doctor` and in `lcode bench`, it says `~23 GB, 42% on the GPU and the rest in system RAM`.
 - **Ollama's prompt cache**, which grows to 8 GB in a long session, next to 1–2 GB of the server's own.
 
 On a 12 GB GPU, `qwen3.6-35b` needs ~21 GB of RAM at 32K, ~23 GB at 128K and ~26 GB at 256K. On Linux,

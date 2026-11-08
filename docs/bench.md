@@ -25,7 +25,7 @@ its memory use, so those columns stay empty.
 lcode bench · NVIDIA GeForce RTX 4080 Laptop GPU (12 GB VRAM), 31 GB RAM · Ollama 0.40.13
 
 lcode-qwen3.6-35b · 32K context · reasoning on · 8 tasks · 3 attempts each
-  Loaded in 18s · 10.4 GB, 98% on the GPU · reads prompts at 905 tok/s
+  Loaded in 18s · ~23 GB, 42% on the GPU and the rest in system RAM · reads prompts at 905 tok/s
   Attempt 1 of 3
   ✓ fix-bug       Fix a bug so the tests pass         22s  the tests pass
   ✓ find-code     Answer with file:line                8s  next_wait at backoff.py:13
@@ -182,7 +182,7 @@ quick tasks once, as `lcode bench` did before 0.57.
 | **Generation** | Output tokens per second, across all the model's responses |
 | **Prompt reading** | Prompt tokens per second: how fast the model reads files and tool output. Measured per model with fresh 4,000-token prompts (the faster of two readings, since the first one after loading includes warm-up), because during the tasks Ollama serves most of each request from its prompt cache |
 | **Tool-call errors** | Tool calls that failed (wrong arguments, editing without reading first, unmatched edits) or that the model wrote as invalid JSON |
-| **Memory** | The model's memory use and how much of it is on the GPU, from Ollama |
+| **Memory** | The model's memory and how much of it is on the GPU, counted as in the [line after a load](usage.md#whats-happening-under-the-hood). Ollama leaves out what stays mapped from the model's file in system RAM, so for a model in `lcode models` that's partly off the GPU, it's lcode's estimate of the whole model (`~23 GB`). Otherwise it's what Ollama says |
 
 Results depend on the context window, so `lcode bench` uses **32K** by default on every machine,
 which makes results comparable. When comparing models, each one is unloaded before the next starts
@@ -217,7 +217,7 @@ RTX 4080 Laptop GPU (12 GB) with 31 GB of RAM, Ollama 0.40.13, 32K context, reas
 | Generation | 64.0 tok/s |
 | Prompt reading | 851 tok/s |
 | Tool-call errors | 4 |
-| Memory | 10.5 GB, 98% on GPU |
+| Memory | ~23 GB, 42% on GPU |
 
 What it missed:
 - one `spec-fix` attempt fixed the reported case but not all the docstring's rules;
@@ -225,6 +225,9 @@ What it missed:
 - one `repo-bug` attempt went round in circles until lcode stopped it;
 - every `runtime-bug` attempt settled for a band-aid: the window still grew, or still couldn't be
   made smaller.
+
+The table shows memory as lcode counts it now. lcode 0.58.0 printed Ollama's count,
+`10.5 GB, 98% on GPU`, which leaves out the ~12 GB of experts in system RAM.
 
 Two `wide-feature` attempts were first counted as failed. Their `budget list` printed `No budgets
 set.` without budgets, and one listed the budgeted categories first. The task asks for neither
@@ -302,6 +305,8 @@ existing fields keep their meaning until `schema` changes.
       "prompt_tps": 904.6,
       "memory_gb": 10.4,
       "gpu_percent": 98,
+      "estimated_memory_gib": 22.7,
+      "estimated_gpu_percent": 42,
       "attempts": 3,
       "passed": 24,
       "total": 24,
@@ -328,7 +333,8 @@ existing fields keep their meaning until `schema` changes.
 | `ollama`, `server` | The Ollama version, or `null` with [another model server](servers.md); `server` names the server either way |
 | `runs[].model` | The name you gave (catalog key or Ollama tag); `ollama_model` is the model that ran |
 | `runs[].context`, `num_batch`, `think` | The settings used. lcode lowers the batch size or context if the GPU runs out of memory, and reports what it ended up using |
-| `runs[].memory_gb`, `gpu_percent` | From Ollama's `/api/ps`; `null` if unavailable |
+| `runs[].memory_gb`, `gpu_percent` | The model's memory in GB and the share of it on the GPU, as Ollama's `/api/ps` counts them; `null` if unavailable. Ollama 0.40 leaves out what stays mapped from the model's file in system RAM: `qwen3.6-35b` at 32K on a 12 GB GPU shows as 10.4 GB, 98% of it on the GPU |
+| `runs[].estimated_memory_gib`, `estimated_gpu_percent` | When Ollama's count leaves out part of a model in `lcode models`: lcode's estimate of the whole model in GiB, and the share of it on the GPU, as the summary shows them (`~23 GB, 42% on GPU`). `null` when Ollama counts the whole model (all of it on the GPU, or a model outside the catalog) and in older results |
 | `runs[].generation_tps` | Output tokens per second across the tasks; `null` if Ollama reported no timings |
 | `runs[].prompt_tps` | Prompt tokens per second for a fresh 4,000-token prompt (the faster of two readings); `null` if it couldn't be measured |
 | `runs[].usage` | Totals over the tasks as Ollama reports them. `prompt_tokens` includes tokens served from the prompt cache |
