@@ -6,6 +6,23 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The line after a load counts the part of the model in system RAM.** With Ollama 0.40, `qwen3.6-35b`
+  at 32K on a 12 GB GPU showed as `10.5 GB, 98% on the GPU and the rest in system RAM`, because Ollama
+  leaves out the ~12 GB of experts that stay mapped from the model's file. For the models in the catalog,
+  lcode now counts the whole model at its estimate, the one `lcode setup` and `lcode doctor` show:
+  `~23 GB, 42% on the GPU and the rest in system RAM`. With Ollama's numbers, the warning that another
+  program is using GPU memory couldn't fire. Now it does, and it says how much of the model fits on the GPU.
+- **`lcode doctor` shows the loaded model.** It looked for `lcode-qwen3.6-35b` while Ollama lists it as
+  `lcode-qwen3.6-35b:latest`, so the `Loaded` line never appeared for the models `lcode setup` creates.
+  It now says how the model fits, in the same words as the line after a load.
+- **`lcode bench` counts the part of the model in system RAM, too.** For `qwen3.6-35b` at 32K on a
+  12 GB GPU, it said `10.4 GB, 98% on the GPU` after loading, and the same in its summary. It now says
+  `~23 GB, 42% on the GPU and the rest in system RAM`, as the line after a load does. `--json` results
+  keep Ollama's count in `memory_gb` and `gpu_percent`, so they still compare with older results, and
+  add lcode's estimate in `estimated_memory_gib` and `estimated_gpu_percent`.
+
 ## [0.62.0] - 2026-11-06
 
 ### Changed

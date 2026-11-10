@@ -84,8 +84,10 @@ need `lcode mcp login <name>`. More in [MCP servers: Troubleshooting](mcp.md#tro
   starts, and `keep_alive` keeps it loaded between requests.
 - Reading many large files takes a while the first time (~280 tokens/s on a 12 GB GPU, ~500 with
   `lcode config set num_batch 1024` if it fits); follow-up turns reuse the cache.
-- `ollama ps` shows how much of the model is on the GPU. Dense models are much slower when split;
-  prefer the MoE models in `lcode models` on smaller GPUs.
+- `lcode doctor` shows how much of the loaded model is on the GPU, for example
+  `Loaded ~23 GB, 42% on the GPU and the rest in system RAM · 32K context`. `ollama ps` leaves out the
+  part of a Mixture-of-Experts model that's in system RAM, so it can say 98%. Dense models are much
+  slower when split; prefer the MoE models in `lcode models` on smaller GPUs.
 - `--no-think` skips reasoning for simple requests.
 
 ### It starts fast, then gets about three times slower

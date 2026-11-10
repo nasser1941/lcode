@@ -1,3 +1,4 @@
+import dataclasses
 import io
 import json
 import subprocess
@@ -261,6 +262,64 @@ def test_report_and_markdown(tmp_path):
     assert "| | `qwen3.6-35b` | `qwen3.5-9b` |" in md
     assert "| **Passed** | **1/2** | **—** |" in md
     assert "| fix-bug: Fix a bug so the tests pass | ✓ " in md
+
+
+# What Ollama 0.40.13 lists for lcode-qwen3.6-35b at 32K on a 12 GB laptop: the ~12 GB of experts that stay mapped
+# from the model's file in RAM aren't in its size, so 98% of it seems to be on the GPU.
+OLLAMA_0_40 = {
+    "name": "lcode-qwen3.6-35b:latest",
+    "model": "lcode-qwen3.6-35b:latest",
+    "size": 10_490_000_000,
+    "size_vram": 10_290_000_000,
+    "context_length": 32768,
+}
+MEMORY = ("memory_gb", "gpu_percent", "estimated_memory_gib", "estimated_gpu_percent")
+
+
+def bench_loaded(model: str, entry: dict) -> tuple[bench.ModelRun, str]:
+    """`model` benched without tasks while Ollama lists `entry` as loaded: the run, and what it printed."""
+    ollama = FakeOllama([probe(), probe()])
+    ollama.loaded = [entry]
+    console = quiet()
+    run = bench.run_model(ollama, model, dataclasses.replace(settings(), model=model), [], console)
+    return run, console.file.getvalue()
+
+
+def saved_memory(run: bench.ModelRun) -> list:
+    return [bench.report([run], LAPTOP, "0.40.13")["runs"][0][key] for key in MEMORY]
+
+
+def test_memory_counts_the_part_of_the_model_ollama_leaves_out():
+    run, printed = bench_loaded("lcode-qwen3.6-35b", OLLAMA_0_40)  # Ollama lists it with :latest
+    assert "Loaded in 0s · ~23 GB, 42% on the GPU and the rest in system RAM · reads prompts at 2,000 tok/s" in printed
+    assert (run.memory_gb, run.gpu_percent) == (10.5, 98)  # what Ollama says, under the names older results use
+    assert (run.estimated_memory_gib, run.estimated_gpu_percent) == (22.7, 42)  # the ~23 GB lcode setup shows
+    assert saved_memory(run) == [10.5, 98, 22.7, 42]
+    assert "| Memory | ~23 GB, 42% on GPU |" in bench.markdown([run], [], LAPTOP, "0.40.13")
+
+
+def test_memory_is_what_ollama_says_when_it_counts_the_whole_model():
+    run, printed = bench_loaded("qwen3.5-9b", {"name": "qwen3.5-9b", "size": 6.6e9, "size_vram": 6.6e9})
+    assert "Loaded in 0s · 6.6 GB, all on the GPU · reads" in printed
+    assert saved_memory(run) == [6.6, 100, None, None]
+    assert "| Memory | 6.6 GB, 100% on GPU |" in bench.markdown([run], [], LAPTOP, "0.40.13")
+    run, printed = bench_loaded("custom:7b", {**OLLAMA_0_40, "name": "custom:7b", "model": "custom:7b"})  # no estimate
+    assert "Loaded in 0s · 10.5 GB, 98% on the GPU and the rest in system RAM · reads" in printed
+    assert saved_memory(run) == [10.5, 98, None, None] and bench.memory(run) == "10.5 GB, 98% on GPU"
+
+
+def test_memory_is_measured_after_the_tasks_when_the_model_loaded_late(monkeypatch):
+    ollama = FakeOllama()
+    ollama.loaded = []  # the load failed: the model isn't in memory when it's measured after loading
+
+    def measure(*args):  # a later request loads it
+        ollama.loaded = [OLLAMA_0_40]
+
+    monkeypatch.setattr(bench, "prompt_speed", measure)
+    console = quiet()
+    run = bench.run_model(ollama, "qwen3.6-35b", settings(), [], console)
+    assert "GB" not in console.file.getvalue()
+    assert saved_memory(run) == [10.5, 98, 22.7, 42]
 
 
 def test_select_tasks():

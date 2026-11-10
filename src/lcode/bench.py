@@ -27,12 +27,12 @@ from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
-from lcode import __version__, escalate
+from lcode import __version__, escalate, residency
 from lcode.agent import Agent, Settings
 from lcode.bench_checks import Check, Task
 from lcode.bench_quick import TASKS
 from lcode.config import format_tokens
-from lcode.hardware import Hardware
+from lcode.hardware import GIB, Hardware
 from lcode.ollama import Ollama, OllamaError
 
 SCHEMA_VERSION = 1
@@ -188,8 +188,10 @@ class ModelRun:
     think: bool = True
     load_seconds: float = 0.0
     prompt_tps: float | None = None  # measured with a fresh prompt; see prompt_speed()
-    memory_gb: float | None = None
-    gpu_percent: int | None = None
+    memory_gb: float | None = None  # as Ollama's /api/ps counts it, which can leave part of the model out
+    gpu_percent: int | None = None  # of memory_gb, on the GPU
+    estimated_memory_gib: float | None = None  # all of the model by the catalog's estimate, when Ollama leaves part out
+    estimated_gpu_percent: int | None = None  # of estimated_memory_gib, on the GPU
     usage: dict = field(default_factory=dict)
     tasks: list[TaskResult] = field(default_factory=list)
     error: str | None = None  # the model couldn't run at all
@@ -218,6 +220,14 @@ class ModelRun:
     @property
     def tool_errors(self) -> int:
         return sum(t.tool_errors for t in self.tasks)
+
+    def note_memory(self, where: residency.Placement) -> None:
+        """Ollama's count keeps the names it always had, so results compare with older ones. The estimate that the line
+        after the load shows goes next to it."""
+        self.memory_gb, self.gpu_percent = round(where.size / 1e9, 1), round(100 * where.vram / where.size)
+        if where.estimate > where.size:
+            self.estimated_memory_gib = round(where.estimate / GIB, 1)
+            self.estimated_gpu_percent = round(100 * where.gpu_share)
 
     def to_json(self) -> dict:
         data = asdict(self)
@@ -410,13 +420,11 @@ def _read_prompt(ollama: Ollama, settings: Settings, options: dict) -> float | N
     return round(count / (ns / 1e9), 1) if ns and count >= 1000 else None
 
 
-def memory_use(ollama: Ollama, model: str) -> tuple[float | None, int | None]:
-    for entry in ollama.running():
-        if entry.get("name") in (model, f"{model}:latest") or entry.get("model") in (model, f"{model}:latest"):
-            size, vram = entry.get("size") or 0, entry.get("size_vram") or 0
-            if size:
-                return round(size / 1e9, 1), round(100 * vram / size)
-    return None, None
+def memory_use(ollama: Ollama, model: str, context: int) -> residency.Placement | None:
+    """How the loaded model sits in memory, counted as the line after a load counts it: Ollama 0.40 leaves out the
+    part of a Mixture-of-Experts model that stays mapped from its file in RAM (see residency.with_estimate)."""
+    where = residency.placement(ollama, model)  # Ollama lists lcode-qwen3.6-35b as lcode-qwen3.6-35b:latest
+    return residency.with_estimate(where, model, context) if where and where.size else None
 
 
 def run_model(
@@ -455,14 +463,15 @@ def run_model(
         run.interrupted = True
         return run
     run.load_seconds = round(time.monotonic() - started, 1)
-    run.memory_gb, run.gpu_percent = memory_use(ollama, settings.model)
+    if placed := memory_use(ollama, settings.model, settings.context):
+        run.note_memory(placed)
     try:
         with console.status(Elapsed("  Measuring prompt speed")):
             run.prompt_tps = prompt_speed(ollama, settings, options)
     except KeyboardInterrupt:
         run.interrupted = True
         return run
-    where = f" · {run.memory_gb} GB, {run.gpu_percent}% on the GPU" if run.memory_gb else ""
+    where = f" · {placed.describe()}" if placed else ""
     reads = f" · reads prompts at {run.prompt_tps:,.0f} tok/s" if run.prompt_tps else ""
     if getattr(ollama, "kind", "ollama") == "ollama":
         console.print(f"  [dim]Loaded in {run.load_seconds:.0f}s{where}{reads}[/]")
@@ -503,8 +512,8 @@ def run_model(
                 run.pruned, run.compacted = pruned + shared.pruned, compacted + shared.compacted
         if run.interrupted:
             break
-    if run.memory_gb is None:
-        run.memory_gb, run.gpu_percent = memory_use(ollama, settings.model)
+    if run.memory_gb is None and (placed := memory_use(ollama, settings.model, settings.context)):
+        run.note_memory(placed)
     # lcode lowers the batch size or context if the GPU runs out of memory; report what was used.
     run.context, run.num_batch, run.think = settings.context, settings.num_batch, settings.think
     return run
@@ -519,6 +528,13 @@ def duration(seconds: float) -> str:
 
 def percent(share: float | None) -> str:
     return "–" if share is None else f"{share * 100:.0f}%"
+
+
+def memory(run: ModelRun) -> str:
+    """'~23 GB, 42% on GPU' by lcode's estimate, as the line after the load counts it, or else what Ollama says."""
+    if run.estimated_memory_gib:
+        return f"~{run.estimated_memory_gib:.0f} GB, {run.estimated_gpu_percent}% on GPU"
+    return f"{run.memory_gb} GB, {run.gpu_percent}% on GPU" if run.memory_gb else "?"
 
 
 def summary_rows(runs: list[ModelRun], tasks: list[Task]) -> list[tuple[str, list[str]]]:
@@ -554,10 +570,7 @@ def summary_rows(runs: list[ModelRun], tasks: list[Task]) -> list[tuple[str, lis
         ("Generation", [cell(r, f"{r.generation_tps:.1f} tok/s" if r.generation_tps else "?") for r in runs]),
         ("Prompt reading", [cell(r, f"{r.prompt_tps:,.0f} tok/s" if r.prompt_tps else "?") for r in runs]),
         ("Tool-call errors", [cell(r, str(r.tool_errors)) for r in runs]),
-        (
-            "Memory",
-            [cell(r, f"{r.memory_gb} GB, {r.gpu_percent}% on GPU" if r.memory_gb else "?") for r in runs],
-        ),
+        ("Memory", [cell(r, memory(r)) for r in runs]),
         ("Context", [cell(r, format_tokens(r.context)) for r in runs]),
     ]
     if any(r.session for r in runs):

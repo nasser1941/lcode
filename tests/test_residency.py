@@ -21,6 +21,11 @@ def entry(name, size_gb, gpu_gb, context=0):
     return {"name": name, "size": size_gb * 1e9, "size_vram": gpu_gb * 1e9, "context_length": context}
 
 
+# What Ollama 0.40.13 lists for lcode-qwen3.6-35b at 32K on the laptop: the ~12 GB of experts that stay mapped from
+# the model's file in RAM aren't in its size, so 98% of it seems to be on the GPU.
+OLLAMA_0_40 = {**entry("lcode-qwen3.6-35b:latest", 10.49, 10.29, 32768), "model": "lcode-qwen3.6-35b:latest"}
+
+
 def text(agent):
     return " ".join(output(agent).split())
 
@@ -29,6 +34,24 @@ def test_where_a_model_sits():
     assert Placement("m", 22.3e9, 9.8e9).describe() == "22.3 GB, 44% on the GPU and the rest in system RAM"
     assert Placement("m", 6e9, 6e9).describe() == "6.0 GB, all on the GPU"
     assert Placement("m", 6e9, 0).describe() == "6.0 GB, all in system RAM (on the CPU)"
+
+
+def estimated(model, size_gb, gpu_gb, context=32768, fallback=32768):
+    return residency.with_estimate(Placement(model, size_gb * 1e9, gpu_gb * 1e9, context), model, fallback).describe()
+
+
+def test_the_part_of_a_catalog_model_ollama_leaves_out_is_counted():
+    assert estimated("lcode-qwen3.6-35b", 10.49, 10.29) == "~23 GB, 42% on the GPU and the rest in system RAM"
+    assert f"~{catalog.find('qwen3.6-35b').memory_gib(32768):.0f} GB" == "~23 GB"  # as lcode setup and doctor say
+    assert estimated("qwen3.6-35b", 10.49, 10.29, context=262144) == "~28 GB, 35% on the GPU and the rest in system RAM"
+    assert estimated("qwen3.6-35b", 10.49, 10.29, context=0) == "~23 GB, 42% on the GPU and the rest in system RAM"
+    assert estimated("qwen3.5-4b", 1.2, 0) == "~5 GB, all in system RAM (on the CPU)"  # no GPU: all of it is in RAM
+
+
+def test_what_ollama_counts_stands_when_nothing_is_left_out_or_nothing_is_known():
+    assert estimated("qwen3.5-9b", 8.5, 8.5, context=65536) == "8.5 GB, all on the GPU"  # below the estimate
+    assert estimated("qwen3.6-35b", 26, 10) == "26.0 GB, 38% on the GPU and the rest in system RAM"  # above it
+    assert estimated("custom:7b", 10.49, 10.29) == "10.5 GB, 98% on the GPU and the rest in system RAM"  # no catalog
 
 
 def test_dense_models_that_dont_fit_get_a_warning(make_agent):
@@ -54,29 +77,42 @@ def test_models_outside_the_catalog_are_asked_about(make_agent):
 
 
 def test_a_load_is_reported_once_with_how_it_fits(make_agent):
-    agent = make_agent([reply("hi"), reply("again")], model="qwen3.6-35b", context=32768)
+    agent = make_agent([reply("hi"), reply("again")], context=32768)
     agent.hardware = LAPTOP
     agent.ollama.loaded = []
 
     def chat_stream(payload, on_open=None):
         agent.ollama.payloads.append(payload)
-        agent.ollama.loaded = [entry("qwen3.6-35b:latest", 22.3, 9.8, 32768)]
+        agent.ollama.loaded = [OLLAMA_0_40]
         yield from agent.ollama.scripts.pop(0)
 
     agent.ollama.chat_stream = chat_stream
     agent.run_turn("hello")
-    assert "◆ Loaded qwen3.6-35b: 22.3 GB, 44% on the GPU and the rest in system RAM." in text(agent)
+    assert "◆ Loaded lcode-qwen3.6-35b: ~23 GB, 42% on the GPU and the rest in system RAM." in text(agent)
+    assert "⚠" not in output(agent)  # as much is on the GPU as usual
     agent.console.file.truncate(0)
     agent.run_turn("and again")
     assert "◆" not in output(agent) and "⚠" not in output(agent)  # in memory: nothing to say
 
 
-def test_less_on_the_gpu_than_usual_is_explained(make_agent):
-    report = residency.load_report("qwen3.6-35b", 14, Placement("m", 22.3e9, 2e9), 32768, LAPTOP, dense=False)
-    assert report.startswith("Loaded qwen3.6-35b in 14s: 22.3 GB, 9% on the GPU")
-    assert "another program or model is using GPU memory" in report
-    dense = residency.load_report("qwen3.8-27b", 40, Placement("m", 18e9, 11e9), 32768, LAPTOP, dense=True)
-    assert dense.endswith("It's a dense model split between GPU and CPU, so expect it to be slow.")
+def report(model, size_gb, gpu_gb, context=32768, dense=False):
+    placement = Placement("m", size_gb * 1e9, gpu_gb * 1e9, context)
+    return residency.load_report(model, 14, placement, context, LAPTOP, dense=dense)
+
+
+def test_less_on_the_gpu_than_usual_is_explained():
+    # Another program holds GPU memory: Ollama counts 4.2 GB, 95% of it on the GPU, and leaves out the rest in RAM.
+    assert report("qwen3.6-35b", 4.2, 4.0) == (
+        "Loaded qwen3.6-35b in 14s: ~23 GB, 16% on the GPU and the rest in system RAM. Less of it is on the GPU than "
+        "usual (up to 53% fits): another program or model is using GPU memory, so it runs slower until that's closed."
+    )
+    assert report("qwen3.6-35b", 10.49, 10.29) == (
+        "Loaded qwen3.6-35b in 14s: ~23 GB, 42% on the GPU and the rest in system RAM."  # the usual 9-10 GB
+    )
+    assert "(all of it fits)" in report("qwen3.5-9b", 7.7, 7.5, context=131072, dense=True)
+    split = "It's a dense model split between GPU and CPU, so expect it to be slow."
+    assert report("qwen3.8-27b", 18, 11, dense=True).endswith(split)
+    assert report("qwen3.8-27b", 11.2, 11, dense=True).endswith(split)  # with the part in RAM left out, too
 
 
 def test_the_status_line_says_what_comes_before_the_first_token(make_agent):
@@ -388,6 +424,18 @@ def test_doctor_says_nothing_about_ram_it_cant_tell(cli_here, machine):
     machine(available=None)
     assert run_doctor() == 0
     assert "RAM     " not in cli_here()
+
+
+def test_doctor_shows_how_the_loaded_model_fits(cli_here, machine, monkeypatch):
+    machine(available=25.0, ollama_private=0.0)
+    ollama = LocalOllama()
+    ollama.loaded = [OLLAMA_0_40]  # as lcode-qwen3.6-35b:latest, while the model resolves to lcode-qwen3.6-35b
+    monkeypatch.setattr(cli, "Ollama", lambda host: ollama)
+    assert run_doctor() == 0
+    assert "✓ Loaded     ~23 GB, 42% on the GPU and the rest in system RAM · 32K context\n" in cli_here()
+    ollama.loaded = [entry("qwen3.5-9b", 6.6, 6.6, 131072)]  # another model
+    assert run_doctor() == 0
+    assert cli_here().count("Loaded") == 1
 
 
 def test_setup_warns_about_ram_on_its_recommendation(cli_here, machine, monkeypatch):
