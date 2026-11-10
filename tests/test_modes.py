@@ -160,3 +160,6 @@ def test_a_request_from_the_command_line_without_comfyui_says_how_to_get_it(tmp_
         assert done.value.code == 1
         result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
         assert result["status"] == "error" and "no install found" in result["error"]
+        with pytest.raises(SystemExit) as done:  # the same exit code without --output
+            cli.main(["--mode", mode, "-p", "a red fox running", "--no-mcp"])
+        assert done.value.code == 1 and "no install found" in capsys.readouterr().out

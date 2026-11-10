@@ -8,6 +8,12 @@ All notable changes to lcode are documented here. The format follows
 
 ### Fixed
 
+- **`lcode -p` exits with `1` when the request fails, also without `--output`.** It showed the error (a
+  model error, Ollama stopping in the middle of a reply, running out of memory) and exited with `0`, so in
+  `lcode -p "…" && next-step` the next step ran after a failed request. It now exits with the codes
+  `--output json` uses: `1` for an error, `3` stopped at `--max-steps`, `4` stopped because the model kept
+  repeating itself, `130` interrupted. What it prints is the same, and the interactive session still carries
+  on after an error.
 - **The line after a load counts the part of the model in system RAM.** With Ollama 0.40, `qwen3.6-35b`
   at 32K on a 12 GB GPU showed as `10.5 GB, 98% on the GPU and the rest in system RAM`, because Ollama
   leaves out the ~12 GB of experts that stay mapped from the model's file. For the models in the catalog,

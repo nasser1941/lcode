@@ -25,6 +25,8 @@ lcode -p "Explain the retry logic" --output stream-json --max-steps 20
 lcode's usual output goes to stderr, so stdout holds only the JSON. The exit code says how it
 went: `0` success, `1` an error, `3` stopped at `--max-steps`, `4` stopped because the model
 [kept repeating itself](how-it-works.md#when-the-model-repeats-itself), `130` interrupted.
+Without `--output`, `lcode -p` exits with the same codes, so in `lcode -p "…" && next-step`
+the next step runs only after a request that succeeded.
 
 ### The result
 

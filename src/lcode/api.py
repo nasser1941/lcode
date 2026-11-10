@@ -345,6 +345,12 @@ def close_agent(agent: Agent) -> None:
 # ----------------------------------------------------------------------------- running
 
 
+def request_status(agent: Agent) -> str:
+    """How a request that ran to its end went: success, or max_steps, loop or blocked when lcode stopped it. `lcode -p`
+    exits with its code (EXIT_CODES), with or without --output."""
+    return agent.turn_status if agent.turn_status in ("max_steps", "loop", "blocked") else "success"
+
+
 def run_request(agent: Agent, prompt: str) -> Result:
     """Run one request to its end and say how it went; errors end up in the result, not raised."""
     calls: dict[str, dict] = {}
@@ -369,7 +375,7 @@ def run_request(agent: Agent, prompt: str) -> Result:
 
     try:
         agent.run_turn(prompt)
-        status = agent.turn_status if agent.turn_status in ("max_steps", "loop", "blocked") else "success"
+        status = request_status(agent)
     except KeyboardInterrupt:
         status, error = "interrupted", "interrupted before the request was done"
     except ModelError as e:

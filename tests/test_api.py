@@ -136,6 +136,51 @@ def test_output_stream_json_refuses_what_needs_asking(server, repo, capsys):
     assert lines[-1]["status"] == "max_steps" and not (repo / "y").exists()
 
 
+def raising(error: BaseException):
+    """A model reply that stops with this error before its first words."""
+    raise error
+    yield
+
+
+def exit_code(argv: list[str]) -> object:
+    try:
+        cli.main(argv)
+    except SystemExit as stopped:
+        return stopped.code
+    return 0
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "options"),
+    [
+        ("success", 0, []),
+        ("error", 1, []),
+        ("max_steps", 3, ["--max-steps", "1"]),
+        ("loop", 4, []),
+        ("interrupted", 130, []),
+    ],
+)
+def test_lcode_p_exits_as_the_json_result_says(server, repo, capsys, status, code, options):
+    """With or without --output, so `lcode -p "…" && next-step` doesn't go on after a request that failed."""
+    replies = {
+        "success": lambda: [reply("It says Demo.")],
+        "error": lambda: [raising(OllamaError("model 'x' not found"))],
+        "max_steps": lambda: [reply(tool_calls=[call("read_file", path="README.md")])],
+        "loop": lambda: [reply(tool_calls=[call("read_file", path="README.md")]) for _ in range(6)],
+        "interrupted": lambda: [raising(KeyboardInterrupt())],
+    }[status]
+    argv = ["-p", "What does the README say?", "-r", str(repo), "--no-mcp", *options]
+    server.scripts = replies()
+    assert exit_code(argv) == code
+    shown = capsys.readouterr()
+    assert not shown.out.lstrip().startswith("{") and "Cancelled." not in shown.out  # lcode's usual output
+    if status == "error":
+        assert "model 'x' not found" in shown.out
+    server.scripts = replies()
+    assert exit_code([*argv, "--output", "json"]) == code
+    assert json.loads(capsys.readouterr().out)["status"] == status
+
+
 def test_output_needs_a_request(server, repo, capsys):
     with pytest.raises(SystemExit):
         cli.main(["--output", "json", "-r", str(repo)])
