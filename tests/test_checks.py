@@ -138,6 +138,25 @@ def test_a_failing_run_piped_into_tail_doesnt_count_as_passed(make_agent):
     assert len(notes) == 1 and "FAIL: test_average" in notes[0]
 
 
+def test_a_passing_run_of_one_test_file_doesnt_count_as_the_checks(make_agent):
+    # Passes when it's given a test file, fails on its own: the rest of the tests fail.
+    check = "python3 -c \"import sys; print('FAIL: test_average' * (not sys.argv[1:])); sys.exit(not sys.argv[1:])\""
+    agent = make_agent(
+        [
+            reply(tool_calls=[call("write_file", path="calc.py", content="x = 1\n")]),
+            reply(tool_calls=[call("bash", command=f"{check} tests/test_calc.py -x")]),
+            reply("Done, the tests pass."),
+            reply("test_average fails, and it isn't about my change."),
+        ],
+        checks=check,
+    )
+    agent.run_turn("fix calc")
+    assert "◆ Checking the work" in text(agent)
+    assert agent.check_results == [{"command": check, "exit_code": 1, "by": "lcode"}]
+    notes = [m["content"] for m in agent.messages if m["role"] == "user" and m["content"].startswith("[lcode]")]
+    assert len(notes) == 1 and "FAIL: test_average" in notes[0]
+
+
 @pytest.mark.parametrize(
     ("command", "shown", "passed"),
     [
@@ -167,6 +186,49 @@ def test_a_run_passed_when_its_exit_code_or_output_says_so(command, shown, passe
     check = checks.Check("python -m pytest -q", "tests/")
     assert checks.covers(check, command)
     assert checks.run_passed(check, command, f"{shown}\n[exit code: 0]") is passed
+
+
+@pytest.mark.parametrize(
+    ("check", "command", "whole"),
+    [
+        # Options alone, redirections and what comes after a shell operator leave the run whole.
+        ("python -m pytest -q", "python -m pytest -q -x --tb=short 2>&1 | tail -40", True),
+        ("python -m pytest -q", "python -m pytest -q --tb short -p no:cacheprovider -n auto -W error", True),
+        ("python -m pytest -q", "python -m pytest -qx > log.txt 2>&1", True),
+        ("python -m pytest -q", "python -m pytest -q  # all of them\necho tests/test_a.py", True),
+        ("python -m pytest -q", "python -m pytest -q tests/test_a.py && python -m pytest -q", True),
+        # A path, a test, or an option that picks tests: part of the checks.
+        ("python -m pytest -q", "python -m pytest -q xarray/tests/test_dataset.py -x --tb=short 2>&1 | tail", False),
+        ("python -m pytest -q", "python -m pytest -q tests/test_a.py::test_b", False),
+        ("python -m pytest -q", "python -m pytest -q 2>&1 tests/test_a.py", False),
+        ("python -m pytest -q", "python -m pytest -q -k chunk -x", False),
+        ("python -m pytest -q", 'python -m pytest -q -m "not slow"', False),
+        ("python -m pytest -q", "python -m pytest -q --ignore=tests/test_catalogue.py 2>&1", False),
+        ("python -m pytest -q", "python -m pytest -q --lf", False),
+        ("python -m pytest -q", "python -m pytest -q --collect-only", False),
+        ("python -m pytest -q", 'echo "then run python -m pytest -q"', False),
+        ("python -m unittest discover -s tests", "python -m unittest discover -s tests -t . -v 2>&1", True),
+        ("python -m unittest discover -s tests", "python -m unittest discover -s tests/decorators -t .", False),
+        ("python -m unittest", "python -m unittest discover -v", True),
+        ("python -m unittest", "python -m unittest test_outputs -v 2>&1", False),
+        ("python -m unittest", "python -m unittest discover -s tests", False),
+        ("npm test", "npm test -- --coverage --reporter dot", True),
+        ("npm test", "npm test -- --grep adds", False),
+        ("npm test", "npm test -- --grep=adds", False),
+        ("npm test", "npm test -- tests/calc.test.js", False),
+        ("npm test", "npm test:unit", False),
+        ("cargo test", "cargo test -- --nocapture --test-threads 1", True),
+        ("cargo test", "cargo test parser", False),
+        ("cargo test", "cargo test --lib", False),
+        ("go test ./...", "go test ./... -count=1 -v", True),
+        ("go test ./...", "go test ./... -run=TestAdd", False),
+        ("make test", "make test -j 4", True),
+        ("make test", "make test-fast", False),
+        (" ", "python -m pytest -q", False),  # `checks = " "` isn't anything a command runs
+    ],
+)
+def test_a_run_of_part_of_the_checks_isnt_the_checks(check, command, whole):
+    assert checks.covers(checks.Check(check, "tests/"), command) is whole
 
 
 def test_a_run_that_exits_with_an_error_never_passed():

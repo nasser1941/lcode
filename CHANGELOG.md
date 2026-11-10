@@ -33,6 +33,14 @@ All notable changes to lcode are documented here. The format follows
   `~23 GB, 42% on the GPU and the rest in system RAM`, as the line after a load does. `--json` results
   keep Ollama's count in `memory_gb` and `gpu_percent`, so they still compare with older results, and
   add lcode's estimate in `estimated_memory_gib` and `estimated_gpu_percent`.
+- **A passing run of one test file counted as the whole checks.** When the model ran the project's
+  check command with a path or a test name after it (`.venv/bin/python -m pytest -q tests/test_calc.py`),
+  lcode took the checks as passed and didn't run them, and `/status` and `lcode -p --output json` said
+  they passed, even on a project whose full run stops before its first test. Now a run like that, or
+  one with an option that picks tests (`-k`, `--ignore`, `npm test -- --grep`), doesn't count, and lcode
+  runs the checks itself. Options alone, like `-x` or `--tb=short`, still count. In 426 attempts on six
+  dev-slice nights this changes 2: one now runs xarray's suite (4.4 minutes, failing on tests that failed
+  before), the other a run that stops before its first test in under a second.
 - **A model server that stops in the middle of a reply no longer ends lcode in a traceback.** When the
   connection broke while a reply streamed, as it did when `lcode update` replaced Ollama's container during
   a reply, `lcode` and `lcode -p` stopped with a Python traceback, which also ended an interactive

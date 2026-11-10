@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -208,8 +209,118 @@ def exit_code(result: str) -> int | None:
 
 
 def covers(check: Check, command: str) -> bool:
-    """Whether a command the model ran is this check (`cd x && uv run pytest -q 2>&1 | tail` counts)."""
-    return " ".join(check.command.split()) in " ".join(command.split())
+    """Whether a command the model ran is this check, all of it (`cd x && uv run pytest -q 2>&1 | tail` counts).
+
+    A run that adds a path or a test name after the check's words, or an option that picks tests (`-k`, `--ignore`,
+    `npm test -- --grep`), ran only part of it, and says nothing about the rest. Other options (`-x`, `--tb=short`)
+    leave it whole.
+    """
+    return whole_run(check, command) is not None
+
+
+def whole_run(check: Check, command: str) -> re.Match[str] | None:
+    """The first place in a command that runs this check, all of it."""
+    if not check.command.split():
+        return None  # `checks = " "`: there's no command to find
+    found = re.finditer(r"\s+".join(map(re.escape, check.command.split())), command)
+    return next((run for run in found if not narrows(check, command[run.end() :])), None)
+
+
+# Per test runner: options that pick which tests run, or run none, so a run with one isn't the whole check; and
+# options whose value can be the next word, which then isn't a path or a test name (`--tb short`).
+PICKS_TESTS = {
+    "pytest": "-k -m --ignore --ignore-glob --deselect --lf --last-failed --sw --stepwise --sw-skip --stepwise-skip "
+    "--co --collect-only --setup-only --setup-plan --fixtures --fixtures-per-test --markers --cache-show",
+    "unittest": "-k -s -p --start-directory --pattern",
+    "js": "-t -g -f -o -w --workspace --filter --grep --fgrep --spec --ignore --exclude --testNamePattern "
+    "--testPathPattern --testPathPatterns --testPathIgnorePatterns --onlyChanged --onlyFailures --changedSince "
+    "--findRelatedTests --listTests --selectProjects --shard --project --changed --related --dir --dry-run "
+    "--test-name-pattern --test-skip-pattern --test-only",
+    "cargo": "-p --package --exclude --lib --bin --bins --test --tests --example --examples --bench --benches "
+    "--all-targets --doc --no-run --exact --skip --ignored --list",
+    "go": "-run -skip -short -list -c -n",
+    "make": "-n --dry-run --just-print --recon -q --question -t --touch -C --directory -f --file",
+}
+TAKES_VALUE = {
+    "pytest": "-p -n -c -o -W -r --tb --maxfail --durations --color --capture --rootdir --basetemp --confcutdir "
+    "--import-mode --timeout --log-level --log-cli-level --cov --cov-report --junitxml --dist",
+    "unittest": "-t --top-level-directory --durations",
+    "js": "--reporter --timeout --testTimeout --maxWorkers --config --env --pool",
+    "cargo": "-j --jobs -F --features --target --profile --manifest-path --color --test-threads --format",
+    "go": "-count -timeout -p -parallel -cpu -tags -coverprofile -covermode -o",
+    "make": "-j --jobs",
+}
+HELP = ("-h", "--help", "--version")  # any runner's: help instead of tests
+CHECK_RUNNERS = (
+    ("pytest", re.compile(r"\b(?:pytest|py\.test)\b")),
+    ("unittest", re.compile(r"\bunittest\b")),
+    ("js", re.compile(r"\b(?:npm|pnpm|yarn|bun)\b")),
+    ("cargo", re.compile(r"\bcargo\b")),
+    ("go", re.compile(r"\bgo\b")),
+    ("make", re.compile(r"\bmake\b")),
+)
+OPERATOR = frozenset("();|&<>\n")  # characters of the shell's operators and redirections
+
+
+def narrows(check: Check, rest: str) -> bool:
+    """Whether what follows the check's words in a command makes it run only part of the check: a path or a test
+    name before the next shell operator (redirections don't count), or an option that picks tests."""
+    last = check.command.split()[-1]
+    goes_on = re.match(r"[^\s\\();|&<>]", rest) is not None  # the check's last word goes on
+    if goes_on and not last.startswith("-"):
+        return True  # into another word: `-s tests/unit`, `npm test:unit`, `make test-fast`
+    words = run_words(rest)
+    if words is None:
+        return True  # in quotes: `bash -c "…"` can't be told from `echo "…"`
+    if goes_on and words:
+        words[0] = last + words[0]  # options run together: `-q` and `x` make `-qx`
+    runner = runner_of(check)
+    picks, takes_value = PICKS_TESTS.get(runner, "").split(), TAKES_VALUE.get(runner, "").split()
+    if runner == "unittest" and last == "unittest" and words[:1] == ["discover"]:
+        words = words[1:]  # plain `python -m unittest` discovers too
+    value = False  # this word is the value of the option before it
+    for word in words:
+        if value:
+            value = False
+            continue
+        if not word.startswith("-") or word == "-":
+            return True  # a path or a test name
+        name = word.split("=", 1)[0]
+        if name in picks or name in HELP:
+            return True
+        value = name in takes_value and "=" not in word
+    return False
+
+
+def runner_of(check: Check) -> str:
+    """The test runner that gets the words after the check's: its last command's (a key of PICKS_TESTS, or "")."""
+    command = re.split(r"&&|\|\||;", check.command)[-1]
+    return next((name for name, uses in CHECK_RUNNERS if uses.search(command)), "")
+
+
+def run_words(rest: str) -> list[str] | None:
+    """The words the shell gives a program from the start of `rest` to its next operator, without redirections
+    (`> log.txt 2>&1`). None when quotes don't close."""
+    rest = re.sub(r"(?<!\S)\d+(?=[<>])", " ", rest.replace("\\\n", " "))  # the 2 of `2>&1` is no word
+    lexer = shlex.shlex(rest, posix=True, punctuation_chars="".join(OPERATOR))
+    lexer.whitespace, lexer.whitespace_split, lexer.commenters = " \t\r", True, ""
+    words: list[str] = []
+    target = False  # this word is where a redirection goes
+    try:
+        for word in lexer:
+            if target:
+                target = False
+            elif word and set(word) <= OPERATOR:
+                if set(word) & set("()") or not set(word) & set("<>"):
+                    break  # `|`, `&&`, `;`, a new line, a subshell…: what follows is another command
+                target = True  # a redirection
+            elif word.startswith("#"):
+                break  # a comment
+            else:
+                words.append(word)
+    except ValueError:
+        return None
+    return words
 
 
 KEEPS_EXIT_CODE = re.compile(r"\d*>&\d+|&>>?|&&")  # redirections and `&&`, after the check
@@ -223,7 +334,7 @@ def run_passed(check: Check, command: str, result: str) -> bool:
     the exit code isn't the check's, only the output can say: a test runner's summary, with nothing failing."""
     if exit_code(result) != 0:
         return False
-    found = re.search(r"\s+".join(map(re.escape, check.command.split())), command)
+    found = whole_run(check, command)
     after = KEEPS_EXIT_CODE.sub(" ", command[found.end() :]).rstrip() if found else ""
     if not HIDES_EXIT_CODE.search(after):
         return True
