@@ -33,6 +33,14 @@ All notable changes to lcode are documented here. The format follows
   `~23 GB, 42% on the GPU and the rest in system RAM`, as the line after a load does. `--json` results
   keep Ollama's count in `memory_gb` and `gpu_percent`, so they still compare with older results, and
   add lcode's estimate in `estimated_memory_gib` and `estimated_gpu_percent`.
+- **A model server that stops in the middle of a reply no longer ends lcode in a traceback.** When the
+  connection broke while a reply streamed, as it did when `lcode update` replaced Ollama's container during
+  a reply, `lcode` and `lcode -p` stopped with a Python traceback, which also ended an interactive
+  session. Now lcode says that Ollama stopped in the middle of a reply and what to do, the session carries
+  on, the trace records the failure, and `lcode -p --output json` reports `status` `error`. LM Studio,
+  llama-server, vLLM and MLX servers get the same. A reply stopped on purpose breaks its connection too,
+  and that stays a stop: a cancel from an editor (ACP) came back as an internal error,
+  `ChunkedEncodingError`, and a subagent stopped with Ctrl+C was reported as failed.
 
 ## [0.62.0] - 2026-11-06
 
