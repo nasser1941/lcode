@@ -146,7 +146,9 @@ def model(repo, tmp_path_factory, monkeypatch):
 
 def test_lcode_p_says_ollama_stopped_halfway(model, host, repo, capsys):
     model.scripts = [host]
-    cli.main(["-p", "what's in math.py?", "-r", str(repo), "--no-mcp"])
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["-p", "what's in math.py?", "-r", str(repo), "--no-mcp"])
+    assert stopped.value.code == 1
     assert f"{STOPPED}: the connection to {host} broke" in " ".join(capsys.readouterr().out.split())
     model.scripts = [host]
     with pytest.raises(SystemExit) as stopped:
