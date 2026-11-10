@@ -85,6 +85,7 @@ SETTINGS: dict[str, tuple[object, type, str]] = {
     "escalate_url": (None, str, "the stronger model's server, if not its provider's (another Ollama, any OpenAI API)"),
     "escalate_price": (None, str, "its price in dollars per million tokens in/out, e.g. 3/15, for the cost shown"),
     "repeat_limit": (3, int, "identical tool calls with identical results before lcode steps in (0: never)"),
+    "think_budget": (7000, int, "tokens a reply may think before it acts; past that, lcode asks it to act (0: never)"),
     "secret_check": (True, bool, "before git commit and git push, look for passwords, keys and tokens they'd add"),
     "compact_at": (65536, int, "summarize at this many tokens even when the window is larger (0: only at 85%)"),
     "max_parallel_agents": (1, int, "subagents that may run at the same time (more needs OLLAMA_NUM_PARALLEL)"),

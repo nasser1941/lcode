@@ -94,6 +94,17 @@ four in one request, lcode stops it (status `loop`), offering the
 [stronger model](usage.md#a-stronger-model-when-stuck) first when one is set. An answer the context
 cut off midway is kept, with a warning to `/compact` or use a larger `/context`.
 
+A reply can also think for a long time without repeating itself: weighing one option after another,
+never trying any. When a reply has thought for 7,000 tokens (`think_budget`) and hasn't yet written
+anything or called a tool, lcode stops it the same way. The model gets back the last part of its
+thinking, so it can act on where its reasoning got to, and the next reply runs with thinking off.
+Once the model acts, thinking is back on. On the dev slice of the
+[public benchmarks](public-benchmarks.md), about 1 reply in 100 thought that long. They came from 42
+of the 110 attempts that failed and 2 of the 102 that passed. Such a reply doesn't count towards the
+four per request, so a long task with several hard steps carries on, but a reply that goes nowhere
+right after one stops the request as before. Change the budget with
+`lcode config set think_budget 12000`, or turn it off with `0`.
+
 ## Subagents
 
 The `agent` tool starts a [subagent](agents.md): another agent loop with its own conversation, the

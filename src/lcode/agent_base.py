@@ -86,6 +86,7 @@ class Settings:
     secret_check: bool = True  # scan what git commit and git push would add (lcode.secretscan)
     compact_at: int = 0  # tokens: make room at this size even when the window is larger (0: only at 85%)
     repeat_limit: int = 3  # identical calls with identical results before the model is told (lcode.repeats)
+    think_budget: int = 7000  # tokens a reply may think before it writes or calls a tool (0: no limit)
     checks: str = "off"  # the project's checks after a change (lcode.checks): auto, off or a command
     review: str = "off"  # check a change against the request before the answer (lcode.review): auto or off
     escalate_model: str | None = None  # a stronger model to ask when stuck (lcode.escalate): provider/model
@@ -191,7 +192,7 @@ class AgentBase:
         self.turn_status = ""  # how the last request ended: success, max_steps, loop, blocked
         self.repeats = Repeats(settings.repeat_limit)  # notices when the model repeats itself
         self.sites = Sites(NOTE_AT if settings.repeat_limit else 0)  # notices a site this machine can't reach
-        self.reply_trouble = ""  # what went wrong with the last reply: "circles", "cut_off" or ""
+        self.reply_trouble = ""  # what went wrong with the last reply: "circles", "overthought", "cut_off" or ""
         self.response = None  # the streaming response, so another thread can abort it
         self.ctx_used = 0
         self._repo: tuple[Path, repoid.Repo | None] | None = None  # the workspace's repository, for saved sessions
