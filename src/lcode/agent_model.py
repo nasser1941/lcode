@@ -41,6 +41,8 @@ GPU_MEMORY_ERRORS = (
 
 
 SAFE_NUM_BATCH = 512  # Ollama's default prompt batch
+# Characters a thinking token takes: qwen3.6's long thinking on the dev slice, as Ollama counted it (median 3.3).
+THINK_CHARS_PER_TOKEN = 3.3
 
 
 class Progress:
@@ -229,7 +231,11 @@ class ModelCalls(AgentBase):
         """Stream one model response, rendering thinking/content live. Returns the assistant message.
 
         `think=False` asks for this reply without thinking, even when thinking is on: after a reply that went
-        round in circles, so the model acts instead of starting the same deliberation over."""
+        round in circles, so the model acts instead of starting the same deliberation over.
+
+        A reply that thinks past `think_budget` tokens before it writes anything or calls a tool is stopped
+        (`reply_trouble` "overthought"): on the dev slice, 2 of 102 attempts that passed had one, against 42 of 110
+        that failed (#241)."""
         content, thinking, tool_calls, final = "", "", [], {}
         md = MarkdownStreamer(self.console)
         progress = Progress(steering=self.steering)
@@ -251,6 +257,7 @@ class ModelCalls(AgentBase):
 
         start_spinner()
         circles = Circles()
+        budget = self.settings.think_budget * THINK_CHARS_PER_TOKEN
         self.reply_trouble = ""
         stream = self.chat(self.messages, self.tool_schemas(), self.settings.think and think)
         try:
@@ -273,6 +280,10 @@ class ModelCalls(AgentBase):
                     if self.settings.repeat_limit and circles.feed(msg["thinking"]):
                         self.reply_trouble = "circles"
                         break  # closing the stream below stops the model
+                    acted = content.strip() or (msg.get("content") or "").strip() or tool_calls or msg.get("tool_calls")
+                    if budget and len(thinking) > budget and not acted:
+                        self.reply_trouble = "overthought"
+                        break
                 if msg.get("content"):
                     if printed_thinking:
                         self.console.print("\n")

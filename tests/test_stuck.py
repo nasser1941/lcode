@@ -227,6 +227,70 @@ def test_with_thinking_off_the_second_chance_says_nothing_about_it(make_agent):
     assert "thinking is off" not in agent.messages[-2]["content"] and "with thinking off" not in output(agent)
 
 
+# A reply that weighs one option after another without acting, as polyglot-rust-c did for 45,000 characters (#241).
+PONDERING = [
+    {"message": {"thinking": f"Option {n}: the preprocessor could guard main with directive {n}, but then rustc… "},
+     "done": False}
+    for n in range(400)
+]  # fmt: skip
+
+
+def test_a_reply_that_thinks_past_the_budget_is_stopped_and_asked_to_act(make_agent):
+    closed = []
+    agent = make_agent([None, reply(tool_calls=[call("bash", command="echo compiled")]), reply("It compiles.")])
+    agent.settings.think_budget = 1000  # tokens: about 3,300 characters
+    agent.ollama.scripts[0] = streamed(PONDERING, closed)
+    agent.run_turn("Make main.c.rs compile as both C and Rust")
+    assert closed == [True] and agent.turn_status == "success" and agent.messages[-1]["content"] == "It compiles."
+    assert [p["think"] for p in agent.ollama.payloads] == [True, False, True]  # thinking is back once it acted
+    assert not any(m.get("thinking") for m in agent.messages)  # the long thinking doesn't stay in the context
+    note = next(m["content"] for m in agent.messages if "thought at length" in str(m.get("content")))
+    assert "thinking is off for this reply" in note and "Where your thinking had got to (its last part):" in note
+    tail = note.split("(its last part):\n\n", 1)[1]
+    assert tail.startswith("…Option") and len(tail) <= 1501  # from a sentence start, not mid-word
+    assert "Option 3:" not in tail and "directive" in tail  # the end of the reasoning, not its start
+    text = " ".join(output(agent).split())
+    assert "the reply thought for over 1.0K tokens without acting (think_budget), so lcode stopped it" in text
+    assert "asking for a short answer, with thinking off (the dropped reply is in" in text
+
+
+def test_thinking_within_the_budget_or_alongside_an_answer_is_left_alone(make_agent):
+    long = "".join(f"Step {n}: compare build file {n} with the spec before touching it. " for n in range(70))
+    agent = make_agent([reply("Use the VPN.", thinking=long)])
+    agent.settings.think_budget = 1000
+    agent.run_turn("Why does the build fail?")  # it answers in the chunk that carries the thinking
+    assert agent.turn_status == "success" and agent.messages[-1]["content"] == "Use the VPN."
+    agent = make_agent([None])
+    agent.settings.think_budget = 0  # no limit
+    agent.ollama.scripts[0] = [*PONDERING, *reply("Use the VPN.")]
+    agent.run_turn("Why does the build fail?")
+    assert agent.messages[-1]["content"] == "Use the VPN." and len(agent.ollama.payloads) == 1
+    assert type(agent.settings)("m", 32768).think_budget == 7000  # the default
+
+
+def test_long_thinking_doesnt_count_towards_the_limit_per_request(make_agent):
+    """A long task has several hard steps. Replies stopped at the budget that the model then acts on don't add up
+    to stopping the request, as four replies that go nowhere do."""
+    work = [reply(tool_calls=[call("bash", command=f"echo step {n}")]) for n in range(5)]
+    scripts: list = []
+    for step in work:
+        scripts += [None, step]
+    agent = make_agent([*scripts, reply("All five steps done.")])
+    agent.settings.think_budget = 1000
+    for n in range(5):
+        agent.ollama.scripts[2 * n] = list(PONDERING)
+    agent.run_turn("Do the five steps")
+    assert agent.turn_status == "success" and agent.messages[-1]["content"] == "All five steps done."
+
+
+def test_a_reply_that_goes_nowhere_after_long_thinking_stops_the_request(make_agent):
+    agent = make_agent([list(PONDERING), reply("")])
+    agent.settings.think_budget = 1000
+    agent.run_turn("Make it compile")
+    assert agent.turn_status == "loop"
+    assert "ended without an answer, twice in a row" in " ".join(output(agent).split())
+
+
 def test_an_answer_cut_off_by_the_context_says_so(make_agent):
     cut = [{"message": {"content": "The build fails because"}, "done": False}]
     cut.append({"message": {}, "done": True, "done_reason": "length"})

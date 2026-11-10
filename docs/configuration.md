@@ -59,6 +59,7 @@ lcode config path                      # print the file location
 | `escalate_url` | — | Its server, when it isn't the provider's usual one: another Ollama, or any OpenAI-compatible API |
 | `escalate_price` | — | Its price in dollars per million tokens, input/output (e.g. `3/15`), for the cost shown before each use |
 | `repeat_limit` | `3` | Identical tool calls with identical results before lcode [steps in](how-it-works.md#when-the-model-repeats-itself); `0` turns it off, along with the checks for [unreachable sites](how-it-works.md#when-a-site-cant-be-reached) and [thinking in circles](how-it-works.md#when-a-reply-goes-nowhere) |
+| `think_budget` | `7000` | Tokens a reply may [think](how-it-works.md#when-a-reply-goes-nowhere) before it writes anything or calls a tool. Past that, lcode stops the reply and asks for the next step with thinking off; `0` means no limit |
 | `secret_check` | `true` | Before `git commit` and `git push`, look for passwords, keys and tokens they'd add ([details](usage.md#secrets-in-commits)) |
 | `checkpoints` | `true` | Save a checkpoint before the model changes files, so [`/undo`](usage.md#undo-and-checkpoints) can restore them |
 | `trace` | `true` | Record each request's model calls, tool calls, times and tokens on this machine, for [`lcode trace`](traces.md) (kept 30 days) |

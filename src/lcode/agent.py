@@ -44,27 +44,47 @@ if TYPE_CHECKING:
 
 MAX_STALLS = 2  # replies in a row that go round in circles or say nothing, before lcode stops the request
 MAX_STALLS_PER_REQUEST = 4  # such replies in one request, even with work in between
+THOUGHT_TAIL = 1500  # characters of a stopped reply's thinking that the model gets back, so it needn't start over
 STALLED = {
     "circles": "the reply went round in circles, so lcode stopped it",
+    "overthought": "the reply thought at length without acting, so lcode stopped it",
     "cut_off": "the reply filled the context before it said anything",
     "": "the reply was empty",
 }
 
 
-def stall_note(trouble: str, thinking_off: bool = False) -> str:
-    """What the model is told after a reply that went round in circles or ended without a word."""
+def stall_note(trouble: str, thinking_off: bool = False, thought: str = "") -> str:
+    """What the model is told after a reply that went round in circles, thought too long or ended without a word.
+
+    `thought` is the stopped reply's thinking: for one that thought too long, its end goes back to the model, so
+    the next reply can act on where the reasoning got to instead of starting it over (#241)."""
     first = {
         "circles": "Your last reply went round in circles (the same thoughts over and over), so lcode stopped it.",
+        "overthought": "Your last reply thought at length without writing anything or making a tool call, so lcode "
+        "stopped it.",
         "cut_off": "Your last reply filled the rest of the context before you said anything.",
         "": "Your last reply was empty.",
     }[trouble]
     off = ": thinking is off for this reply" if thinking_off else ""
-    return (
+    note = (
         f"[lcode] {first} Don't deliberate at length now{off}. Either make your next tool call, or, if you're stuck, "
         "tell the user in a few lines what you did, what fails, and what they could do. If you were about to check "
         "something by running it, run it now instead of reasoning about it: for a window, take a screenshot (with "
         "actions for clicks or keys)."
     )
+    if trouble == "overthought" and thought.strip():
+        note += f"\n\nWhere your thinking had got to (its last part):\n\n{thought_tail(thought)}"
+    return note
+
+
+def thought_tail(thought: str) -> str:
+    """The end of a stopped reply's thinking, from a line or sentence start: about THOUGHT_TAIL characters."""
+    if len(thought) <= THOUGHT_TAIL:
+        return thought.strip()
+    tail = thought[-THOUGHT_TAIL:]
+    ends = [tail.find(end) + len(end) for end in ("\n", ". ", "? ", "! ", "… ") if end in tail]
+    starts = [i for i in ends if i < len(tail) // 2] or [tail.find(" ") + 1]  # else at least a whole word
+    return "…" + tail[min(starts) :].strip()
 
 
 EVENT_OUTPUT = 4000  # characters of a tool's output in an event
@@ -343,7 +363,9 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
                 continue
             if not calls and (self.reply_trouble == "circles" or not (reply.get("content") or "").strip()):
                 stalls += 1
-                stalled += 1
+                # A reply that only thought too long counts as one in a row, so one that goes nowhere after it ends
+                # the request, but not towards the limit per request: in a long task, hard steps think long.
+                stalled += self.reply_trouble != "overthought"
                 dropped = self.messages.pop()  # no answer, and circles would only fill the context
                 kept = self.keep_dropped(dropped)
                 if stalls < MAX_STALLS and stalled < MAX_STALLS_PER_REQUEST:
@@ -351,10 +373,14 @@ class Agent(PromptParts, Sessions, Checks, ContextWindow, ModelCalls):
                     # the same deliberation over (all 6 polyglot-rust-c attempts on the dev slice, #241).
                     pause = self.settings.think and self.can_skip_thinking()
                     off = ", with thinking off" if pause else ""
-                    self.console.print(
-                        Text(f"  ⎿ {STALLED[self.reply_trouble]}: asking for a short answer{off}{kept}", style="yellow")
-                    )
-                    note = stall_note(self.reply_trouble, thinking_off=pause)
+                    what = STALLED[self.reply_trouble]
+                    if self.reply_trouble == "overthought":
+                        what = (
+                            f"the reply thought for over {format_tokens(self.settings.think_budget)} tokens without "
+                            "acting (think_budget), so lcode stopped it"
+                        )
+                    self.console.print(Text(f"  ⎿ {what}: asking for a short answer{off}{kept}", style="yellow"))
+                    note = stall_note(self.reply_trouble, thinking_off=pause, thought=dropped.get("thinking") or "")
                     self.messages.append({"role": "user", "content": note})
                     continue
                 times = "twice in a row" if stalls >= MAX_STALLS else f"{stalled} times in this request"

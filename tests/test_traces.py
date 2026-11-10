@@ -13,6 +13,7 @@ import pytest
 
 from conftest import call, output, reply
 from lcode import __version__, cli, config, replay, trace_export, trace_view, traces
+from lcode import agent as agent_module
 from lcode.ollama import OllamaError
 from lcode.tools import Toolbox
 
@@ -144,6 +145,36 @@ def test_a_reply_lcode_stopped_gets_an_estimate_of_its_tokens(make_agent, capsys
     assert "model 1 about " in shown and "stopped" in shown and "out in stopped replies)" in shown
     report = replay.run(events, fresh_copy(original, tmp_path_factory))
     assert report.ok and report.steps == (2, 2)  # the replay stops the same reply at the same place
+
+
+PONDERING = [
+    {"message": {"thinking": f"Option {n}: guard main with directive {n}. "}, "done": False} for n in range(900)
+]
+
+
+def test_a_reply_stopped_at_the_think_budget_replays_the_same(make_agent, original, tmp_path_factory):
+    agent = make_agent([PONDERING, reply("It compiles.")], trace=True, think_budget=1000)
+    agent.run_turn("Make it compile")
+    events = trace_view.load(only_trace().path)
+    assert events[0]["settings"]["think_budget"] == 1000
+    assert [e.get("stopped", False) for e in events if e["type"] == "model"] == [True, False]
+    report = replay.run(events, fresh_copy(original, tmp_path_factory))
+    assert report.ok and report.steps == (2, 2)
+
+
+def test_a_trace_from_before_the_think_budget_replays_without_one(make_agent, original, tmp_path_factory, monkeypatch):
+    """Its long replies ran to the end, so a replay must not stop them at today's default budget: one that thought
+    at length and then said nothing was an empty reply, and the model was told so."""
+    agent = make_agent([[*PONDERING, *reply("")], reply("It compiles.")], trace=True, think_budget=0)
+    agent.run_turn("Make it compile")
+    events = trace_view.load(only_trace().path)
+    del events[0]["settings"]["think_budget"]  # as lcode 0.62 recorded it
+    notes = []
+    note = agent_module.stall_note
+    monkeypatch.setattr(agent_module, "stall_note", lambda trouble, **kw: notes.append(trouble) or note(trouble, **kw))
+    report = replay.run(events, fresh_copy(original, tmp_path_factory))
+    assert report.ok and report.steps == (2, 2) and report.status == ("success", "success")
+    assert notes == [""]  # an empty reply, as recorded: not one stopped for thinking too long
 
 
 def test_a_reply_that_failed_has_no_estimate(make_agent):

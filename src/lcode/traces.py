@@ -57,8 +57,8 @@ SUMMARY_WIDTH = 70  # characters of a command, path or query in a one-line summa
 # The settings a request ran with that a replay of it uses too.
 REPLAYED = (
     "mode", "web", "memory", "subagents", "max_parallel_agents", "trust_project", "skills", "prune", "repo_map",
-    "lsp", "embed_model", "checks", "review", "escalate_model", "repeat_limit", "compact_at", "secret_check",
-    "sandbox", "vision_model",
+    "lsp", "embed_model", "checks", "review", "escalate_model", "repeat_limit", "think_budget", "compact_at",
+    "secret_check", "sandbox", "vision_model",
 )  # fmt: skip
 TERMINAL = ("COLUMNS", "LINES")  # pytest and others fit their output to these: a replay's commands get the same
 ACTIONS = ("list", "show", "export", "replay", "path")
@@ -278,7 +278,7 @@ class Lane:
         if error:
             event["error"] = error[:4000]
         elif not finished:
-            event["stopped"] = True  # lcode closed the stream: it went round in circles, or was interrupted
+            event["stopped"] = True  # lcode closed the stream: circles, thinking too long, or interrupted
             if not final and first is not None:  # the server counts a reply only at its end: about what this took
                 event["estimated_in"], event["estimated_out"] = estimate(payload, reply)
                 self.recorder.add(estimated_in=event["estimated_in"], estimated_out=event["estimated_out"])
