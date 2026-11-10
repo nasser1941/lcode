@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.63.0] - 2026-11-11
+
 ### Changed
 
 - **A reply that thinks at length without acting is stopped.** Sometimes the model weighs one option
@@ -1417,7 +1419,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.62.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.63.0...HEAD
+[0.63.0]: https://github.com/nasser1941/lcode/compare/v0.62.0...v0.63.0
 [0.62.0]: https://github.com/nasser1941/lcode/compare/v0.61.0...v0.62.0
 [0.61.0]: https://github.com/nasser1941/lcode/compare/v0.60.0...v0.61.0
 [0.60.0]: https://github.com/nasser1941/lcode/compare/v0.59.0...v0.60.0
