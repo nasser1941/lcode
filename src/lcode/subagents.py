@@ -585,6 +585,7 @@ class Run:
 def abort(response) -> None:
     """Stop a streaming Ollama response from another thread (Ollama then cancels the request)."""
     with contextlib.suppress(Exception):
+        response.aborted = True  # its stream breaks now: lcode.ollama.reply_lines takes that for the stop it is
         connection = getattr(response.raw, "_connection", None) or getattr(response.raw, "connection", None)
         sock = getattr(connection, "sock", None)
         if sock is not None:

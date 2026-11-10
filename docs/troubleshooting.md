@@ -23,6 +23,16 @@ Ollama isn't running (or isn't installed).
   as well (`docker volume prune -a`), so were the models: download them again with `lcode setup`.
 - Remote server: `lcode config set ollama_host http://host:11434`.
 
+### `Ollama stopped in the middle of a reply`
+
+The connection to Ollama broke while the model was answering: Ollama stopped or restarted (a crash, or an
+update that replaces its container, as `lcode update` does), or the network to a remote Ollama dropped.
+The session carries on and keeps the conversation, without the reply that was cut off. Once Ollama is
+running, send the request again. If it doesn't answer, `lcode doctor` checks it and says how to start it.
+
+With `lcode -p --output json`, the result has `status` `error` with this message, and lcode exits with
+`1`. LM Studio, llama-server, vLLM and MLX servers get the same message, with their own name.
+
 ### Docker: `all predefined address pools have been fully subnetted`
 
 Docker Compose can't create a network for the Ollama container. A VPN that routes all traffic (for example
