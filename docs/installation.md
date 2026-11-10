@@ -181,6 +181,9 @@ lcode update --check    # only show which versions are out
     network and restart policy. The old one is kept until the new one answers with the new
     version, and is put back if it doesn't.
   - Your models stay: they're in the container's volume.
+  - A reply that an lcode session is getting while the container is replaced stops halfway. That
+    session [says so](troubleshooting.md#ollama-stopped-in-the-middle-of-a-reply) and carries on:
+    send the request again after the update.
 - **Ollama installed without Docker** gets the command that updates it: on Linux,
   `curl -fsSL https://ollama.com/install.sh | sh`; on macOS, `brew upgrade ollama` or the app
   itself.

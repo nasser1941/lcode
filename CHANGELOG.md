@@ -30,6 +30,14 @@ All notable changes to lcode are documented here. The format follows
   runs the checks itself. Options alone, like `-x` or `--tb=short`, still count. In 426 attempts on six
   dev-slice nights this changes 2: one now runs xarray's suite (4.4 minutes, failing on tests that failed
   before), the other a run that stops before its first test in under a second.
+- **A model server that stops in the middle of a reply no longer ends lcode in a traceback.** When the
+  connection broke while a reply streamed, as it did when `lcode update` replaced Ollama's container during
+  a reply, `lcode` and `lcode -p` stopped with a Python traceback, which also ended an interactive
+  session. Now lcode says that Ollama stopped in the middle of a reply and what to do, the session carries
+  on, the trace records the failure, and `lcode -p --output json` reports `status` `error`. LM Studio,
+  llama-server, vLLM and MLX servers get the same. A reply stopped on purpose breaks its connection too,
+  and that stays a stop: a cancel from an editor (ACP) came back as an internal error,
+  `ChunkedEncodingError`, and a subagent stopped with Ctrl+C was reported as failed.
 
 ## [0.62.0] - 2026-11-06
 

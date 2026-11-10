@@ -33,6 +33,37 @@ def version_tuple(version: str) -> tuple[int, ...]:
     return tuple(int(x) for x in re.findall(r"\d+", version)[:3])
 
 
+def stopped_halfway(server: str, host: str, error: requests.RequestException) -> str:
+    """What to say when the connection breaks in the middle of a reply: the server stopped or restarted (an update
+    that recreates its container, a crash), or the network dropped."""
+    why = error.args[0] if error.args else ""  # requests wraps urllib3's error, whose first argument is its message
+    if isinstance(why, BaseException):
+        why = why.args[0] if why.args else type(why).__name__
+    return (
+        f"{server} stopped in the middle of a reply: the connection to {redact(host)} broke "
+        f"({why or type(error).__name__}). Once it's running, send the request again; `lcode doctor` checks it and "
+        "says how to start it."
+    )
+
+
+def reply_lines(
+    response: requests.Response, server: str, host: str, error: type[OllamaError] = OllamaError
+) -> Iterator[bytes]:
+    """The lines of a streamed reply. A connection that breaks halfway raises `error`, which the agent reports and
+    the session survives, instead of a requests error that nothing catches.
+
+    A reply lcode stops from another thread (an editor's cancel, a stopped subagent: lcode.subagents.abort) breaks
+    the same way, whichever way the read fails. That's a stop, as anywhere else: KeyboardInterrupt."""
+    try:
+        yield from response.iter_lines()
+    except Exception as e:
+        if getattr(response, "aborted", False):
+            raise KeyboardInterrupt from e
+        if not isinstance(e, requests.RequestException):
+            raise
+        raise error(stopped_halfway(server, host, e)) from e
+
+
 class Ollama:
     kind = "ollama"
     name = "Ollama"
@@ -179,7 +210,7 @@ class Ollama:
                 raise OllamaError(unauthorized(payload["model"], self.host))
             if r.status_code != 200:
                 raise OllamaError(f"Ollama error {r.status_code}: {r.text[:500]}")
-            for line in r.iter_lines():
+            for line in reply_lines(r, self.name, self.host):
                 if line:
                     chunk = json.loads(line)
                     if "error" in chunk:
