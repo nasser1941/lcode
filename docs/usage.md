@@ -831,4 +831,7 @@ lcode -p "Review the uncommitted changes (git diff) for bugs"
 lcode -p "Run the tests and fix any failures" --auto-edit
 ```
 
+The exit code says how the request went: `0` when it succeeded, `1` for an error, and the other
+codes in [Automation](automation.md#structured-output).
+
 Combine with `--yolo` only in disposable environments.

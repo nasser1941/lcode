@@ -560,7 +560,7 @@ def cmd_chat(args) -> None:
             print(json.dumps(result.to_json(), ensure_ascii=False, indent=None if output == "stream-json" else 2))
             exit_code = result.exit_code
         else:
-            repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)
+            exit_code = repl(agent, prompt=args.prompt, hardware=hw, cont=args.cont, resume=args.resume)
     finally:
         api.close_agent(agent)
         if worktree is not None:

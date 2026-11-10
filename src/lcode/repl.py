@@ -26,6 +26,7 @@ from rich.text import Text
 
 from lcode import (
     __version__,
+    api,
     assistant,
     backends,
     clipboard,
@@ -504,20 +505,25 @@ def git_command(agent: Agent, cmd: str, arg: str) -> None:
             agent.no_changes = ""
 
 
-def run_safely(agent: Agent, text: str) -> None:
+def run_safely(agent: Agent, text: str) -> str:
+    """Run a request. An interrupt or a model error ends the request, not the session. Returns how it ended, as
+    `lcode -p --output json` says it: success, error, max_steps, loop, blocked or interrupted."""
     started = time.monotonic()
     reader = start_steering(agent) if agent.interactive else None
     try:
         agent.run_turn(text)
+        status = api.request_status(agent)
     except KeyboardInterrupt:
-        pass
+        status = "interrupted"
     except OllamaError as e:
+        status = "error"
         agent.console.print(f"[red]{e}[/]")
     finally:
         if reader is not None:
             stop_steering(agent, reader)
         agent.save()
         agent.finished(text, time.monotonic() - started)
+    return status
 
 
 def start_steering(agent: Agent) -> KeyReader | None:
@@ -708,7 +714,10 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
     return True
 
 
-def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = False, resume: str | None = None) -> None:
+def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = False, resume: str | None = None) -> int:
+    """The interactive session, or with a prompt (`lcode -p`) that one request. Returns lcode's exit code: for a coding
+    request, the one `--output json` gives (api.EXIT_CODES), so a script can tell a failed request from a done one;
+    otherwise 0."""
     if cont:
         note = agent.load_latest()
         if note is None:
@@ -725,10 +734,9 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
     session_start(agent)
     if prompt and agent.settings.mode in ("image", "video"):
         respond(agent, prompt)
-        return
+        return 0
     if prompt:
-        run_safely(agent, prompt)
-        return
+        return api.EXIT_CODES.get(run_safely(agent, prompt), 1)
     banner(agent)
     if agent.settings.mode == "code" and is_cloud(agent.settings.model):
         agent.say(cloud_notice(agent.settings.model))
@@ -765,6 +773,7 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
         respond(agent, line)
     memory_notes.reflect(agent)
     agent.console.print("[dim]Bye.[/]")
+    return 0
 
 
 def respond(agent: Agent, line: str) -> None:
