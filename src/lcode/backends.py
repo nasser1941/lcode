@@ -21,7 +21,7 @@ from urllib.parse import quote
 
 import requests
 
-from lcode.ollama import OllamaError, redact
+from lcode.ollama import OllamaError, redact, reply_lines
 
 PRESETS = {  # backend setting -> (the server's name, its default address)
     "lmstudio": ("LM Studio", "http://localhost:1234/v1"),
@@ -308,7 +308,7 @@ class OpenAICompatible:
         with r:
             if r.status_code != 200:
                 raise self._failed(r.status_code, r.text)
-            for line in r.iter_lines():
+            for line in reply_lines(r, self.name, self.host, BackendError):
                 if not line or not line.startswith(b"data:"):
                     continue
                 data = line[5:].strip()
