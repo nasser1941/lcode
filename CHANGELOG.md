@@ -6,6 +6,17 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A reply that thinks at length without acting is stopped.** Sometimes the model weighs one option
+  after another for minutes without trying any: in `polyglot-rust-c` it wrote 45,000 to 53,000 tokens,
+  most of them thinking, and ran 1 or 2 commands in 15 minutes. Now, when a reply has thought for 7,000 tokens without
+  writing anything or calling a tool, lcode stops it and asks for the next step with thinking off. It
+  hands the model the last part of its thinking, so it can act on where its reasoning got to. On the
+  dev slice, about 1 reply in 100 thought that long: they came from 42 of the 110 attempts that failed
+  and 2 of the 102 that passed. Set the budget with `lcode config set think_budget`, `0` for no limit
+  ([#241](https://github.com/nasser1941/lcode/issues/241)).
+
 ### Fixed
 
 - **The line after a load counts the part of the model in system RAM.** With Ollama 0.40, `qwen3.6-35b`

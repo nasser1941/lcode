@@ -325,6 +325,7 @@ def replay_agent(start_event: dict, folder: Path, server: ReplayServer, console:
         **{k: v for k, v in recorded.items() if k in allowed},
     )
     settings.think = bool(start_event.get("think", True))
+    settings.think_budget = int(recorded.get("think_budget") or 0)  # recorded before 0.63: no budget then
     settings.num_batch = options.get("num_batch")
     settings.max_parallel_agents = 1  # subagents one after another, in the order they were asked for
     settings.sandbox, settings.checkpoints, settings.notify = "off", False, False
