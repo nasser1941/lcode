@@ -6,6 +6,13 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`lcode -c -p` in an image or video session exits with `1` when nothing came.** When `lcode -c -p "…"`
+  (or `--resume … -p`) carried on an image or video session and the picture or video didn't come (no
+  ComfyUI, a job that failed in ComfyUI, Ctrl+C), lcode said so and exited with `0`. It now exits with `1`,
+  as `lcode --mode image -p` does.
+
 ## [0.63.0] - 2026-11-11
 
 ### Changed
@@ -27,10 +34,6 @@ All notable changes to lcode are documented here. The format follows
   `--output json` uses: `1` for an error, `3` stopped at `--max-steps`, `4` stopped because the model kept
   repeating itself, `130` interrupted. What it prints is the same, and the interactive session still carries
   on after an error.
-- **`lcode -c -p` in an image or video session exits with `1` when nothing came.** When `lcode -c -p "…"`
-  (or `--resume … -p`) carried on an image or video session and the picture or video didn't come (no
-  ComfyUI, a job that failed in ComfyUI, Ctrl+C), lcode said so and exited with `0`. It now exits with `1`,
-  as `lcode --mode image -p` does.
 - **The line after a load counts the part of the model in system RAM.** With Ollama 0.40, `qwen3.6-35b`
   at 32K on a 12 GB GPU showed as `10.5 GB, 98% on the GPU and the rest in system RAM`, because Ollama
   leaves out the ~12 GB of experts that stay mapped from the model's file. For the models in the catalog,
