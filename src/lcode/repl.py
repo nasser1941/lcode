@@ -715,9 +715,9 @@ def handle_command(agent: Agent, line: str, hardware: Hardware) -> bool:
 
 
 def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = False, resume: str | None = None) -> int:
-    """The interactive session, or with a prompt (`lcode -p`) that one request. Returns lcode's exit code: for a coding
-    request, the one `--output json` gives (api.EXIT_CODES), so a script can tell a failed request from a done one;
-    otherwise 0."""
+    """The interactive session, or with a prompt (`lcode -p`) that one request. Returns lcode's exit code, so a script
+    can tell a failed request from a done one: for a coding request, the one `--output json` gives (api.EXIT_CODES);
+    for an image or video request, 1 when it failed or was cancelled, as `lcode --mode image -p` exits; otherwise 0."""
     if cont:
         note = agent.load_latest()
         if note is None:
@@ -732,9 +732,8 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
         if info:
             resume_session(agent, info)
     session_start(agent)
-    if prompt and agent.settings.mode in ("image", "video"):
-        respond(agent, prompt)
-        return 0
+    if prompt and agent.settings.mode in ("image", "video"):  # -c or --resume into an image or video session
+        return 0 if respond(agent, prompt) else 1
     if prompt:
         return api.EXIT_CODES.get(run_safely(agent, prompt), 1)
     banner(agent)
@@ -776,17 +775,17 @@ def repl(agent: Agent, prompt: str | None, hardware: Hardware, cont: bool = Fals
     return 0
 
 
-def respond(agent: Agent, line: str) -> None:
+def respond(agent: Agent, line: str) -> bool:
     """What a typed request does: the coding agent works on it, or image and video mode take it (a question about
-    lcode is answered from its manual instead)."""
+    lcode is answered from its manual instead). Returns whether it went through: False when it failed or was
+    cancelled."""
     if agent.settings.mode in ("image", "video"):  # no coding model involved
         if manual.is_question(line) and not media.RAW_FLAG.search(line):
             ask_manual(agent, line, typed=True)
-            return
-        make_image(agent, line)
-        return
+            return True
+        return make_image(agent, line)
     agent.console.print(Rule(style="dim"))
-    run_safely(agent, line)
+    return run_safely(agent, line) == "success"
 
 
 def manual_writer(agent: Agent):

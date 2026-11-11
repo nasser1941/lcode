@@ -6,6 +6,13 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`lcode -c -p` in an image or video session exits with `1` when nothing came.** When `lcode -c -p "…"`
+  (or `--resume … -p`) carried on an image or video session and the picture or video didn't come (no
+  ComfyUI, a job that failed in ComfyUI, Ctrl+C), lcode said so and exited with `0`. It now exits with `1`,
+  as `lcode --mode image -p` does.
+
 ## [0.63.0] - 2026-11-11
 
 ### Changed
