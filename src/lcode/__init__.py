@@ -3,7 +3,7 @@
 From a program: `from lcode import Session` (see lcode.api).
 """
 
-__version__ = "0.62.0"
+__version__ = "0.63.0"
 
 API = ("Session", "Result", "Options", "SetupError")
 
