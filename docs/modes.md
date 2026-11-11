@@ -99,7 +99,8 @@ alone shows them.
   closes before an image arrives, the next request in image mode saves it.
 - **From scripts:** `lcode --mode image -p "a red fox in the snow --n 2"` makes the images and
   exits; with `--output json` it prints a result with the file paths, the model, the seeds, the size
-  and the time.
+  and the time. It exits with `1` when no image came (no ComfyUI, a job that failed, Ctrl+C), and so
+  does `lcode -c -p "…"` when it carries on an image or video session.
 - **No Ollama needed:** `lcode --mode image` starts even when Ollama isn't running or the coding
   model isn't installed; `/mode code` then says what's missing.
 

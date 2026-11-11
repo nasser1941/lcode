@@ -297,9 +297,9 @@ def gallery(agent: Agent, everything: bool = False) -> None:
         )
 
 
-def make_image(agent: Agent, prompt: str = "", options=None, run=None) -> None:
+def make_image(agent: Agent, prompt: str = "", options=None, run=None) -> bool:
     """Image mode: ComfyUI makes the images (a request, or `run(cancelled, ask)`); Esc or Ctrl+C cancels them
-    there too."""
+    there too. Returns whether they came: False when the request failed or was cancelled."""
     steering = Steering()
     reader = KeyReader(steering)
     reading = agent.interactive and reader.start()  # Esc sets steering.pause: here it cancels
@@ -309,6 +309,7 @@ def make_image(agent: Agent, prompt: str = "", options=None, run=None) -> None:
         return answer.strip().lower() in ("y", "yes")
 
     started = time.monotonic()
+    made = False
     try:
         asking = ask if agent.interactive else None
         if run is not None:
@@ -317,6 +318,7 @@ def make_image(agent: Agent, prompt: str = "", options=None, run=None) -> None:
             media.request(agent, prompt, cancelled=lambda: steering.pause, ask=asking)
         else:
             media.make(agent, prompt, options, cancelled=lambda: steering.pause, ask=asking)
+        made = True
     except media.MediaError as e:
         agent.console.print(f"[yellow]{escape(str(e))}[/]")
     except KeyboardInterrupt:  # while ComfyUI was starting: nothing queued yet
@@ -332,3 +334,4 @@ def make_image(agent: Agent, prompt: str = "", options=None, run=None) -> None:
             agent.console.print(Text("✎ What you typed is in the prompt below.", style="cyan"))
         agent.save()  # the gallery and options carry over when the session is resumed
         agent.finished(prompt or "image or video", time.monotonic() - started)  # a long render: notify
+    return made
