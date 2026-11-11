@@ -146,7 +146,9 @@ def test_the_mode_setting(tmp_path, monkeypatch):
     assert config.load()["mode"] == "video"
 
 
-def test_a_request_from_the_command_line_without_comfyui_says_how_to_get_it(tmp_path, monkeypatch, capsys):
+def test_a_request_from_the_command_line_without_comfyui_says_how_to_get_it(
+    tmp_path, monkeypatch, capsys, make_agent, repo
+):
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
     cli.main(["config", "set", "comfyui_url", "http://127.0.0.1:9"])
     monkeypatch.setattr(cli, "Ollama", lambda host: FakeOllama())
@@ -163,3 +165,10 @@ def test_a_request_from_the_command_line_without_comfyui_says_how_to_get_it(tmp_
         with pytest.raises(SystemExit) as done:  # the same exit code without --output
             cli.main(["--mode", mode, "-p", "a red fox running", "--no-mcp"])
         assert done.value.code == 1 and "no install found" in capsys.readouterr().out
+        saved = make_agent()  # and with -c, into a saved session in this mode
+        saved.settings.mode, saved.session_name = mode, f"{mode} session"
+        saved.save()
+        with pytest.raises(SystemExit) as done:
+            cli.main(["-c", "-p", "a red fox running", "-r", str(repo), "--no-mcp"])
+        shown = capsys.readouterr().out
+        assert done.value.code == 1 and f"Continuing {mode} session" in shown and "no install found" in shown

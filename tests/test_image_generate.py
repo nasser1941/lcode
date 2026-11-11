@@ -244,6 +244,38 @@ def test_several_images_from_the_command_line(tmp_path, monkeypatch, capsys, sta
     assert len(result["files"]) == 2 and result["seeds"] == [100, 101]
 
 
+def test_lcode_c_p_into_an_image_session_exits_with_1_when_no_image_comes(
+    tmp_path, monkeypatch, capsys, standin, image_agent, repo
+):
+    """`lcode -c -p` carries on a saved image session in image mode, and exits as `lcode --mode image -p` does."""
+    from conftest import FakeOllama
+    from lcode import catalog
+
+    respond(image_agent, "a red fox")  # an image session, saved in the demo folder
+    monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
+    cli.main(["config", "set", "comfyui_url", standin.url])
+    monkeypatch.setattr(cli, "Ollama", lambda host: FakeOllama())
+    monkeypatch.setattr(cli, "detect", lambda: LAPTOP)
+    monkeypatch.setattr("lcode.api.check_server", lambda *args: "0.35.1")
+    monkeypatch.setattr(cli, "resolve_model", lambda ollama, name: (name, catalog.find(name)))
+    monkeypatch.setattr(cli, "choose_context", lambda *args: (32768, ""))
+    argv = ["-c", "-p", "a fox in the snow", "-r", str(repo), "--no-mcp"]
+    cli.main(argv)  # the image came: exit code 0, so main returns
+    assert "Continuing" in capsys.readouterr().out and len(list((repo / ".lcode" / "media").glob("*.png"))) == 2
+    standin.fail = "CUDA error: out of memory"
+    with pytest.raises(SystemExit) as done:
+        cli.main(argv)
+    assert done.value.code == 1 and "out of memory" in capsys.readouterr().out
+
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(media, "request", interrupted)  # Ctrl+C while ComfyUI starts: 1, as with --mode image
+    with pytest.raises(SystemExit) as done:
+        cli.main(argv)
+    assert done.value.code == 1 and "Cancelled." in capsys.readouterr().out
+
+
 def test_the_preview_setting(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.toml")
     assert config.load()["preview"] == "auto"
