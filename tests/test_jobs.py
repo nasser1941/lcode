@@ -23,7 +23,7 @@ def gone(pid: int) -> bool:
     status = Path(f"/proc/{pid}/status")  # Linux; elsewhere there's nothing to check
     try:
         return not status.exists() or "zombie" in status.read_text().lower()
-    except FileNotFoundError:  # it ended between the two looks
+    except OSError:  # it ended between the two looks (ENOENT or ESRCH, by timing)
         return True
 
 
