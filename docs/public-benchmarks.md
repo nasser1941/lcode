@@ -137,6 +137,43 @@ result dropped beyond the noise, so a script can stop on it.
 if the dev slice doesn't drop beyond the noise against the last baseline, and the comparison goes on
 its pull request. See the [release steps](contributing.md#releases).
 
+## Baselines
+
+lcode 0.63.0 on the dev slice, on a laptop with a 12 GB GPU (RTX 4080 Laptop) and 31 GB of RAM, with
+nothing else running:
+
+| Model | Context | Attempts | pass@1 | Terminal-Bench | SWE-bench | pass^3 | Speed | Time |
+|---|---|---|---|---|---|---|---|---|
+| qwen3.6-35b | 32K | 3 | 55% | 51% | 60% | 36% | 73 tokens/s | 11.4 h |
+| qwen3.6-35b | 64K | 3 | 61% | 51% | 77% | 40% | 67 tokens/s | 11.8 h |
+| qwen3.6-35b | 256K | – | stopped after 2 h | | | | 26–46 tokens/s | |
+| qwen3.8-27b | 32K | 1 | 36% of 22 tasks | 20% | 71% of 7 | – | 9 tokens/s | stopped after 9 h |
+
+To reproduce them:
+
+```bash
+lcode bench --harbor dev qwen3.6-35b --context 32k
+lcode bench --harbor dev qwen3.6-35b --context 64k
+lcode bench --harbor dev qwen3.6-35b --context 256k
+lcode bench --harbor dev qwen3.8-27b --context 32k --attempts 1
+```
+
+- **32K or 64K:** 64K passed 7 points more, within the noise (±11), so this slice doesn't show that 64K
+  helps. It did waste less: 5 replies that went nowhere instead of 20. The 32K run is the baseline the
+  [release rule](#comparing-two-runs) compares against.
+- **256K doesn't fit this machine.** Ollama kept 4 of the model's 9 GB on the GPU and took 23 GB of
+  RAM, so the system started swapping. Generation fell from 40–46 to 26 tokens/s, and the run was
+  stopped after 2 hours. By then 2 of 8 Terminal-Bench attempts had passed and 6 had run out of time,
+  `crack-7z-hash` among them, which passed 3 times out of 3 at 32K. With 12 GB of GPU memory, use 64K
+  at most.
+- **qwen3.8-27b is too slow on a 12 GB GPU.** The dense 27B model is larger than the GPU (8 of its
+  20 GB fit), so it generates 9 tokens/s, and 12 of the 15 Terminal-Bench tasks ran out of time. The
+  run was stopped after 9 hours, when generation fell to 4 tokens/s, and 3 SWE-bench tasks didn't
+  run. On the 22 tasks it ran, qwen3.6-35b at 32K passed 56%.
+
+Runs on other machines differ, mostly through the model's speed: a faster GPU runs into the tasks' time
+limits less often.
+
 ## Other agents on the same model
 
 `--agent` runs Claude Code, OpenCode or Codex on the same tasks, with the same model, context
