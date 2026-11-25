@@ -390,6 +390,15 @@ def test_every_catalog_entry_builds_a_valid_server(monkeypatch):
         assert "${" not in json.dumps(cfg.raw), preset.key
 
 
+def test_the_guide_explains_every_catalog_server():
+    """docs/mcp-guide.md has a section, a row in its table and the command for each ready-made server, and no others."""
+    guide = (Path(__file__).parents[1] / "docs" / "mcp-guide.md").read_text()
+    keys = set(catalog.load())
+    assert set(re.findall(r"^### (\S+)$", guide, re.M)) == keys
+    assert set(re.findall(r"^\| \[`(\S+)`\]\(#", guide, re.M)) == keys
+    assert keys <= set(re.findall(r"^lcode mcp add (\S+)$", guide, re.M))
+
+
 def test_skipped_optional_inputs_are_dropped(monkeypatch):
     monkeypatch.delenv("CONTEXT7_API_KEY", raising=False)
     preset = catalog.load()["context7"]

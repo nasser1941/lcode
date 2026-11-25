@@ -16,6 +16,8 @@ and find the code for the top one."*
 
 ## Ready-made servers
 
+The [MCP server guide](mcp-guide.md) explains each one: what it does, how to add it and what to ask.
+
 `lcode mcp add <name>` sets these up, asks for anything they need and tests the connection:
 
 | Name | What it gives the model | You need |

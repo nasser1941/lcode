@@ -81,8 +81,9 @@ through [Ollama](https://ollama.com), and when it needs current information it c
 - **Bring your own model.** Eight curated open-weight models, all tested end to end, or any Ollama model
   with tool calling. Or use LM Studio, llama.cpp, vLLM or MLX instead of Ollama.
 - **MCP servers, ready to go.** Connect Jira and Confluence, GitHub, AWS, Google Drive, Grafana,
-  Google Cloud, Sentry, Linear, Notion, Postgres, Kubernetes, Metabase, Encord, Valohai and more with one command
-  (`lcode mcp add atlassian`), or any other MCP server. Browser sign-in (OAuth) is built in.
+  Google Cloud, Sentry, Linear, Notion, Postgres, Kubernetes, Metabase, Encord, Valohai, REA (reverse engineering)
+  and more with one command (`lcode mcp add atlassian`), or any other MCP server. Browser sign-in (OAuth) is built in.
+  See the [MCP server guide](https://nasser1941.github.io/lcode/mcp-guide/).
 - **Sees images.** Attach a screenshot or mockup with `@path` and lcode looks at it, using the
   vision part of your model.
 - **Images, videos and films.** Image and video [modes](https://nasser1941.github.io/lcode/modes/)

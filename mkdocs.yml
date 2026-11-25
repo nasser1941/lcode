@@ -107,6 +107,7 @@ nav:
       - Public benchmarks: public-benchmarks.md
       - Run traces: traces.md
       - MCP servers: mcp.md
+      - MCP server guide: mcp-guide.md
       - Sandbox: sandbox.md
       - Hooks and permission rules: hooks.md
       - Configuration: configuration.md
