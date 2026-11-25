@@ -37,6 +37,7 @@ and find the code for the top one."*
 | `metabase` | Explore your data and ask questions through Metabase's semantic layer | Metabase 60 or later with MCP on ([below](#metabase)) |
 | `encord` | Projects, datasets, ontologies, labeling progress, tasks and labels, read-only | `uvx`, an SSH key registered in Encord ([below](#encord)) |
 | `valohai` | ML executions with their logs, metrics and outputs, and pipelines, read-only | `uvx`, a Valohai API token ([below](#valohai)) |
+| `rea` | Reverse engineering: unpack Electron apps and archives, decompile native programs | `npx` (a recent Node.js); Ghidra and a JDK for native programs ([below](#rea)) |
 
 `npx` comes with [Node.js](https://nodejs.org) (18 or newer) and `uvx` with
 [uv](https://docs.astral.sh/uv/getting-started/installation/). `lcode mcp catalog` shows what's missing
@@ -139,6 +140,41 @@ address of a self-hosted installation if you use one; `lcode mcp add valohai` as
 Both servers are ordinary MCP servers: other MCP clients can use them too, for example
 `uvx --isolated --from lcode-cli lcode-mcp-valohai` with `VALOHAI_TOKEN` set. Keep `--isolated`: without it,
 `uvx` reuses an lcode you installed with `uv tool install`, which may be older or lack the Encord SDK.
+
+### REA
+
+[REA](https://github.com/morluto/rea) (Reverse Engineer Anything) lets the model examine an app without its
+source code. Use it only for software you own or are authorized to examine.
+
+```bash
+lcode mcp add rea
+```
+
+Then ask, for example: *"Use REA to extract /path/to/app.asar, then explain how search works in this app.
+Name the file and function for each point."*
+
+| Target | You need |
+|---|---|
+| Electron apps (`.asar`) and other archives | Node.js 22.23.4 or later in its 22 line, or a current 24 or 26 |
+| Native programs | Node.js as above, [Ghidra](https://github.com/NationalSecurityAgency/ghidra/releases) 12.2 and a full JDK 25 (the Java runtime alone isn't enough). Give both folders when `lcode mcp add rea` asks |
+
+The first start downloads REA from npm (42 MB, 186 MB unpacked), without install scripts and without its
+optional packages. lcode sets up the version it was tested with; to try a newer one, change the version in
+`mcp.json`.
+
+- **Context.** All of REA's 263 tools would take about 82,000 tokens. lcode offers 10, about 4,700 tokens, so
+  they're sent with every request at 32K. Add others under `tools` in `mcp.json`, at the cost of context.
+- **Electron apps.** The model opens the app and extracts it; `extract_artifact` writes the files to a folder,
+  and the model then reads them with lcode's own tools.
+- **Permission.** Every call asks first, as with any MCP server. As REA documents them, the 10 tools read and unpack the target but
+  don't run it. Some of REA's other tools do run programs or attach to them, so think before you add them.
+- **What to expect from a local model.** This was measured with qwen3.6-35b at 32K. On a tiny Electron app, four
+  runs (three with an earlier set of 8 tools) took 1 to 2 minutes each: three answers were right and one had a small
+  mistake. Native programs are much harder. On a small stripped program (a license-key check), three runs were tried: two finished in
+  4 to 5 minutes, and one ran out of its 15. Of the two, one worked out a key the program accepts, with a mistake in
+  its explanation; the other misread a number format and its key was rejected. Check the answers, and
+  expect larger apps to be harder.
+- **REA's workflow skill** is about 34 KB, too long for a 32K window, so lcode doesn't install it.
 
 ## Adding your own servers
 

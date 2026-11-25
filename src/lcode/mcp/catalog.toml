@@ -7,7 +7,7 @@
 # requires commands that must be installed.
 # login    sign in through the browser (OAuth) after adding.
 #
-# Commands and URLs were checked against each project's documentation in September and October 2026.
+# Commands and URLs were checked against each project's documentation in September to November 2026.
 
 [atlassian]
 name = "Atlassian"
@@ -254,3 +254,41 @@ var = "VALOHAI_HOST"
 prompt = "Valohai address (Enter for app.valohai.com; for a self-hosted installation, its URL)"
 optional = true
 
+[rea]
+name = "REA"
+description = "Reverse engineering: unpack Electron apps and archives, decompile native programs with Ghidra"
+homepage = "https://github.com/morluto/rea"
+requires = ["npx"]
+setup = """Only for software you own or are authorized to examine. Electron apps and archives need only a recent Node.js (22.23.4
+or later in its 22 line, or a current 24 or 26). Native programs also need Ghidra 12.2 and a full JDK 25, not just the Java
+runtime: give their folders, or press Enter to skip them."""
+
+[rea.server]
+command = "npx"
+# The version lcode was tested with. No install scripts and no optional packages: frida, for hooking into running
+# programs, is one, and lcode doesn't offer the tools that use it.
+args = ["-y", "rea-agents@6.10.1", "mcp"]
+env = { npm_config_ignore_scripts = "true", npm_config_omit = "optional", NO_UPDATE_NOTIFIER = "1", GHIDRA_INSTALL_DIR = "${GHIDRA_INSTALL_DIR}", JAVA_HOME = "${JAVA_HOME}" }
+# All 263 definitions take about 82,000 tokens. These fit in a 32K window and don't launch the target.
+tools = [
+  "open_binary",
+  "extract_artifact",
+  "binary_overview",
+  "list_procedures",
+  "search_strings",
+  "trace_feature",
+  "xrefs",
+  "procedure_callers",
+  "procedure_pseudo_code",
+  "close_binary",
+]
+
+[[rea.inputs]]
+var = "GHIDRA_INSTALL_DIR"
+prompt = "Ghidra folder, full path (Enter to skip native programs)"
+optional = true
+
+[[rea.inputs]]
+var = "JAVA_HOME"
+prompt = "JDK 25 folder, full path (Enter to use the java on your PATH)"
+optional = true
