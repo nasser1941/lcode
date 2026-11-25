@@ -8,6 +8,9 @@ All notable changes to lcode are documented here. The format follows
 
 ### Added
 
+- **Reverse engineering with REA.** `lcode mcp add rea` sets up [REA](https://github.com/morluto/rea), which unpacks
+  Electron apps and archives, and decompiles native programs if you have Ghidra 12.2 and a JDK 25. lcode offers 10 of its
+  263 tools, so they fit in a 32K window and none of them runs the program being examined.
 - **Baselines for the public benchmarks.** The *Public benchmarks* page now gives lcode 0.63.0's results
   on the dev slice on a 12 GB GPU: qwen3.6-35b at 32K (55%) and 64K (61%), why 256K and qwen3.8-27b
   don't fit such a machine, and the commands to reproduce them.

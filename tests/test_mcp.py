@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import stat
 import sys
 import threading
@@ -395,6 +396,23 @@ def test_skipped_optional_inputs_are_dropped(monkeypatch):
     assert catalog.build(preset, {"CONTEXT7_API_KEY": None}) == {"type": "http", "url": "https://mcp.context7.com/mcp"}
     monkeypatch.setenv("CONTEXT7_API_KEY", "k")
     assert catalog.build(preset, {"CONTEXT7_API_KEY": None})["headers"] == {"CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"}
+
+
+def test_rea_is_pinned_static_and_works_without_ghidra(monkeypatch):
+    """REA's 263 tools take more than a 32K window, and some launch or attach to programs: lcode offers a few static
+    ones, from the version it was tested with, without npm install scripts."""
+    for name in ("GHIDRA_INSTALL_DIR", "JAVA_HOME"):
+        monkeypatch.delenv(name, raising=False)
+    preset = catalog.load()["rea"]
+    server = catalog.build(preset, {"GHIDRA_INSTALL_DIR": None, "JAVA_HOME": None})
+    assert any(re.fullmatch(r"rea-agents@\d+\.\d+\.\d+", arg) for arg in server["args"])
+    assert server["env"]["npm_config_ignore_scripts"] == "true" and server["env"]["npm_config_omit"] == "optional"
+    assert not {"GHIDRA_INSTALL_DIR", "JAVA_HOME"} & set(server["env"])
+    assert len(server["tools"]) <= 12 and {"open_binary", "extract_artifact"} <= set(server["tools"])
+    assert not [t for t in server["tools"] if re.search(r"frida|gdb|debug|launch|start|capture|adb|observe|command", t)]
+    assert "allow" not in server  # every call asks
+    native = catalog.build(preset, {"GHIDRA_INSTALL_DIR": "/opt/ghidra", "JAVA_HOME": "/opt/jdk-25"})
+    assert native["env"]["GHIDRA_INSTALL_DIR"] == "/opt/ghidra" and native["env"]["JAVA_HOME"] == "/opt/jdk-25"
 
 
 # ----------------------------------------------------------------------------- manager
