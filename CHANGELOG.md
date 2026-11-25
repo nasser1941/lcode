@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.64.0] - 2026-11-25
+
 ### Added
 
 - **Reverse engineering with REA.** `lcode mcp add rea` sets up [REA](https://github.com/morluto/rea), which unpacks
@@ -1437,7 +1439,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.63.1...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.64.0...HEAD
+[0.64.0]: https://github.com/nasser1941/lcode/compare/v0.63.1...v0.64.0
 [0.63.1]: https://github.com/nasser1941/lcode/compare/v0.63.0...v0.63.1
 [0.63.0]: https://github.com/nasser1941/lcode/compare/v0.62.0...v0.63.0
 [0.62.0]: https://github.com/nasser1941/lcode/compare/v0.61.0...v0.62.0
