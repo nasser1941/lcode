@@ -36,7 +36,7 @@ Settings are in `~/.config/lcode/mcp.json`. Add only the servers you use: each o
 | [`notion`](#notion) | Pages and databases | yes | browser sign-in |
 | [`google-drive`](#google-drive) | Files in Google Drive | creates files | your own Google OAuth client |
 | [`sentry`](#sentry) | Errors, traces and releases | yes | browser sign-in |
-| [`grafana`](#grafana) | Dashboards, metrics, logs, alerts | yes | `uvx`, a service account token |
+| [`grafana`](#grafana) | Dashboards, metrics, logs, alerts | read-only to start | `uvx`, a service account token |
 | [`aws`](#aws) | AWS CLI commands | read-only to start | `uvx`, AWS credentials |
 | [`aws-knowledge`](#aws-knowledge) | AWS documentation | no | nothing |
 | [`gcp`](#gcp) | `gcloud` commands | yes | `npx`, `gcloud` signed in |
@@ -118,8 +118,7 @@ lcode mcp add google-drive
 ```
 
 Searches files, reads their content and metadata, downloads them and creates new ones. It needs an OAuth client from
-your own Google Cloud project ([steps](mcp.md#google-drive)). In Google's settings for that client, **Use this client
-for an AI-powered agent** must be selected.
+your own Google Cloud project ([steps](mcp.md#google-drive)).
 
 > *"Find the latest requirements document in my Drive and list what this project doesn't implement yet."*
 
@@ -143,10 +142,9 @@ lcode mcp add grafana
 ```
 
 Asks for Grafana's address and a service account token (**Administration > Users and access > Service accounts**).
-Covers dashboards, Prometheus and Loki queries, other data sources, alert rules, incidents and on-call schedules,
-including changing dashboards and alert rules. It has about 80 tools, so list the ones you use under `tools` in
-`mcp.json`. Add `--disable-write` to its `args` there to make it
-read-only.
+Covers dashboards, Prometheus and Loki queries, other data sources, alert rules, incidents and on-call schedules.
+It starts read-only: remove `--disable-write` from its `args` in `mcp.json` to let it change
+dashboards and alert rules. It has about 80 tools, so list the ones you use under `tools` in `mcp.json`.
 
 > *"Query Loki for errors of the checkout service in the last hour and find where this code logs them."*
 

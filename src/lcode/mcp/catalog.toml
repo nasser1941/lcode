@@ -11,7 +11,7 @@
 
 [atlassian]
 name = "Atlassian"
-description = "Jira, Confluence, Jira Service Management, Compass and Bitbucket"
+description = "Jira, Confluence, Bitbucket and Compass"
 homepage = "https://github.com/atlassian/atlassian-mcp-server"
 login = true
 setup = "Sign in with your Atlassian account in the browser."
@@ -50,11 +50,13 @@ name = "Google Drive"
 description = "Search, read and create files in your Google Drive"
 homepage = "https://developers.google.com/workspace/drive/api/guides/configure-mcp-server"
 login = true
-setup = """Google needs an OAuth client from your own Google Cloud project:
+setup = """Google needs an OAuth client from your own Google Cloud project. For your own account, the quickest way is Google
+Cloud's personal mode setup, with a "Desktop app" client. Otherwise:
   1. In a Google Cloud project, enable the Google Drive API and the Google Drive MCP API.
   2. Configure the OAuth consent screen (add yourself as a test user if the app is in testing).
-  3. Create an OAuth client ID of type "Desktop app" and copy its client ID and secret.
-Guide: https://developers.google.com/workspace/guides/configure-mcp-servers"""
+  3. Create an OAuth client ID of type "Desktop app", with "Use this client for an AI-powered agent" selected, and
+     copy its client ID and secret.
+Guide: https://developers.google.com/workspace/drive/api/guides/configure-mcp-server"""
 
 [google-drive.server]
 type = "http"
@@ -80,11 +82,11 @@ name = "Grafana"
 description = "Dashboards, Prometheus and Loki queries, alerts and incidents"
 homepage = "https://github.com/grafana/mcp-grafana"
 requires = ["uvx"]
-setup = "Create a service account token in Grafana: Administration > Users and access > Service accounts. The server has about 80 tools; list the ones you use under \"tools\" in mcp.json to save context."
+setup = "Create a service account token in Grafana: Administration > Users and access > Service accounts. Read-only to start: remove --disable-write in mcp.json to let it change dashboards and alert rules. The server has about 80 tools; list the ones you use under \"tools\" in mcp.json to save context."
 
 [grafana.server]
 command = "uvx"
-args = ["--python", "3.12", "mcp-grafana"]
+args = ["--python", "3.12", "mcp-grafana", "--disable-write"]
 env = { GRAFANA_URL = "${GRAFANA_URL}", GRAFANA_SERVICE_ACCOUNT_TOKEN = "${GRAFANA_SERVICE_ACCOUNT_TOKEN}" }
 
 [[grafana.inputs]]
