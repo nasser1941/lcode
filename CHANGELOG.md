@@ -6,6 +6,11 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **An MCP server guide.** A new docs page explains each ready-made MCP server: what it does, how to add it, whether it can
+  change things, and what to ask.
+
 ## [0.64.0] - 2026-11-25
 
 ### Added
