@@ -6,6 +6,8 @@ All notable changes to lcode are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-11-26
+
 ### Added
 
 - **AWS's newer server.** `lcode mcp add aws-mcp` sets up the AWS MCP Server, which AWS runs and recommends
@@ -1458,7 +1460,8 @@ First public release.
 - `AGENTS.md` project instructions and `/init` to generate them.
 - One-line installer for Linux and macOS.
 
-[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.64.0...HEAD
+[Unreleased]: https://github.com/nasser1941/lcode/compare/v0.65.0...HEAD
+[0.65.0]: https://github.com/nasser1941/lcode/compare/v0.64.0...v0.65.0
 [0.64.0]: https://github.com/nasser1941/lcode/compare/v0.63.1...v0.64.0
 [0.63.1]: https://github.com/nasser1941/lcode/compare/v0.63.0...v0.63.1
 [0.63.0]: https://github.com/nasser1941/lcode/compare/v0.62.0...v0.63.0
