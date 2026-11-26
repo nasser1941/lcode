@@ -22,8 +22,9 @@ The [MCP server guide](mcp-guide.md) explains each one: what it does, how to add
 
 | Name | What it gives the model | You need |
 |---|---|---|
-| `atlassian` | Jira, Confluence, Jira Service Management, Compass, Bitbucket | an Atlassian account (browser sign-in) |
+| `atlassian` | Jira, Confluence, Bitbucket, Compass | an Atlassian account (browser sign-in) |
 | `aws` | AWS CLI commands on your account, read-only unless you change it | `uvx` and AWS credentials |
+| `aws-mcp` | AWS's newer managed server: API calls through Python scripts, docs and skills; can change things | `uvx` and AWS credentials |
 | `aws-knowledge` | Current AWS documentation, code samples, regional availability | nothing |
 | `google-drive` | Search, read and create files in Google Drive | your own Google OAuth client ([below](#google-drive)) |
 | `grafana` | Dashboards, Prometheus and Loki queries, alerts, incidents | `uvx`, a Grafana service account token |
@@ -45,7 +46,7 @@ The [MCP server guide](mcp-guide.md) explains each one: what it does, how to add
 [uv](https://docs.astral.sh/uv/getting-started/installation/). `lcode mcp catalog` shows what's missing
 on your machine.
 
-Servers that can change things start read-only where the server supports it (`aws`, `postgres`,
+Servers that can change things start read-only where the server supports it (`aws`, `grafana`, `postgres`,
 `kubernetes`, `encord`, `valohai`); the setup note tells you which setting to change to allow writes.
 
 ### Signing in
@@ -78,14 +79,16 @@ keep the tool list short; change `X-MCP-Toolsets` in `mcp.json` for
 ### Google Drive
 
 Google doesn't let apps register themselves, so the Drive server needs an OAuth client from your own
-Google Cloud project:
+Google Cloud project. For your own Google account, the quickest way is Google Cloud's **personal mode** setup
+(described in Google's guide below): choose a **Desktop app** client, then go to step 4. Otherwise:
 
 1. In a Google Cloud project, enable the **Google Drive API** and the **Google Drive MCP API**.
 2. Configure the OAuth consent screen (while it's in testing, add yourself as a test user).
-3. Create an **OAuth client ID** of type **Desktop app**, and copy its ID and secret.
+3. Create an **OAuth client ID** of type **Desktop app**, with **Use this client for an AI-powered agent**
+   selected, and copy its ID and secret.
 4. Run `lcode mcp add google-drive` and paste them; lcode then signs you in through the browser.
 
-See [Google's guide](https://developers.google.com/workspace/guides/configure-mcp-servers) for
+See [Google's guide](https://developers.google.com/workspace/drive/api/guides/configure-mcp-server) for
 details.
 
 ### Images and videos

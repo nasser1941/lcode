@@ -8,8 +8,22 @@ All notable changes to lcode are documented here. The format follows
 
 ### Added
 
+- **AWS's newer server.** `lcode mcp add aws-mcp` sets up the AWS MCP Server, which AWS runs and recommends
+  over the AWS API MCP Server (`aws`). It can change your resources, within the permissions of the AWS profile you
+  give it, and lcode asks before every call.
 - **An MCP server guide.** A new docs page explains each ready-made MCP server: what it does, how to add it, whether it can
   change things, and what to ask.
+
+### Changed
+
+- **`lcode mcp add grafana` starts read-only**, like the other servers that can change things: remove `--disable-write`
+  from its `args` in `mcp.json` to let it change dashboards and alert rules. Servers you already added don't change.
+
+### Fixed
+
+- **MCP setup notes.** Atlassian's entry no longer lists Jira Service Management, which its server offers only with an
+  API token, not after the browser sign-in. The Google Drive steps include the setting Google now requires ("Use this
+  client for an AI-powered agent") and its quicker personal mode setup.
 
 ## [0.64.0] - 2026-11-25
 

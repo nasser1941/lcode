@@ -11,7 +11,7 @@
 
 [atlassian]
 name = "Atlassian"
-description = "Jira, Confluence, Jira Service Management, Compass and Bitbucket"
+description = "Jira, Confluence, Bitbucket and Compass"
 homepage = "https://github.com/atlassian/atlassian-mcp-server"
 login = true
 setup = "Sign in with your Atlassian account in the browser."
@@ -22,7 +22,7 @@ name = "AWS"
 description = "Run AWS CLI commands against your account (read-only unless you change it)"
 homepage = "https://awslabs.github.io/mcp/servers/aws-api-mcp-server"
 requires = ["uvx"]
-setup = "Uses your local AWS credentials (aws configure or aws sso login). Read-only to start: set READ_OPERATIONS_ONLY to \"false\" in mcp.json to allow changes; lcode still asks before every call."
+setup = "Uses your local AWS credentials (aws configure or aws sso login). AWS now recommends its newer server: lcode mcp add aws-mcp. Read-only to start: set READ_OPERATIONS_ONLY to \"false\" in mcp.json to allow changes; lcode still asks before every call."
 
 [aws.server]
 command = "uvx"
@@ -39,6 +39,34 @@ var = "AWS_PROFILE"
 prompt = "AWS profile (from ~/.aws/config)"
 default = "default"
 
+[aws-mcp]
+name = "AWS MCP Server"
+description = "AWS's newer managed server: AWS API calls through Python scripts, documentation and skills (can change things)"
+homepage = "https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html"
+requires = ["uvx"]
+setup = """AWS runs this server; a local proxy signs requests with your AWS credentials (aws configure, aws sso login or
+aws login). It can change resources: your IAM permissions decide what it can do, so use a profile with only the access
+you want, and lcode asks before every call. Add --read-only to its args in mcp.json to hide the tools that can write.
+Add either this or "aws", not both: their tools overlap."""
+
+[aws-mcp.server]
+command = "uvx"
+# mcp-proxy-for-aws-cli pins all of its dependencies, and signs requests with your credentials (SigV4).
+args = [
+  "--python", "3.12", "mcp-proxy-for-aws-cli@1.8.0", "https://aws-mcp.us-east-1.api.aws/mcp",
+  "--profile", "${AWS_PROFILE}", "--metadata", "AWS_REGION=${AWS_REGION}", "--disable-telemetry",
+]
+
+[[aws-mcp.inputs]]
+var = "AWS_REGION"
+prompt = "AWS region for your resources"
+default = "us-east-1"
+
+[[aws-mcp.inputs]]
+var = "AWS_PROFILE"
+prompt = "AWS profile (from ~/.aws/config)"
+default = "default"
+
 [aws-knowledge]
 name = "AWS Knowledge"
 description = "Up-to-date AWS documentation, code samples and regional availability (no AWS account needed)"
@@ -50,11 +78,13 @@ name = "Google Drive"
 description = "Search, read and create files in your Google Drive"
 homepage = "https://developers.google.com/workspace/drive/api/guides/configure-mcp-server"
 login = true
-setup = """Google needs an OAuth client from your own Google Cloud project:
+setup = """Google needs an OAuth client from your own Google Cloud project. For your own account, the quickest way is Google
+Cloud's personal mode setup, with a "Desktop app" client. Otherwise:
   1. In a Google Cloud project, enable the Google Drive API and the Google Drive MCP API.
   2. Configure the OAuth consent screen (add yourself as a test user if the app is in testing).
-  3. Create an OAuth client ID of type "Desktop app" and copy its client ID and secret.
-Guide: https://developers.google.com/workspace/guides/configure-mcp-servers"""
+  3. Create an OAuth client ID of type "Desktop app", with "Use this client for an AI-powered agent" selected, and
+     copy its client ID and secret.
+Guide: https://developers.google.com/workspace/drive/api/guides/configure-mcp-server"""
 
 [google-drive.server]
 type = "http"
@@ -80,11 +110,11 @@ name = "Grafana"
 description = "Dashboards, Prometheus and Loki queries, alerts and incidents"
 homepage = "https://github.com/grafana/mcp-grafana"
 requires = ["uvx"]
-setup = "Create a service account token in Grafana: Administration > Users and access > Service accounts. The server has about 80 tools; list the ones you use under \"tools\" in mcp.json to save context."
+setup = "Create a service account token in Grafana: Administration > Users and access > Service accounts. Read-only to start: remove --disable-write in mcp.json to let it change dashboards and alert rules. The server has about 80 tools; list the ones you use under \"tools\" in mcp.json to save context."
 
 [grafana.server]
 command = "uvx"
-args = ["--python", "3.12", "mcp-grafana"]
+args = ["--python", "3.12", "mcp-grafana", "--disable-write"]
 env = { GRAFANA_URL = "${GRAFANA_URL}", GRAFANA_SERVICE_ACCOUNT_TOKEN = "${GRAFANA_SERVICE_ACCOUNT_TOKEN}" }
 
 [[grafana.inputs]]

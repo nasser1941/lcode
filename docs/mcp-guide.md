@@ -36,8 +36,9 @@ Settings are in `~/.config/lcode/mcp.json`. Add only the servers you use: each o
 | [`notion`](#notion) | Pages and databases | yes | browser sign-in |
 | [`google-drive`](#google-drive) | Files in Google Drive | creates files | your own Google OAuth client |
 | [`sentry`](#sentry) | Errors, traces and releases | yes | browser sign-in |
-| [`grafana`](#grafana) | Dashboards, metrics, logs, alerts | yes | `uvx`, a service account token |
+| [`grafana`](#grafana) | Dashboards, metrics, logs, alerts | read-only to start | `uvx`, a service account token |
 | [`aws`](#aws) | AWS CLI commands | read-only to start | `uvx`, AWS credentials |
+| [`aws-mcp`](#aws-mcp) | AWS API calls, docs and skills | yes, within your IAM permissions | `uvx`, AWS credentials |
 | [`aws-knowledge`](#aws-knowledge) | AWS documentation | no | nothing |
 | [`gcp`](#gcp) | `gcloud` commands | yes | `npx`, `gcloud` signed in |
 | [`kubernetes`](#kubernetes) | Pods, logs, events | read-only to start | `npx`, a kubeconfig |
@@ -118,8 +119,7 @@ lcode mcp add google-drive
 ```
 
 Searches files, reads their content and metadata, downloads them and creates new ones. It needs an OAuth client from
-your own Google Cloud project ([steps](mcp.md#google-drive)). In Google's settings for that client, **Use this client
-for an AI-powered agent** must be selected.
+your own Google Cloud project ([steps](mcp.md#google-drive)).
 
 > *"Find the latest requirements document in my Drive and list what this project doesn't implement yet."*
 
@@ -143,10 +143,9 @@ lcode mcp add grafana
 ```
 
 Asks for Grafana's address and a service account token (**Administration > Users and access > Service accounts**).
-Covers dashboards, Prometheus and Loki queries, other data sources, alert rules, incidents and on-call schedules,
-including changing dashboards and alert rules. It has about 80 tools, so list the ones you use under `tools` in
-`mcp.json`. Add `--disable-write` to its `args` there to make it
-read-only.
+Covers dashboards, Prometheus and Loki queries, other data sources, alert rules, incidents and on-call schedules.
+It starts read-only: remove `--disable-write` from its `args` in `mcp.json` to let it change
+dashboards and alert rules. It has about 80 tools, so list the ones you use under `tools` in `mcp.json`.
 
 > *"Query Loki for errors of the checkout service in the last hour and find where this code logs them."*
 
@@ -162,10 +161,34 @@ Uses your local AWS credentials.
 - `suggest_aws_commands` suggests commands for a task described in words.
 
 It starts read-only: set `READ_OPERATIONS_ONLY` to `"false"` in `mcp.json` to allow changes. AWS says its newer
-[AWS MCP Server](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html) supersedes this one,
-which still works but shows a notice.
+server, [`aws-mcp`](#aws-mcp), supersedes this one, which still works but shows a notice. Add one of the two, not both.
 
 > *"Which Lambda functions in eu-central-1 still use Python 3.10?"*
+
+### aws-mcp
+
+```bash
+lcode mcp add aws-mcp
+```
+
+The [AWS MCP Server](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html), which AWS runs. A small
+local proxy (`mcp-proxy-for-aws-cli`, through `uvx`) signs the requests with your AWS credentials.
+
+| Tool | |
+|---|---|
+| `aws___run_script` | Runs Python with AWS API access in AWS's sandbox: list resources, check them, change them |
+| `aws___get_tasks` | The status of a long-running script |
+| `aws___get_presigned_url` | Upload and download links for S3 |
+| `aws___search_documentation`, `aws___read_documentation`, `aws___retrieve_skill` | AWS documentation and AWS's step-by-step skills |
+| `aws___list_regions`, `aws___get_regional_availability` | Regions, and what's available in each |
+
+It **can change your resources**: unlike `aws`, it has no read-only setting that keeps API access. Your IAM permissions
+decide what it can do, so use a profile with only the access you want, for example AWS's `ReadOnlyAccess` policy, and
+read each script before you allow it. `--read-only` in its `args` in `mcp.json` hides the tools that can write, which
+probably leaves only the documentation tools. Add either `aws` or `aws-mcp`, not both, and leave out `aws-knowledge`
+too, since its tools are included: AWS says overlapping tools confuse the model.
+
+> *"List my S3 buckets that aren't encrypted with KMS."*
 
 ### aws-knowledge
 
