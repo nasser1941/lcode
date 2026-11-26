@@ -24,6 +24,7 @@ The [MCP server guide](mcp-guide.md) explains each one: what it does, how to add
 |---|---|---|
 | `atlassian` | Jira, Confluence, Bitbucket, Compass | an Atlassian account (browser sign-in) |
 | `aws` | AWS CLI commands on your account, read-only unless you change it | `uvx` and AWS credentials |
+| `aws-mcp` | AWS's newer managed server: API calls through Python scripts, docs and skills; can change things | `uvx` and AWS credentials |
 | `aws-knowledge` | Current AWS documentation, code samples, regional availability | nothing |
 | `google-drive` | Search, read and create files in Google Drive | your own Google OAuth client ([below](#google-drive)) |
 | `grafana` | Dashboards, Prometheus and Loki queries, alerts, incidents | `uvx`, a Grafana service account token |

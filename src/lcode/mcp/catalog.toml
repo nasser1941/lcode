@@ -22,7 +22,7 @@ name = "AWS"
 description = "Run AWS CLI commands against your account (read-only unless you change it)"
 homepage = "https://awslabs.github.io/mcp/servers/aws-api-mcp-server"
 requires = ["uvx"]
-setup = "Uses your local AWS credentials (aws configure or aws sso login). Read-only to start: set READ_OPERATIONS_ONLY to \"false\" in mcp.json to allow changes; lcode still asks before every call."
+setup = "Uses your local AWS credentials (aws configure or aws sso login). AWS now recommends its newer server: lcode mcp add aws-mcp. Read-only to start: set READ_OPERATIONS_ONLY to \"false\" in mcp.json to allow changes; lcode still asks before every call."
 
 [aws.server]
 command = "uvx"
@@ -35,6 +35,34 @@ prompt = "AWS region"
 default = "us-east-1"
 
 [[aws.inputs]]
+var = "AWS_PROFILE"
+prompt = "AWS profile (from ~/.aws/config)"
+default = "default"
+
+[aws-mcp]
+name = "AWS MCP Server"
+description = "AWS's newer managed server: AWS API calls through Python scripts, documentation and skills (can change things)"
+homepage = "https://docs.aws.amazon.com/agent-toolkit/latest/userguide/mcp-server.html"
+requires = ["uvx"]
+setup = """AWS runs this server; a local proxy signs requests with your AWS credentials (aws configure, aws sso login or
+aws login). It can change resources: your IAM permissions decide what it can do, so use a profile with only the access
+you want, and lcode asks before every call. Add --read-only to its args in mcp.json to hide the tools that can write.
+Add either this or "aws", not both: their tools overlap."""
+
+[aws-mcp.server]
+command = "uvx"
+# mcp-proxy-for-aws-cli pins all of its dependencies, and signs requests with your credentials (SigV4).
+args = [
+  "--python", "3.12", "mcp-proxy-for-aws-cli@1.8.0", "https://aws-mcp.us-east-1.api.aws/mcp",
+  "--profile", "${AWS_PROFILE}", "--metadata", "AWS_REGION=${AWS_REGION}", "--disable-telemetry",
+]
+
+[[aws-mcp.inputs]]
+var = "AWS_REGION"
+prompt = "AWS region for your resources"
+default = "us-east-1"
+
+[[aws-mcp.inputs]]
 var = "AWS_PROFILE"
 prompt = "AWS profile (from ~/.aws/config)"
 default = "default"
